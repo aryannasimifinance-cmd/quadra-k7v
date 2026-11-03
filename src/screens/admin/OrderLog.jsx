@@ -12,10 +12,10 @@ const RANGES = { today: 'امروز', week: '۷ روز', month: '۳۰ روز', a
 const SINCE = { today: () => new Date().setHours(0, 0, 0, 0), week: () => Date.now() - 7 * 864e5, month: () => Date.now() - 30 * 864e5, all: () => 0 }
 
 // lines(o): [[نام, تعداد, توضیح, قیمت واحد]]؛ status: { کلید: [نام, رنگ] }
-export function OrderLog({ orders, lines, status, title, file }) {
+export function OrderLog({ orders, lines, status, title, file, initialRange = 'month' }) {
   const { user } = useStore()
   const [q, setQ] = useState('')
-  const [range, setRange] = useState('month')
+  const [range, setRange] = useState(initialRange)
   const [src, setSrc] = useState('all')
   const [open, setOpen] = useState(null)
   // متن قابل جستجوی هر سفارش یک بار ساخته می‌شود

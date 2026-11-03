@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import {
-  BADGES, COACHES, COACH_PACKS, COURTS, DAYPARTS, DURATIONS, EVENT_KIND, LEVELS, MEMBERS, SERIES, coachById, coachPackPrice, courtById, dayKey, dayLabel, dayMonth, dayNum,
+  BADGES, COACHES, COACH_PACKS, COURTS, DAYPARTS, DURATIONS, EVENT_KIND, LEVELS, MEMBERS, SERIES, coachById, coachPackPrice, coachPacks, courtById, dayKey, dayLabel, dayMonth, dayNum,
   SIDES, coachesRanked, fa, fromKey, hourLabel, isPeak, isWeekend, levelById, levelIndex, nearLevels, nextDays, priceFor, range, short, sideById, toman, weekday,
 } from '../../data'
 import { celebrate, chime, haptic } from '../../fx'
@@ -528,7 +528,7 @@ function StepCoach({ w, set, onNext }) {
       <h2 className="wz-h">با کی تمرین کنیم؟</h2>
       <div className="coach-list">
         {coachesRanked(useStore().club).map((c) => (
-          <motion.button key={c.id} className={`coach-li ${w.coachId === c.id ? 'on' : ''}`} whileTap={{ scale: 0.98 }} onClick={() => { haptic(8); set({ coachId: c.id }) }}>
+          <motion.button key={c.id} className={`coach-li ${w.coachId === c.id ? 'on' : ''}`} whileTap={{ scale: 0.98 }} onClick={() => { haptic(8); set({ coachId: c.id, ...(coachPacks(c).some((p) => p.id === w.pack) ? {} : { pack: coachPacks(c)[0]?.id }) }) }}>
             <Photo src={c.img} />
             <div className="grow">
               <b>{c.name} <LevelPill id={c.level} /></b>
@@ -543,7 +543,7 @@ function StepCoach({ w, set, onNext }) {
         <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <p className="label">تعداد جلسه</p>
           <div className="pack-grid">
-            {COACH_PACKS.map((p) => (
+            {coachPacks(coach).map((p) => (
               <motion.button key={p.id} className={`pack-opt ${w.pack === p.id ? 'on' : ''}`} whileTap={{ scale: 0.95 }} onClick={() => { haptic(6); set({ pack: p.id }) }}>
                 <b>{p.name}</b><span>{toman(coachPackPrice(coach, p))}</span>{p.tag && <small>{p.tag}</small>}
               </motion.button>
@@ -552,7 +552,7 @@ function StepCoach({ w, set, onNext }) {
         </motion.section>
       )}
       {coach && COACH_PACKS.find((p) => p.id === w.pack)?.sessions > 1 && <p className="hint">📅 جلسه‌ها هر هفته همان روز و ساعتی است که در مرحله‌ی بعد انتخاب می‌کنید؛ همه همان لحظه در تقویم ثبت می‌شوند.</p>}
-      <CtaBar><Button full variant="dark" disabled={!coach} onClick={onNext}>انتخاب روز و ساعت</Button></CtaBar>
+      <CtaBar><Button full variant="dark" disabled={!coach || !coachPacks(coach).some((p) => p.id === w.pack)} onClick={onNext}>انتخاب روز و ساعت</Button></CtaBar>
     </div>
   )
 }
@@ -619,7 +619,7 @@ function StepPay({ w, set, onDone }) {
     kind = count > 1 ? 'coach-series' : 'coach'
     title = `${pack.name}، ${coach.name}`; sub = `${count > 1 ? 'از ' : ''}${dayLabel(w.date)}، ${range(w.start, 1)}`
     total = coachPackPrice(coach, pack)
-    lines = [[`${fa(count)} جلسه × ${toman(coach.price)}`, toman(coach.price * count * (pack.mult || 1))], pack.off > 0 && ['تخفیف پکیج', '−' + toman(coach.price * count * pack.off)]].filter(Boolean)
+    lines = coach.prices?.[pack.id] ? [[`${pack.name}، ${fa(count)} جلسه`, toman(total)]] : [[`${fa(count)} جلسه × ${toman(coach.price)}`, toman(coach.price * count * (pack.mult || 1))], pack.off > 0 && ['تخفیف پکیج', '−' + toman(coach.price * count * pack.off)]].filter(Boolean)
   } else if (EVENT_INTENTS.includes(w.intent)) {
     kind = 'event'
     title = ev.title; sub = `${dayLabel(ev.date)}، ${hourLabel(ev.start)}، ${ev.format}`

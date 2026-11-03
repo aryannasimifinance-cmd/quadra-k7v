@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
-import { BADGES, COACHES, COACH_PACKS, coachesRanked, ratingOf, EVENT_KIND, LEVELS, PACKAGES, RANKS, XP_GUIDE, rankOf, coachPackPrice, dayLabel, dayMonth, fa, fromKey, hourLabel, levelById, short, toman } from '../../data'
+import { BADGES, COACHES, COACH_PACKS, coachesRanked, ratingOf, EVENT_KIND, LEVELS, PACKAGES, RANKS, XP_GUIDE, rankOf, coachPackPrice, coachPacks, dayLabel, dayMonth, fa, fromKey, hourLabel, levelById, short, toman } from '../../data'
 import { celebrate, chime, haptic } from '../../fx'
 import { ME, myPoints, useStore } from '../../store'
 import { activeMembership, quests } from '../../select'
@@ -56,7 +56,7 @@ export function Coaches({ nav, onBack, focus }) {
                 <ul className="record light">{c.record.map((f) => <li key={f}>{f}</li>)}</ul>
                 {[...new Set(c.list.filter((r) => r.text).map((r) => r.text))].slice(0, 2).map((t) => <p key={t} className="cb-quote">«{t}» <small>— ناشناس</small></p>)}
                 <div className="cb-packs">
-                  {COACH_PACKS.map((p) => <div key={p.id}><small>{p.name}</small><b>{short(coachPackPrice(c, p))}</b></div>)}
+                  {coachPacks(c).map((p) => <div key={p.id}><small>{p.name}</small><b>{short(coachPackPrice(c, p))}</b></div>)}
                 </div>
                 <Button full variant="q" onClick={() => nav.start({ intent: 'coach', coachId: c.id })}>رزرو جلسه یا خرید پکیج</Button>
                 <button className="cb-rate-btn" disabled={done || !studied(c.id)} onClick={() => setRate(c)}>

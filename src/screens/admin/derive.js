@@ -1,4 +1,4 @@
-import { COACHES, COURTS, MEMBERS, ratingOf, addDays, dayMonth, coachById, courtById, fromKey, memberById, productById, range, todayKey } from '../../data'
+import { COACHES, COACH_PACKS, COURTS, MEMBERS, ratingOf, addDays, dayMonth, coachById, courtById, fromKey, memberById, productById, range, todayKey } from '../../data'
 import { ME, payState } from '../../store'
 
 export const SERIES = [
@@ -76,7 +76,7 @@ const notPack = (b) => b.method !== 'package' && b.method !== 'coach-pack'
 export function memberStats(club, user) {
   const rows = MEMBERS.filter((m) => !(user && m.source === 'app' && m.phone === user.phone)).map((m) => {
     const bk = club.bookings.filter((b) => b.status !== 'cancelled' && (b.by === m.id || b.players?.includes(m.id)))
-    const spent = bk.filter((b) => b.by === m.id && notPack(b)).reduce((s, b) => s + b.paid, 0) + club.orders.filter((o) => o.by === m.id).reduce((s, o) => s + o.total, 0) + club.sales.filter((x) => x.by === m.id).reduce((s, x) => s + x.price, 0)
+    const spent = bk.filter((b) => b.by === m.id && notPack(b)).reduce((s, b) => s + b.paid, 0) + club.orders.filter((o) => o.by === m.id).reduce((s, o) => s + o.total, 0) + (club.cafeOrders || []).filter((o) => o.by === m.id).reduce((s, o) => s + o.total, 0) + club.sales.filter((x) => x.by === m.id).reduce((s, x) => s + x.price, 0)
     const lastB = bk.map((b) => fromKey(b.date).getTime()).filter((t) => t <= Date.now()).sort((a, b) => b - a)[0]
     const lastDays = lastB ? Math.floor((Date.now() - lastB) / 864e5) : 99
     const seg = m.member ? 'vip' : m.source || m.joined < 30 ? 'new' : lastDays > 10 ? 'risk' : 'active'
@@ -84,27 +84,42 @@ export function memberStats(club, user) {
   })
   if (user) {
     const bk = club.bookings.filter((b) => b.status !== 'cancelled' && (b.by === ME || b.players?.includes(ME)))
-    rows.unshift({ id: ME, name: user.name + ' (اپ)', phone: user.phone, level: user.level, games: bk.length, visits: bk.length, wins: 0, points: 0, joined: 0, source: 'app', spent: bk.filter((b) => b.by === ME && notPack(b)).reduce((s, b) => s + b.paid, 0) + club.orders.filter((o) => o.by === ME).reduce((s, o) => s + o.total, 0) + club.sales.filter((x) => x.by === ME).reduce((s, x) => s + x.price, 0), lastDays: 0, seg: 'new', member: null })
+    rows.unshift({ id: ME, name: user.name + ' (اپ)', phone: user.phone, level: user.level, games: bk.length, visits: bk.length, wins: 0, points: 0, joined: 0, source: 'app', spent: bk.filter((b) => b.by === ME && notPack(b)).reduce((s, b) => s + b.paid, 0) + club.orders.filter((o) => o.by === ME).reduce((s, o) => s + o.total, 0) + (club.cafeOrders || []).filter((o) => o.by === ME).reduce((s, o) => s + o.total, 0) + club.sales.filter((x) => x.by === ME).reduce((s, x) => s + x.price, 0), lastDays: 0, seg: 'new', member: null })
   }
   return rows
 }
 export const SEGMENTS = { all: 'همه', vip: 'VIP / عضو', active: 'فعال', new: 'جدید', risk: 'در خطر ریزش' }
 
-export function coachStats(club) {
+// بازه‌های گزارش مربی: از کی تا الان
+export const SPANS = { today: 'امروز', week: '۷ روز', month: '۳۰ روز', q: '۳ ماه', h: '۶ ماه', all: 'همه' }
+export const spanStart = (k) => ({ today: new Date().setHours(0, 0, 0, 0), week: Date.now() - 7 * 864e5, month: Date.now() - 30 * 864e5, q: Date.now() - 91 * 864e5, h: Date.now() - 182 * 864e5 }[k] || 0)
+const startOf = (b) => fromKey(b.date).getTime() + b.start * 36e5
+const done = (b) => startOf(b) + b.dur * 36e5 <= Date.now()
+
+// آمار هر مربی در بازه: جلسه‌ی برگزارشده، شاگرد، پکیج به تفکیک نوع، درآمد و نظرها
+export function coachStats(club, span = 'all') {
+  const since = spanStart(span)
   return COACHES.map((c) => {
     const bk = club.bookings.filter((b) => b.coach === c.id && b.status !== 'cancelled')
-    const past = bk.filter((b) => fromKey(b.date) < fromKey(todayKey()))
-    const sales = club.sales.filter((s) => s.kind === 'coach' && s.item === c.id)
+    const held = bk.filter((b) => done(b) && startOf(b) >= since)
+    const sales = club.sales.filter((s) => s.kind === 'coach' && s.item === c.id && s.at >= since)
+    const students = new Set([...held.flatMap((b) => b.players), ...sales.map((s) => s.by)])
     const rt = ratingOf(club, 'coach:' + c.id)
-    return { ...c, rating: rt.avg, reviews: rt.count, comments: rt.list.filter((r, i, a) => r.text && a.findIndex((x) => x.text === r.text) === i).slice(0, 3), sessions: past.length, upcoming: bk.length - past.length, revenue: past.filter(notPack).reduce((s, b) => s + b.paid, 0) + sales.reduce((s, x) => s + x.price, 0), packs: sales.length }
+    const byPack = Object.fromEntries(COACH_PACKS.map((p) => [p.id, sales.filter((s) => s.pack === p.id).length]))
+    return {
+      ...c, rating: rt.avg, reviews: rt.count, comments: rt.list.filter((r, i, a) => r.text && a.findIndex((x) => x.text === r.text) === i).slice(0, 3),
+      sessions: held.length, upcoming: bk.filter((b) => !done(b)).length, students: students.size, packsSold: sales.length, byPack,
+      revenue: held.filter(notPack).reduce((s, b) => s + b.paid, 0) + sales.reduce((s, x) => s + x.price, 0),
+    }
   })
 }
 
-// پرونده‌ی یک مربی: هر شاگرد با پکیج‌ها، جلسه‌های گذشته و آینده و پرداختی‌اش
-export function coachFile(club, id, user) {
-  const today = fromKey(todayKey())
+// پرونده‌ی یک مربی در بازه: هر شاگرد با پکیج‌ها، جلسه‌ها و پرداختی؛ هر پکیج با شروع، روز و ساعت و جلسه‌های مانده
+export function coachFile(club, id, user, span = 'all') {
+  const since = spanStart(span)
   const bk = club.bookings.filter((b) => b.coach === id && b.status !== 'cancelled')
-  const sales = club.sales.filter((s) => s.kind === 'coach' && s.item === id).sort((a, b) => b.at - a.at)
+  const allSales = club.sales.filter((s) => s.kind === 'coach' && s.item === id).sort((a, b) => b.at - a.at)
+  const sales = allSales.filter((s) => s.at >= since)
   const m = new Map()
   const get = (pid) => {
     if (!m.has(pid)) {
@@ -113,15 +128,25 @@ export function coachFile(club, id, user) {
     }
     return m.get(pid)
   }
-  bk.forEach((b) => b.players.forEach((pid) => {
-    const s = get(pid), d = fromKey(b.date)
-    if (d < today) { s.past++; if (!s.last || d > fromKey(s.last)) s.last = b.date } else { s.next++; if (!s.upcoming || d < fromKey(s.upcoming)) s.upcoming = b.date }
-  }))
-  bk.filter(notPack).forEach((b) => { get(b.by).paid += b.paid })
+  bk.forEach((b) => {
+    const isDone = done(b)
+    if (isDone && startOf(b) < since) return
+    b.players.forEach((pid) => {
+      const s = get(pid)
+      if (isDone) { s.past++; if (!s.last || fromKey(b.date) > fromKey(s.last)) s.last = b.date } else { s.next++; if (!s.upcoming || fromKey(b.date) < fromKey(s.upcoming)) s.upcoming = b.date }
+    })
+  })
+  bk.filter((b) => notPack(b) && done(b) && startOf(b) >= since).forEach((b) => { get(b.by).paid += b.paid })
   sales.forEach((x) => { const s = get(x.by); s.packs.push(x); s.paid += x.price })
   const students = [...m.values()].sort((a, b) => (b.next > 0) - (a.next > 0) || b.past - a.past || b.paid - a.paid)
-  const upcoming = bk.filter((b) => fromKey(b.date) >= today).sort((a, b) => fromKey(a.date) - fromKey(b.date) || a.start - b.start)
-  return { students, sales, upcoming, active: students.filter((s) => s.next > 0).length }
+  const packs = sales.map((s) => {
+    const ss = bk.filter((b) => s.series && b.series === s.series).sort((a, b) => startOf(a) - startOf(b))
+    const p = COACH_PACKS.find((x) => x.id === s.pack)
+    return { ...s, student: who(s.by, user), packName: p?.name || s.name, total: ss.length || p?.sessions || 1, used: ss.filter(done).length, first: ss[0], slot: ss[0] && { day: fromKey(ss[0].date).getDay(), start: ss[0].start }, nextS: ss.find((b) => !done(b)) }
+  })
+  const upcoming = bk.filter((b) => !done(b)).sort((a, b) => startOf(a) - startOf(b))
+  const reviews = ratingOf(club, 'coach:' + id).list
+  return { students, sales, packs, upcoming, reviews, active: students.filter((s) => s.next > 0).length }
 }
 
 export const csv = (rows) => '﻿' + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')

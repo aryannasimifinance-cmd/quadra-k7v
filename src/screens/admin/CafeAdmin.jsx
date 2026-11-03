@@ -1,7 +1,7 @@
 // کافه: سفارش‌ها (اپ، حضوری، سر زمین)، منو با دستور تهیه، انبار مواد اولیه، خریدها و گزارش فروش
 import { motion } from 'framer-motion'
 import { Fragment, useMemo, useState } from 'react'
-import { METHOD_NAME, addDays, dayLabel, fa, fromKey, short, toman, todayKey } from '../../data'
+import { METHOD_NAME, addDays, dayLabel, fa, fromKey, hourLabel, short, toman, todayKey } from '../../data'
 import {
   BIG_K, CAFE_CATS, DRINKS, ING_CATS, NOTES, UNITS, bigCost, cafeCat, fits, fmtQty, ingAcc, itemAcc, itemCost, moreOf, nextIngCode, nextItemCode, portions, priceOf, shortage,
 } from '../../cafe'
@@ -17,7 +17,7 @@ import { who } from './derive'
 import { Badge, Card, Empty, Field, Guide, ImageUpload, Kpi, Money, More, PeriodBar, Search, Seg, Side, Tabs, XlsxBtn, usePage } from './kit'
 import { CustomerField, Qty, Ticket, useCustomer } from './PosKit'
 import { OrderLog } from './OrderLog'
-import { eventAt } from '../../events'
+import { cafeOf, eventAt } from '../../events'
 
 const fmt = new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' })
 const NEXT = { new: ['prep', 'شروع آماده‌سازی'], prep: ['ready', 'آماده شد'], ready: ['delivered', 'تحویل داده شد'] }
@@ -49,6 +49,7 @@ export function CafeAdmin() {
           ['report', 'گزارش فروش', null, 'پرفروش‌ها، ساعت‌های شلوغ و سود کافه'],
         ]} />
         <div className="sec-actions">
+          <button className={`adm-btn ${tab === 'events' ? 'primary' : 'ghost'} sm ev-btn`} onClick={() => setTab(tab === 'events' ? 'orders' : 'events')} data-tip="فروش کافه در آدینه‌ها و مسابقه‌ها، جدا از روزهای عادی">🏆 آدینه‌ها و مسابقات</button>
           <button className="adm-btn ghost sm" onClick={() => setTab('history')} data-tip="همه‌ی سفارش‌ها؛ با نام یا شماره‌ی مشتری ببینید چه کسی چه سفارش داده"><Icon name="search" size={16} />جستجوی سفارش‌ها</button>
           <button className={`adm-btn ${tab === 'orders' ? 'primary' : 'ghost'} sm`} onClick={() => setPos(true)} data-tip="ثبت دستی سفارش مشتری‌ای که حضوری به کافه آمده"><Icon name="plus" size={16} />ثبت سفارش حضوری</button>
           <button className="adm-btn ghost sm" onClick={() => setRecv(true)} data-tip="قهوه، شیر، نان و… که خریدید را وارد انبار کنید"><Icon name="box" size={16} />خرید مواد اولیه</button>
@@ -62,13 +63,15 @@ export function CafeAdmin() {
         orders: 'هر سفارش را به ستون بعد ببرید؛ وقتی «آماده شد» را بزنید، مشتری در اپ اعلان می‌گیرد. سفارش‌های بیش از ۲۰ دقیقه نارنجی می‌شوند.',
         menu: 'روی هر آیتم بزنید تا ویرایش شود. آیتمی که مواد اولیه‌اش تمام شده، در اپ «تمام شده» نشان داده می‌شود.',
         stock: 'با هر فروش، مواد اولیه طبق دستور تهیه خودکار کم می‌شود. خرید را ثبت کنید تا انبار پر شود؛ ضایعات را هم ثبت کنید تا حساب درست بماند.',
-        report: 'فروش، هزینه‌ی مواد اولیه و سود کافه در بازه‌ی انتخابی.',
+        report: 'فروش، هزینه‌ی مواد اولیه و سود کافه در بازه‌ی انتخابی؛ با «روزهای عادی» یا «مسابقه‌ها» فقط همان بخش را ببینید.',
+        events: 'هر سفارشی که از یک ساعت قبل تا یک ساعت بعد از آدینه یا مسابقه ثبت شود، فروش همان مسابقه است. روی هر مسابقه بزنید تا سفارش‌هایش را با جستجو ببینید.',
       }[tab]}</Guide>
       {tab === 'orders' && <Orders onAll={() => setTab('history')} />}
       {tab === 'history' && <OrderLog orders={club.cafeOrders} lines={logLines} status={LOG_ST} title="سفارش‌های کافه" file="quadra-cafe-orders" />}
       {tab === 'menu' && <Menu onEdit={setEdit} />}
       {tab === 'stock' && <><Stock onEdit={setIng} onRecv={setRecv} onAdj={setAdj} /><Buys onRecv={setRecv} /></>}
       {tab === 'report' && <Report />}
+      {tab === 'events' && <CafeEvents />}
       <Side open={!!edit} onClose={() => setEdit(null)} title={edit === 'new' ? 'آیتم جدید منو' : 'ویرایش آیتم منو'} wide>
         {edit && <ItemForm key={edit.id || 'new'} it={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />}
       </Side>
@@ -516,8 +519,48 @@ function Pos({ onClose }) {
   )
 }
 
+// کافه در آدینه‌ها: فهرست مسابقه‌ها با فروش هر کدام؛ با انتخاب یکی، سفارش‌هایش با جستجو و صفحه‌بندی
+function CafeEvents() {
+  const { club } = useStore()
+  const [sel, setSel] = useState(null)
+  const rows = useMemo(() => (club.events || []).filter((e) => e.status !== 'draft' && e.status !== 'cancelled').map((e) => {
+    const os = cafeOf(club, e)
+    const top = {}
+    os.forEach((o) => o.items.forEach((x) => { top[x.name] = (top[x.name] || 0) + x.qty }))
+    return { e, os, rev: os.reduce((s, o) => s + o.total, 0), top: Object.entries(top).sort((a, b) => b[1] - a[1]).slice(0, 3) }
+  }).filter((r) => r.os.length || fromKey(r.e.date) >= fromKey(todayKey()))
+    // اول مسابقه‌هایی که فروش داشته‌اند (تازه‌ترین بالا)، بعد پیش‌روها به ترتیب تاریخ
+    .sort((a, b) => (b.os.length > 0) - (a.os.length > 0) || (a.os.length ? fromKey(b.e.date) - fromKey(a.e.date) : fromKey(a.e.date) - fromKey(b.e.date))), [club])
+  const month = club.cafeOrders.filter((o) => o.at >= Date.now() - 30 * 864e5)
+  const r = sel && rows.find((x) => x.e.id === sel)
+  if (r) return (
+    <div className="stack">
+      <div className="ev-head">
+        <button className="adm-btn ghost sm" onClick={() => setSel(null)}><Icon name="fwd" size={16} />همه‌ی مسابقه‌ها</button>
+        <div className="grow"><h2>☕ {r.e.title}</h2><small>{dayLabel(r.e.date)} {jDateFa(r.e.date)}، سفارش‌های {hourLabel(r.e.start - 1)} تا {hourLabel(r.e.start + r.e.dur + 1)}</small></div>
+      </div>
+      <OrderLog orders={r.os} lines={logLines} status={LOG_ST} title={`کافه — ${r.e.title}`} file={`quadra-cafe-${r.e.id}`} initialRange="all" />
+    </div>
+  )
+  return (
+    <div className="stack">
+      <EventSplit orders={month} title="۳۰ روز اخیر: روزهای عادی و روزهای مسابقه" />
+      <div className="ev-rows">
+        {rows.map(({ e, os, rev, top }) => (
+          <button key={e.id} className="ev-row" onClick={() => setSel(e.id)} disabled={!os.length}>
+            <div className="ev-date"><b>{fa(+jDate(e.date).split('/')[2])}</b><small>{dayLabel(e.date)}</small><small>{hourLabel(e.start)}</small></div>
+            <div className="grow"><b>{e.title}</b><small>{jDateFa(e.date)}، {fa(e.regs.length)} شرکت‌کننده</small>{top.length > 0 && <small>پرفروش: {top.map(([n, q]) => `${n} ${fa(q)}`).join('، ')}</small>}</div>
+            <div className="ev-money"><div><small>{fa(os.length)} سفارش</small><b>{toman(rev)}</b></div>{os.length > 0 && <div><small>میانگین</small><b>{toman(Math.round(rev / os.length))}</b></div>}{!os.length && <small>هنوز برگزار نشده</small>}</div>
+          </button>
+        ))}
+        {!rows.length && <Empty>مسابقه‌ای با فروش کافه نیست.</Empty>}
+      </div>
+    </div>
+  )
+}
+
 // فروش کافه در زمان آدینه‌ها و مسابقه‌ها، جدا از روزهای عادی
-function EventSplit({ orders }) {
+function EventSplit({ orders, title = 'روزهای عادی و روزهای مسابقه' }) {
   const { club } = useStore()
   const by = new Map()
   let normal = 0, normalN = 0
@@ -530,7 +573,7 @@ function EventSplit({ orders }) {
   const evs = [...by.values()].sort((a, b) => fromKey(b.e.date) - fromKey(a.e.date))
   const evRev = evs.reduce((s, r) => s + r.rev, 0), all = normal + evRev
   return (
-    <Card title="روزهای عادی و روزهای مسابقه" sub="سفارش‌های یک ساعت قبل تا یک ساعت بعد از هر آدینه یا تورنمنت، فروش همان مسابقه حساب می‌شوند">
+    <Card title={title} sub="سفارش‌های یک ساعت قبل تا یک ساعت بعد از هر آدینه یا تورنمنت، فروش همان مسابقه حساب می‌شوند">
       <div className="ev-split">
         <div><small>روزهای عادی</small><b>{toman(normal)}</b><em>{fa(normalN)} سفارش، {fa(all ? Math.round((normal / all) * 100) : 0)}٪</em></div>
         <div className="ev"><small>🏆 آدینه‌ها و مسابقه‌ها</small><b>{toman(evRev)}</b><em>{fa(evs.reduce((s, r) => s + r.n, 0))} سفارش، {fa(all ? Math.round((evRev / all) * 100) : 0)}٪</em></div>
@@ -580,7 +623,8 @@ function Buys({ onRecv }) {
 function Report() {
   const { club, user } = useStore()
   const [p, setP] = useState(() => period('week', todayKey()))
-  const orders = club.cafeOrders.filter((o) => inPeriod(dk(o.at), p))
+  const [mode, setMode] = useState('all')
+  const orders = club.cafeOrders.filter((o) => inPeriod(dk(o.at), p) && (mode === 'all' || !!eventAt(club.events, o.at) === (mode === 'event')))
   const R = useMemo(() => {
     const items = {}, cats = {}, hours = {}, ingUse = {}, days = {}
     orders.forEach((o) => {
@@ -615,14 +659,13 @@ function Report() {
   ])
   return (
     <div className="stack">
-      <PeriodBar p={p} setP={setP} right={<XlsxBtn label="گزارش اکسل کافه" onClick={exp} />} />
+      <PeriodBar p={p} setP={setP} right={<><Seg value={mode} onChange={setMode} options={{ all: 'همه', normal: 'روزهای عادی', event: '🏆 مسابقه‌ها' }} tips={{ normal: 'بدون فروش زمان آدینه‌ها', event: 'فقط فروش زمان آدینه‌ها و مسابقه‌ها' }} /><XlsxBtn label="گزارش اکسل کافه" onClick={exp} /></>} />
       <div className="kpis four">
         <Kpi icon="bag" label="سفارش‌ها" value={fa(T.n)} sub={`${fa(T.n ? Math.round((T.app / T.n) * 100) : 0)}٪ از اپ، ${fa(T.court)} سر زمین`} />
         <Kpi icon="cash" label="فروش کافه" value={short(T.rev) + ' تومان'} sub={T.n ? `میانگین ${short(Math.round(T.rev / T.n))}` : null} />
         <Kpi icon="box" label="بهای تمام‌شده (مواد اولیه)" value={short(T.cogs) + ' تومان'} />
         <Kpi icon="chart" label="سود ناخالص" value={short(T.rev - T.cogs) + ' تومان'} sub={T.rev ? `حاشیه ${fa(Math.round(((T.rev - T.cogs) / T.rev) * 100))}٪` : null} />
       </div>
-      <EventSplit orders={orders} />
       <div className="two">
         <Card title="فروش به تفکیک دسته">{byCat.length ? <HBars rows={byCat} /> : <Empty>فروشی در این بازه نیست.</Empty>}</Card>
         <Card title="ساعت‌های شلوغ کافه" sub="فروش هر ساعت">{byHour.length ? <HBars rows={byHour} /> : <Empty>—</Empty>}</Card>

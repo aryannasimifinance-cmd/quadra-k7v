@@ -46,7 +46,7 @@ export function ShopAdmin() {
           <button className="adm-btn ghost sm" onClick={() => setTab('history')} data-tip="همه‌ی سفارش‌ها؛ با نام یا شماره‌ی مشتری ببینید چه کسی چه خریده"><Icon name="search" size={16} />جستجوی سفارش‌ها</button>
           <button className={`adm-btn ${tab === 'orders' ? 'primary' : 'ghost'} sm`} onClick={() => setPos(true)} data-tip="فروش به مشتری حاضر در باشگاه؛ موجودی همان لحظه کم می‌شود"><Icon name="plus" size={16} />فروش حضوری</button>
           <button className="adm-btn ghost sm" onClick={() => setRecv(true)} data-tip="کالایی که از تأمین‌کننده خریدید را وارد انبار کنید"><Icon name="box" size={16} />ثبت خرید کالا</button>
-          <button className={`adm-btn ${tab === 'orders' ? 'ghost' : 'primary'} sm`} onClick={() => setEdit('new')} data-tip="تعریف کالای تازه با عکس، قیمت، سایز و رنگ"><Icon name="plus" size={16} />کالای جدید</button>
+          <button className={`adm-btn ${tab === 'orders' ? 'ghost' : 'primary'} sm`} onClick={() => setEdit('new')} data-tip="کالای تازه با عکس، قیمت، سایز و رنگ؛ در فروشگاه اپ و سایت نمایش داده می‌شود"><Icon name="plus" size={16} />ثبت کالای جدید در اپ (سایت)</button>
         </div>
       </div>
       <Guide>{{

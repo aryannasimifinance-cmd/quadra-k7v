@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react'
 import {
-  COACH_PACKS, COURTS, LEVELS, MEMBERS, METHOD_NAME, PACKAGES, TYPE_NAME, coachPackPrice, courtById, dayLabel, dayMonth, fa, fromKey,
-  levelById, priceFor, range, short, toman, todayKey,
+  COACHES, COACH_PACKS, COURTS, LEVELS, MEMBERS, METHOD_NAME, PACKAGES, TYPE_NAME, coachById, coachPackPrice, courtById, dayLabel, dayMonth, fa, fromKey,
+  hourLabel, levelById, memberById, priceFor, productById, range, short, toman, todayKey,
 } from '../../data'
 import { chime } from '../../fx'
-import { payState, useStore } from '../../store'
+import { ME, payState, useStore } from '../../store'
+import { podium } from '../../events'
 import { Icon, LevelPill } from '../../components/ui'
-import { Card, Empty, Field, Guide, Kpi, More, Pager, Search, Seg, Side, Status, XlsxBtn, usePage, useSlice } from './kit'
+import { Badge, Card, Empty, Field, Guide, ImageUpload, Kpi, Money, More, Pager, Search, Seg, Side, Status, Tabs, XlsxBtn, usePage, useSlice } from './kit'
 import { HBars } from './Charts'
-import { SEGMENTS, coachFile, coachStats, memberStats, payments, who } from './derive'
+import { SEGMENTS, SPANS, coachFile, coachStats, memberStats, payments, who } from './derive'
 import { dk, jDate, jDateFa } from '../../jalali'
 import { downloadXlsx, table } from '../../xlsx'
 
@@ -101,9 +102,11 @@ export function Members() {
   const [q, setQ] = useState('')
   const [sort, setSort] = useState('spent')
   const [sel, setSel] = useState(null)
-  const [add, setAdd] = useState(false)
+  const [form, setForm] = useState(null) // 'new' یا عضو
+  const [coachOf, setCoachOf] = useState(null)
   const list = all.filter((m) => (seg === 'all' || m.seg === seg) && (src === 'all' || (src === 'desk' ? m.source !== 'app' : m.source === 'app')) && (!q || m.name.includes(q) || m.phone?.includes(q)))
     .sort((a, b) => sort === 'last' ? a.lastDays - b.lastDays : sort === 'new' ? (b.at || 0) - (a.at || 0) : b[sort] - a[sort])
+  const pg = useSlice(list, 30, seg + src + q + sort)
   const counts = Object.fromEntries(Object.keys(SEGMENTS).map((k) => [k, k === 'all' ? all.length : all.filter((m) => m.seg === k).length]))
   const m = sel && all.find((x) => x.id === sel)
   const exp = () => downloadXlsx('quadra-members', [{ name: 'اعضا', rows: table('اعضای باشگاه کوادرا', ['نام', 'موبایل', 'سطح', 'عضویت از', 'بخش', 'تعداد حضور', 'آخرین حضور (روز پیش)', 'رنکینگ', 'مجموع خرید'],
@@ -116,9 +119,9 @@ export function Members() {
             <button key={k} className={seg === k ? 'on' : ''} onClick={() => setSeg(k)} data-tip={SEG_TIP[k]}><b>{fa(counts[k])}</b><small>{v}</small></button>
           ))}
         </div>
-        <div className="sec-actions"><button className="adm-btn primary sm" onClick={() => setAdd(true)} data-tip="ثبت عضوی که حضوری یا تلفنی آمده"><Icon name="plus" size={16} />عضو جدید</button></div>
+        <div className="sec-actions"><button className="adm-btn primary sm" onClick={() => setForm('new')} data-tip="ثبت عضوی که حضوری یا تلفنی آمده"><Icon name="plus" size={16} />عضو جدید</button></div>
       </div>
-      <Guide>کسی که در اپ ثبت‌نام کند خودکار اینجا اضافه می‌شود. عضوی که در پذیرش ثبت کنید هم در «رزرو دستی» قابل انتخاب است.</Guide>
+      <Guide>روی هر عضو بزنید تا پرونده‌اش باز شود: رزروها، کلاس‌ها و مربی‌ها، آدینه‌ها و نتیجه‌ها، خریدها؛ از همان‌جا اطلاعاتش را ویرایش کنید یا او را مربی کنید.</Guide>
       <Card>
         <div className="bk-row">
           <Search value={q} onChange={setQ} ph="نام یا موبایل" />
@@ -129,112 +132,184 @@ export function Members() {
         <p className="count">{fa(list.length)} عضو</p>
         <div className="tbl-wrap"><table className="tbl">
           <thead><tr><th>عضو</th><th>موبایل</th><th>سطح</th><th data-tip="چند بار رزرو یا بازی داشته">حضور</th><th>آخرین حضور</th><th data-tip="جمع پول رزرو، فروشگاه، کافه و پکیج">مجموع خرید</th><th>وضعیت</th></tr></thead>
-          <tbody>{list.map((x) => (
-            <tr key={x.id} className={`click ${sel === x.id ? 'sel' : ''}`} onClick={() => setSel(sel === x.id ? null : x.id)}>
-              <td><div className="prod-cell"><span className="adm-av sm">{x.name[0]}</span><div><b>{x.name}</b><small>{x.source === 'app' ? 'از اپ' : x.source === 'desk' ? 'ثبت در پذیرش' : 'عضو باشگاه'}</small></div>{x.member && <span className="vip">{x.member === 'black' ? 'BLACK' : 'GOLD'}</span>}</div></td>
+          <tbody>{pg.rows.map((x) => (
+            <tr key={x.id} className={`click ${sel === x.id ? 'sel' : ''}`} onClick={() => setSel(x.id)}>
+              <td><div className="prod-cell"><span className="adm-av sm">{x.name[0]}</span><div><b>{x.name}</b><small>{x.source === 'app' ? 'از اپ' : x.source === 'desk' ? 'ثبت در پذیرش' : 'عضو باشگاه'}{coachOfMember(x.id) ? '، مربی' : ''}</small></div>{x.member && <span className="vip">{x.member === 'black' ? 'BLACK' : 'GOLD'}</span>}</div></td>
               <td dir="ltr" className="num">{x.phone}</td><td><LevelPill id={x.level} /></td><td className="num">{fa(x.visits)}</td>
               <td>{x.lastDays === 0 ? 'امروز' : x.lastDays >= 99 ? '—' : `${fa(x.lastDays)} روز پیش`}</td>
               <td className="num">{toman(x.spent)}</td><td><span className={`seg-pill s-${x.seg}`}>{SEGMENTS[x.seg]}</span></td>
             </tr>))}</tbody>
         </table></div>
         {!list.length && <Empty>عضوی پیدا نشد.</Empty>}
+        <div className="log-foot">{list.length > 0 && <small>{fa(pg.from + 1)} تا {fa(pg.from + pg.rows.length)} از {fa(list.length)}</small>}<Pager {...pg} /></div>
       </Card>
-      {m && (
-        <Card title={m.name} sub={`${levelById(m.level).title}، ${fa(m.visits)} حضور`} right={<button className="adm-btn ghost sm" onClick={() => setSel(null)}>بستن</button>}>
-          <div className="tbl-wrap"><table className="tbl"><thead><tr><th>تاریخ</th><th>ساعت</th><th>زمین</th><th>نوع</th><th>مبلغ</th><th>پرداخت</th></tr></thead>
-            <tbody>{club.bookings.filter((b) => b.by === m.id || b.players?.includes(m.id)).sort((a, b) => fromKey(b.date) - fromKey(a.date)).slice(0, 12).map((b) => (
-              <tr key={b.id}><td>{dayLabel(b.date)} {dayMonth(fromKey(b.date))}</td><td className="num" dir="ltr">{range(b.start, b.dur)}</td><td>{courtById(b.court).name}</td><td>{TYPE_NAME[b.type]}</td><td className="num">{toman(b.price)}</td><td><Status s={payState(b)} /></td></tr>
-            ))}</tbody></table></div>
-          {!club.bookings.some((b) => b.by === m.id || b.players?.includes(m.id)) && <Empty>هنوز رزروی ندارد.</Empty>}
-        </Card>
-      )}
-      <Side open={add} onClose={() => setAdd(false)} title="عضو جدید">{add && <MemberForm onClose={() => setAdd(false)} />}</Side>
+      <Side open={!!m} onClose={() => setSel(null)} title={m?.name} wide>
+        {m && <MemberFile key={m.id} m={m} onEdit={() => setForm(m)} onCoach={() => setCoachOf(m)} />}
+      </Side>
+      <Side open={!!form} onClose={() => setForm(null)} title={form === 'new' ? 'عضو جدید' : `ویرایش ${form?.name || ''}`}>
+        {form && <MemberForm key={form.id || 'new'} m={form === 'new' ? null : form} onClose={() => setForm(null)} />}
+      </Side>
+      <Side open={!!coachOf} onClose={() => setCoachOf(null)} title="ثبت به‌عنوان مربی" wide>
+        {coachOf && <CoachForm from={coachOf} onClose={() => setCoachOf(null)} />}
+      </Side>
     </div>
   )
 }
 const SEG_TIP = { all: 'همه‌ی اعضا', vip: 'عضویت طلایی یا مشکی دارند', active: 'در ۱۰ روز اخیر آمده‌اند', new: 'تازه عضو شده‌اند', risk: 'بیش از ۱۰ روز است نیامده‌اند' }
+const coachOfMember = (id) => COACHES.find((c) => c.member === id)
+const toPhone = (v) => v.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '')
 
-function MemberForm({ onClose }) {
-  const { adminMember, toast } = useStore()
-  const [f, setF] = useState({ name: '', phone: '09', level: 'C', side: 'both' })
+// پرونده‌ی عضو: هر چیزی که به او وصل است، در یک جا
+function MemberFile({ m, onEdit, onCoach }) {
+  const { club, user } = useStore()
+  const [tab, setTab] = useState('book')
+  const bookings = club.bookings.filter((b) => b.type !== 'coach' && (b.by === m.id || b.players?.includes(m.id))).sort((a, b) => fromKey(b.date) - fromKey(a.date))
+  const classes = club.bookings.filter((b) => b.type === 'coach' && b.status !== 'cancelled' && (b.by === m.id || b.players?.includes(m.id))).sort((a, b) => fromKey(b.date) - fromKey(a.date))
+  const packs = club.sales.filter((s) => s.by === m.id && s.kind === 'coach')
+  const coaches = [...new Set([...classes.map((b) => b.coach), ...packs.map((s) => s.item)])].map(coachById).filter(Boolean)
+  const evs = (club.events || []).map((e) => ({ e, r: e.regs.find((r) => r.by === m.id) })).filter((x) => x.r).sort((a, b) => fromKey(b.e.date) - fromKey(a.e.date))
+  const orders = [...club.orders.filter((o) => o.by === m.id).map((o) => ({ ...o, k: 'shop' })), ...(club.cafeOrders || []).filter((o) => o.by === m.id).map((o) => ({ ...o, k: 'cafe' }))].sort((a, b) => b.at - a.at)
+  const coach = coachOfMember(m.id)
+  const place = (e, rid) => {
+    const t = e.teams.find((x) => x.players.includes(rid)), p = podium(e)
+    if (!t) return e.status === 'done' ? '—' : 'هنوز تیم‌بندی نشده'
+    const medal = p && (p.first === t.id ? '🏆 قهرمان' : p.second === t.id ? '🥈 نایب‌قهرمان' : p.third.includes(t.id) ? '🥉 سوم' : '')
+    return `${t.name}${medal ? '، ' + medal : ''}`
+  }
+  const tabs = [['book', 'رزروها', bookings.length], ['class', 'کلاس و مربی', classes.length + packs.length], ['ev', 'آدینه‌ها', evs.length], ['buy', 'خریدها', orders.length]]
+  return (
+    <div className="mf">
+      <div className="mf-head">
+        <span className="adm-av">{m.name[0]}</span>
+        <div className="grow"><b>{m.name}</b><small dir="ltr">{m.phone}</small><div className="row-gap"><LevelPill id={m.level} /><span className={`seg-pill s-${m.seg}`}>{SEGMENTS[m.seg]}</span>{m.member && <span className="vip">{m.member === 'black' ? 'BLACK' : 'GOLD'}</span>}{coach && <Badge tone="ok">مربی: {coach.title}</Badge>}</div></div>
+      </div>
+      <div className="row-btns">
+        {m.id !== ME && <button className="adm-btn ghost sm" onClick={onEdit}><Icon name="cog" size={15} />ویرایش اطلاعات</button>}
+        {!coach && m.id !== ME && <button className="adm-btn ghost sm" onClick={onCoach} data-tip="با همین اطلاعات در صفحه‌ی مربی‌ها و اپ اضافه می‌شود"><Icon name="coach" size={15} />ثبت به‌عنوان مربی</button>}
+      </div>
+      {m.id === ME && <p className="guide">این کاربر اطلاعاتش را خودش در اپ ویرایش می‌کند.</p>}
+      {m.note && <p className="mf-note">{m.note}</p>}
+      <div className="mf-kpis">
+        <div><small>حضور</small><b>{fa(m.visits)}</b></div><div><small>مجموع خرید</small><b>{short(m.spent)}</b></div>
+        <div><small>کلاس با مربی</small><b>{fa(classes.length)}</b></div><div><small>آدینه</small><b>{fa(evs.length)}</b></div>
+      </div>
+      <Tabs value={tab} onChange={setTab} tabs={tabs.map(([k, n, c]) => [k, n, c || null])} />
+      {tab === 'book' && <MiniTable empty="رزروی ندارد." head={['تاریخ', 'ساعت', 'زمین', 'نوع', 'پرداخت']} rows={bookings.slice(0, 30).map((b) => [`${dayLabel(b.date)} ${dayMonth(fromKey(b.date))}`, range(b.start, b.dur), courtById(b.court).name, TYPE_NAME[b.type], <Status s={payState(b)} />])} />}
+      {tab === 'class' && (<>
+        {coaches.length > 0 && <div className="mf-coaches">{coaches.map((c) => <span key={c.id}><i style={{ backgroundImage: `url(${c.img})` }} />{c.name}<small>{fa(classes.filter((b) => b.coach === c.id).length)} جلسه</small></span>)}</div>}
+        {packs.length > 0 && <MiniTable head={['پکیج', 'تاریخ خرید', 'مبلغ']} rows={packs.map((s) => [s.name, jDateFa(dk(s.at)), toman(s.price)])} />}
+        <MiniTable empty="کلاسی نداشته." head={['تاریخ', 'ساعت', 'مربی', 'وضعیت']} rows={classes.slice(0, 30).map((b) => [`${dayLabel(b.date)} ${dayMonth(fromKey(b.date))}`, range(b.start, b.dur), coachById(b.coach)?.name || '—', fromKey(b.date) < fromKey(todayKey()) ? 'برگزار شد' : 'آینده'])} />
+      </>)}
+      {tab === 'ev' && <MiniTable empty="در آدینه‌ای شرکت نکرده." head={['مسابقه', 'تاریخ', 'تیم و نتیجه', 'ورودی']} rows={evs.map(({ e, r }) => [e.title, jDateFa(e.date), place(e, r.id), r.paid ? toman(r.paid) : 'رایگان'])} />}
+      {tab === 'buy' && <MiniTable empty="خریدی ندارد." head={['شماره', 'تاریخ', 'بخش', 'اقلام', 'مبلغ']} rows={orders.slice(0, 40).map((o) => [o.id, jDateFa(dk(o.at)), o.k === 'cafe' ? 'کافه' : 'فروشگاه', o.k === 'cafe' ? o.items.map((x) => `${fa(x.qty)}× ${x.name}`).join('، ') : o.items.map((x) => `${fa(x.qty)}× ${productById(x.pid)?.name || x.sku}`).join('، '), toman(o.total)])} />}
+    </div>
+  )
+}
+const MiniTable = ({ head, rows, empty }) => (rows.length
+  ? <div className="tbl-wrap"><table className="tbl"><thead><tr>{head.map((h) => <th key={h}>{h}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{c}</td>)}</tr>)}</tbody></table></div>
+  : empty ? <Empty>{empty}</Empty> : null)
+
+function MemberForm({ m, onClose }) {
+  const { adminMember, adminMemberEdit, toast } = useStore()
+  const [f, setF] = useState(() => (m ? { name: m.name, phone: m.phone || '09', level: m.level, side: m.side || 'both', member: m.member || '', note: m.note || '' } : { name: '', phone: '09', level: 'C', side: 'both', member: '', note: '' }))
   const set = (x) => setF((o) => ({ ...o, ...x }))
-  const phone = f.phone.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '')
-  const dup = MEMBERS.some((m) => m.phone === phone)
+  const phone = toPhone(f.phone)
+  const dup = MEMBERS.some((x) => x.phone === phone && x.id !== m?.id)
   const ok = f.name.trim().length > 2 && /^09\d{9}$/.test(phone) && !dup
-  const save = () => { adminMember({ name: f.name.trim(), phone, level: f.level, side: f.side }); chime('success'); toast({ icon: '👤', title: 'عضو اضافه شد', body: f.name.trim() }); onClose() }
+  const save = () => {
+    const p = { name: f.name.trim(), phone, level: f.level, side: f.side, member: f.member || null, note: f.note.trim() }
+    if (m) adminMemberEdit(m.id, p); else adminMember(p)
+    chime('success'); toast({ icon: '👤', title: m ? 'اطلاعات عضو ذخیره شد' : 'عضو اضافه شد', body: p.name }); onClose()
+  }
   return (
     <div className="form">
       <Field label="نام و نام خانوادگی"><input value={f.name} onChange={(e) => set({ name: e.target.value })} placeholder="مثلاً سارا محمدی" /></Field>
-      <Field label="موبایل" hint={dup ? 'این شماره قبلاً عضو شده است' : 'با همین شماره می‌تواند در اپ وارد شود'}><input dir="ltr" inputMode="numeric" value={f.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
-      <Field label="سطح بازی" tip="اگر نمی‌دانید C بگذارید؛ بعداً با بازی‌ها دقیق می‌شود"><select value={f.level} onChange={(e) => set({ level: e.target.value })}>{LEVELS.map((l) => <option key={l.id} value={l.id}>{l.id}، {l.title}</option>)}</select></Field>
+      <Field label="موبایل" hint={dup ? 'این شماره برای عضو دیگری ثبت شده است' : 'با همین شماره در اپ وارد می‌شود'}><input dir="ltr" inputMode="numeric" value={f.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
+      <Field label="سطح بازی" tip="در تیم‌بندی آدینه‌ها و پیدا کردن بازی هم‌سطح استفاده می‌شود"><select value={f.level} onChange={(e) => set({ level: e.target.value })}>{LEVELS.map((l) => <option key={l.id} value={l.id}>{l.id}، {l.title}</option>)}</select></Field>
       <Field label="سمت بازی"><Seg value={f.side} onChange={(side) => set({ side })} options={{ right: 'راست', left: 'چپ', both: 'هر دو' }} /></Field>
-      <button className="adm-btn primary full" disabled={!ok} onClick={save}>ثبت عضو</button>
+      <Field label="عضویت ویژه"><Seg value={f.member} onChange={(member) => set({ member })} options={{ '': 'ندارد', gold: 'طلایی', black: 'مشکی' }} /></Field>
+      <Field label="یادداشت مدیر" hint="فقط در پنل دیده می‌شود"><textarea rows={2} value={f.note} onChange={(e) => set({ note: e.target.value })} /></Field>
+      <button className="adm-btn primary full" disabled={!ok} onClick={save}>{m ? 'ذخیره' : 'ثبت عضو'}</button>
     </div>
   )
 }
 
+// ---------- مربی‌ها ----------
 export function Coaches() {
   const { club } = useStore()
-  const stats = coachStats(club).sort((a, b) => b.rating - a.rating)
+  const [span, setSpan] = useState('month')
+  const stats = coachStats(club, span).sort((a, b) => (b.active !== false) - (a.active !== false) || b.rating - a.rating)
   const [sel, setSel] = useState(stats[0]?.id)
+  const [form, setForm] = useState(null) // 'new' یا مربی
   const pk = PACKAGES.map((p) => ({ name: p.name, value: club.sales.filter((s) => s.item === p.id).reduce((a, s) => a + s.price, 0), color: '#E07B39' }))
   const pick = (id) => { setSel(id); setTimeout(() => document.getElementById('coach-file')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30) }
+  const c = stats.find((x) => x.id === sel)
   return (
     <div className="stack">
+      <div className="sec-bar">
+        <div className="row-gap"><span className="muted-l">بازه‌ی آمار:</span><Seg value={span} onChange={setSpan} options={SPANS} /></div>
+        <div className="sec-actions"><button className="adm-btn primary sm" onClick={() => setForm('new')} data-tip="مربی تازه با عکس، سطح، نرخ و پکیج‌ها؛ در اپ هم دیده می‌شود"><Icon name="plus" size={16} />مربی جدید</button></div>
+      </div>
+      <Guide>آمار هر کارت مربوط به بازه‌ی انتخابی است. روی کارت بزنید تا پرونده‌ی شاگردها، پکیج‌ها و نظرهای همان مربی باز شود.</Guide>
       <div className="coach-grid">
-        {stats.map((c) => (
-          <button key={c.id} className={`coach-adm ${sel === c.id ? 'on' : ''}`} onClick={() => pick(c.id)} data-tip="پرونده‌ی شاگردها و پکیج‌های این مربی">
-            <div className="ca-photo" style={{ backgroundImage: `url(${c.img})` }} />
+        {stats.map((x) => (
+          <button key={x.id} className={`coach-adm ${sel === x.id ? 'on' : ''} ${x.active === false ? 'off' : ''}`} onClick={() => pick(x.id)}>
+            <div className="ca-photo" style={{ backgroundImage: `url(${x.img})` }}>{x.active === false && <span className="ca-off">در اپ نمایش داده نمی‌شود</span>}</div>
             <div className="ca-body">
-              <div className="row-between"><b>{c.name}</b><LevelPill id={c.level} /></div>
-              <small>{c.title}، ★ {fa(c.rating)} از {fa(c.reviews)} نظر ناشناس، {toman(c.price)}/جلسه</small>
+              <div className="row-between"><b>{x.name}</b><LevelPill id={x.level} /></div>
+              <small>{x.title}، {toman(x.price)}/جلسه</small>
               <div className="ca-stats">
-                <div><b>{fa(c.sessions)}</b><small>جلسه‌ی برگزارشده</small></div>
-                <div><b>{fa(c.upcoming)}</b><small>جلسه‌ی آینده</small></div>
-                <div><b>{fa(c.packs)}</b><small>پکیج فروخته</small></div>
-                <div><b>{short(c.revenue)}</b><small>درآمد</small></div>
+                <div><b>{fa(x.sessions)}</b><small>جلسه‌ی برگزارشده</small></div>
+                <div><b>{fa(x.students)}</b><small>شاگرد</small></div>
+                <div><b>{fa(x.packsSold)}</b><small>پکیج ({COACH_PACKS.filter((p) => p.sessions > 1).map((p) => `${fa(p.sessions)}: ${fa(x.byPack[p.id])}`).join('، ')})</small></div>
+                <div><b>{short(x.revenue)}</b><small>درآمد</small></div>
               </div>
-              {c.comments.map((r) => <p key={r.id} className="ca-quote">{'★'.repeat(r.stars)} «{r.text}»</p>)}
+              <div className="ca-foot"><span>★ {fa(x.rating)} <small>{fa(x.reviews)} نظر</small></span><span>{fa(x.upcoming)} جلسه‌ی آینده</span></div>
             </div>
           </button>
         ))}
       </div>
-      {sel && <CoachFile key={sel} c={stats.find((x) => x.id === sel)} stats={stats} onPick={setSel} />}
+      {c && <CoachFile key={c.id + span} c={c} span={span} onEdit={() => setForm(c)} />}
       <div className="two">
         <Card title="فروش پکیج‌های باشگاه"><HBars rows={pk} /></Card>
-        <Card title="نرخ پکیج‌های مربی" sub="محاسبه‌ی خودکار از نرخ جلسه">
+        <Card title="نرخ پکیج‌های مربی" sub="دستی یا خودکار از نرخ جلسه؛ «—» یعنی این پکیج برای مربی فعال نیست">
           <div className="tbl-wrap"><table className="tbl"><thead><tr><th>مربی</th>{COACH_PACKS.map((p) => <th key={p.id}>{p.name}</th>)}</tr></thead>
-            <tbody>{stats.map((c) => <tr key={c.id}><td>{c.name}</td>{COACH_PACKS.map((p) => <td key={p.id} className="num">{short(coachPackPrice(c, p))}</td>)}</tr>)}</tbody></table></div>
+            <tbody>{stats.map((x) => <tr key={x.id}><td>{x.name}</td>{COACH_PACKS.map((p) => <td key={p.id} className="num">{x.packs?.[p.id] === false ? '—' : <>{short(coachPackPrice(x, p))}{x.prices?.[p.id] ? <small>دستی</small> : null}</>}</td>)}</tr>)}</tbody></table></div>
         </Card>
       </div>
+      <Side open={!!form} onClose={() => setForm(null)} title={form === 'new' ? 'مربی جدید' : `ویرایش ${form?.name || ''}`} wide>
+        {form && <CoachForm key={form.id || 'new'} co={form === 'new' ? null : club.coaches.find((x) => x.id === form.id)} onClose={(id) => { setForm(null); if (id) setSel(id) }} />}
+      </Side>
     </div>
   )
 }
 
-// پرونده‌ی یک مربی: شاگردها با پکیج‌ها و جلسه‌هایشان، فروش پکیج‌ها و برنامه‌ی پیش‌رو
-function CoachFile({ c, stats, onPick }) {
+// پرونده‌ی یک مربی در بازه‌ی انتخابی
+function CoachFile({ c, span, onEdit }) {
   const { club, user } = useStore()
   const [tab, setTab] = useState('students')
   const [q, setQ] = useState('')
-  const f = useMemo(() => coachFile(club, c.id, user), [club, c.id, user])
+  const f = useMemo(() => coachFile(club, c.id, user, span), [club, c.id, user, span])
   const list = f.students.filter((s) => !q || s.name.includes(q) || s.phone?.includes(q))
   const pg = useSlice(list, 12, q + tab)
+  const day = (n) => ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه'][n]
   const exp = () => downloadXlsx(`quadra-coach-${c.id}-${jDate(todayKey()).replace(/\//g, '-')}`, [
-    { name: 'شاگردها', rows: table(`شاگردهای ${c.name}`, ['شاگرد', 'تلفن', 'سطح', 'پکیج‌ها', 'جلسه‌ی برگزارشده', 'جلسه‌ی آینده', 'آخرین جلسه', 'جلسه‌ی بعدی', 'پرداختی'],
+    { name: 'شاگردها', rows: table(`شاگردهای ${c.name} — ${SPANS[span]}`, ['شاگرد', 'تلفن', 'سطح', 'پکیج‌ها', 'جلسه‌ی برگزارشده', 'جلسه‌ی آینده', 'آخرین جلسه', 'جلسه‌ی بعدی', 'پرداختی'],
       f.students.map((s) => [s.name, s.phone || '', s.level || '', s.packs.map((p) => p.name).join('، '), s.past, s.next, s.last ? jDate(s.last) : '', s.upcoming ? jDate(s.upcoming) : '', s.paid])) },
-    { name: 'پکیج‌ها', rows: table(null, ['تاریخ', 'شاگرد', 'پکیج', 'مبلغ', 'روش'], f.sales.map((s) => [jDate(dk(s.at)), who(s.by, user), s.name, s.price, METHOD_NAME[s.method] || s.method])) },
+    { name: 'پکیج‌ها', rows: table(null, ['تاریخ خرید', 'شاگرد', 'پکیج', 'شروع', 'روز و ساعت', 'جلسه‌ها', 'مبلغ', 'روش'], f.packs.map((p) => [jDate(dk(p.at)), p.student, p.packName, p.first ? jDate(p.first.date) : '', p.slot ? `${day(p.slot.day)} ${p.slot.start}` : '', `${p.used}/${p.total}`, p.price, METHOD_NAME[p.method] || p.method])) },
+    { name: 'نظرها', rows: table(null, ['تاریخ', 'امتیاز', 'نظر'], f.reviews.map((r) => [jDate(dk(r.at)), r.stars, r.text || ''])) },
   ])
   return (
-    <Card className="coach-file" title={<span id="coach-file">پرونده‌ی {c.name}</span>} sub={`${c.title}، ${toman(c.price)} هر جلسه`}
-      right={<div className="row-btns"><select className="coach-sel" value={c.id} onChange={(e) => onPick(e.target.value)}>{stats.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select><XlsxBtn onClick={exp} /></div>}>
+    <Card className="coach-file" title={<span id="coach-file">پرونده‌ی {c.name}</span>} sub={`${c.title}، ${SPANS[span]}`}
+      right={<div className="row-btns"><button className="adm-btn ghost sm" onClick={onEdit}><Icon name="cog" size={15} />ویرایش مربی</button><XlsxBtn onClick={exp} /></div>}>
       <div className="kpis four">
         <Kpi icon="users" label="شاگردها" value={fa(f.students.length)} sub={`${fa(f.active)} نفر جلسه‌ی آینده دارند`} />
-        <Kpi icon="ticket" label="پکیج‌های فروخته" value={fa(f.sales.length)} sub={COACH_PACKS.map((p) => `${p.name.replace('پکیج ', '')} ${fa(f.sales.filter((s) => s.pack === p.id).length)}`).join('، ')} />
-        <Kpi icon="cal" label="جلسه‌ها" value={`${fa(c.sessions)} برگزارشده`} sub={`${fa(c.upcoming)} جلسه‌ی آینده`} />
-        <Kpi icon="cash" label="درآمد" value={short(c.revenue) + ' تومان'} sub={`پکیج‌ها ${short(f.sales.reduce((s, x) => s + x.price, 0))}`} />
+        <Kpi icon="ticket" label="پکیج‌های فروخته" value={fa(f.packs.length)} sub={COACH_PACKS.map((p) => `${p.name.replace('پکیج ', '')}: ${fa(f.packs.filter((s) => s.pack === p.id).length)}`).join('، ')} />
+        <Kpi icon="cal" label="جلسه‌های برگزارشده" value={fa(c.sessions)} sub={`${fa(c.upcoming)} جلسه‌ی آینده`} />
+        <Kpi icon="cash" label="درآمد" value={short(c.revenue) + ' تومان'} sub={`★ ${fa(c.rating)} از ${fa(c.reviews)} نظر`} />
       </div>
       <div className="row-between coach-bar">
-        <Seg value={tab} onChange={setTab} options={{ students: `شاگردها ${fa(f.students.length)}`, packs: `پکیج‌ها ${fa(f.sales.length)}`, next: `برنامه‌ی پیش‌رو ${fa(f.upcoming.length)}` }} />
+        <Seg value={tab} onChange={setTab} options={{ students: `شاگردها ${fa(f.students.length)}`, packs: `پکیج‌ها ${fa(f.packs.length)}`, next: `برنامه‌ی پیش‌رو ${fa(f.upcoming.length)}`, reviews: `نظرها ${fa(f.reviews.length)}` }} />
         {tab === 'students' && <Search value={q} onChange={setQ} ph="نام یا شماره‌ی شاگرد" />}
       </div>
       {tab === 'students' && (<>
@@ -242,28 +317,85 @@ function CoachFile({ c, stats, onPick }) {
           <thead><tr><th>شاگرد</th><th>سطح</th><th>پکیج‌ها</th><th>جلسه‌ها</th><th>آخرین / بعدی</th><th>پرداختی</th></tr></thead>
           <tbody>{pg.rows.map((s) => (
             <tr key={s.id}><td><b>{s.name}</b>{s.phone && <small dir="ltr">{s.phone}</small>}</td><td>{s.level ? <LevelPill id={s.level} /> : '—'}</td>
-              <td>{s.packs.length ? <div className="log-items">{s.packs.map((p, i) => <span key={i}>{p.name.replace('، ' + c.name, '')}</span>)}</div> : <small>تک جلسه</small>}</td>
+              <td>{s.packs.length ? <div className="log-items">{s.packs.map((p, i) => <span key={i}>{(COACH_PACKS.find((x) => x.id === p.pack)?.name) || p.name}</span>)}</div> : <small>تک جلسه</small>}</td>
               <td className="num">{fa(s.past)} برگزارشده{s.next > 0 && <small>{fa(s.next)} آینده</small>}</td>
               <td><small>{s.last ? `آخرین: ${jDateFa(s.last)}` : '—'}</small>{s.upcoming && <small className="pos">بعدی: {dayLabel(s.upcoming)} {jDateFa(s.upcoming)}</small>}</td>
               <td className="num">{toman(s.paid)}</td></tr>
           ))}</tbody>
         </table></div>
-        {!list.length && <Empty>{q ? `شاگردی با «${q}» پیدا نشد.` : 'این مربی هنوز شاگردی ندارد.'}</Empty>}
+        {!list.length && <Empty>{q ? `شاگردی با «${q}» پیدا نشد.` : 'در این بازه شاگردی نداشته.'}</Empty>}
         <div className="log-foot">{list.length > 0 && <small>{fa(pg.from + 1)} تا {fa(pg.from + pg.rows.length)} از {fa(list.length)}</small>}<Pager {...pg} /></div>
       </>)}
-      {tab === 'packs' && (
-        <div className="tbl-wrap"><table className="tbl">
-          <thead><tr><th>تاریخ</th><th>شاگرد</th><th>پکیج</th><th>روش</th><th>مبلغ</th></tr></thead>
-          <tbody>{f.sales.map((s) => <tr key={s.id}><td className="nowrap">{fmt.format(s.at)}</td><td>{who(s.by, user)}</td><td>{COACH_PACKS.find((p) => p.id === s.pack)?.name || s.name}</td><td>{METHOD_NAME[s.method]}</td><td className="num">{toman(s.price)}</td></tr>)}</tbody>
-        </table>{!f.sales.length && <Empty>پکیجی فروخته نشده.</Empty>}</div>
-      )}
-      {tab === 'next' && (
-        <div className="tbl-wrap"><table className="tbl">
-          <thead><tr><th>روز</th><th>ساعت</th><th>زمین</th><th>شاگرد</th><th>پرداخت</th></tr></thead>
-          <tbody>{f.upcoming.map((b) => <tr key={b.id}><td>{dayLabel(b.date)} {jDateFa(b.date)}</td><td>{range(b.start, b.dur)}</td><td>{courtById(b.court).name}</td><td>{b.players.map((p) => who(p, user)).join('، ')}</td><td>{b.method === 'package' || b.method === 'coach-pack' ? 'از پکیج' : b.paid >= b.price ? 'پرداخت‌شده' : 'در محل'}</td></tr>)}</tbody>
-        </table>{!f.upcoming.length && <Empty>جلسه‌ی آینده‌ای ندارد.</Empty>}</div>
-      )}
+      {tab === 'packs' && <MiniTable empty="در این بازه پکیجی فروخته نشده." head={['شاگرد', 'پکیج', 'خرید', 'شروع', 'روز و ساعت', 'جلسه‌ها', 'مبلغ']}
+        rows={f.packs.map((p) => [<b>{p.student}</b>, p.packName, jDateFa(dk(p.at)), p.first ? jDateFa(p.first.date) : <small>هنوز رزرو نشده</small>, p.slot ? `${day(p.slot.day)}ها ${hourLabel(p.slot.start)}` : '—',
+          <span className="num">{fa(p.used)} از {fa(p.total)}{p.nextS && <small>بعدی: {jDateFa(p.nextS.date)}</small>}</span>, <span className="num">{toman(p.price)}<small>{METHOD_NAME[p.method]}</small></span>])} />}
+      {tab === 'next' && <MiniTable empty="جلسه‌ی آینده‌ای ندارد." head={['روز', 'ساعت', 'زمین', 'شاگرد', 'پرداخت']}
+        rows={f.upcoming.map((b) => [`${dayLabel(b.date)} ${jDateFa(b.date)}`, range(b.start, b.dur), courtById(b.court).name, b.players.map((p) => who(p, user)).join('، '), b.method === 'package' || b.method === 'coach-pack' ? 'از پکیج' : b.paid >= b.price ? 'پرداخت‌شده' : 'در محل'])} />}
+      {tab === 'reviews' && (f.reviews.length
+        ? <div className="rv-list">{f.reviews.map((r) => <div key={r.id}><span className="rv-stars">{'★'.repeat(r.stars)}<i>{'★'.repeat(5 - r.stars)}</i></span><p>{r.text || <small>بدون متن</small>}</p><small>{jDateFa(dk(r.at))}، ناشناس</small></div>)}</div>
+        : <Empty>هنوز نظری ثبت نشده.</Empty>)}
     </Card>
+  )
+}
+
+// فرم مربی: بالا «نمایش در اپ» (عمومی)، پایین «فقط مدیر» (خصوصی)
+function CoachForm({ co, from, onClose }) {
+  const { adminCoachSave, toast } = useStore()
+  const [f, setF] = useState(() => co ? { ...co, recordText: (co.record || []).join('\n') } : {
+    name: from?.name || '', title: 'مربی پدل', level: from?.level || 'B', exp: 1, price: 1500000, img: null, bio: '', recordText: '', active: true,
+    packs: { one: true, five: true, ten: true, group: true }, prices: {}, phone: from?.phone || '', since: '', share: 50, note: '', member: from?.id || null,
+  })
+  const set = (x) => setF((o) => ({ ...o, ...x }))
+  const phone = toPhone(f.phone || '')
+  const ok = f.name.trim().length > 2 && f.price > 0 && (!phone || /^09\d{9}$/.test(phone))
+  const auto = (p) => coachPackPrice({ ...f, prices: {} }, p)
+  const save = () => {
+    const { recordText, ...rest } = f
+    const s = adminCoachSave({ ...rest, id: co?.id, name: f.name.trim(), phone, record: recordText.split('\n').map((x) => x.trim()).filter(Boolean), img: f.img || './img/coach-a.jpg' })
+    chime('success'); toast({ icon: '🎾', title: co ? 'مربی به‌روز شد' : 'مربی اضافه شد', body: f.active ? 'در اپ دیده می‌شود' : 'در اپ نمایش داده نمی‌شود' })
+    onClose(s.id)
+  }
+  const linked = f.member && memberById(f.member)
+  return (
+    <div className="form">
+      <h4 className="form-sec">نمایش در اپ <small>همه‌ی بازیکن‌ها این‌ها را می‌بینند</small></h4>
+      <ImageUpload value={f.img} onChange={(img) => set({ img })} hint="عکس چهره یا در حال بازی، روشن و واضح" />
+      <div className="form-2">
+        <Field label="نام و نام خانوادگی"><input value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field>
+        <Field label="عنوان" hint="مثلاً «مربی بانوان»"><input value={f.title} onChange={(e) => set({ title: e.target.value })} /></Field>
+      </div>
+      <div className="form-3">
+        <Field label="سطح مربی"><select value={f.level} onChange={(e) => set({ level: e.target.value })}>{LEVELS.map((l) => <option key={l.id} value={l.id}>{l.id}، {l.title}</option>)}</select></Field>
+        <Field label="سابقه (سال)"><input type="number" min="0" value={f.exp} onChange={(e) => set({ exp: +e.target.value })} /></Field>
+        <Field label="نرخ هر جلسه"><Money value={f.price} onChange={(price) => set({ price })} /></Field>
+      </div>
+      <Field label="معرفی کوتاه"><textarea rows={2} value={f.bio} onChange={(e) => set({ bio: e.target.value })} placeholder="مثلاً: کلاس‌های خصوصی و گروهی از پایه تا پیشرفته" /></Field>
+      <Field label="سوابق و افتخارات" hint="هر خط یک مورد"><textarea rows={3} value={f.recordText} onChange={(e) => set({ recordText: e.target.value })} /></Field>
+      <Field label="پکیج‌ها و قیمت" tip="خاموش = این پکیج برای این مربی در اپ نیست؛ قیمت خالی = خودکار از نرخ جلسه">
+        <div className="pack-ed">{COACH_PACKS.map((p) => {
+          const on = f.packs?.[p.id] !== false
+          return (
+            <div key={p.id} className={on ? '' : 'off'}>
+              <label className="chk"><input type="checkbox" checked={on} onChange={(e) => set({ packs: { ...f.packs, [p.id]: e.target.checked } })} />{p.name}</label>
+              <Money value={f.prices?.[p.id] || ''} onChange={(v) => set({ prices: { ...f.prices, [p.id]: v || undefined } })} placeholder={`خودکار: ${auto(p).toLocaleString('en')}`} disabled={!on} />
+            </div>
+          )
+        })}</div>
+      </Field>
+      <Field label="نمایش در اپ"><Seg value={f.active ? 'on' : 'off'} onChange={(v) => set({ active: v === 'on' })} options={{ on: 'فعال', off: 'پنهان' }} tips={{ off: 'جلسه‌های قبلی و آمار می‌ماند ولی در اپ قابل انتخاب نیست' }} /></Field>
+
+      <h4 className="form-sec priv">فقط برای مدیر <small>در اپ نشان داده نمی‌شود</small></h4>
+      <div className="form-3">
+        <Field label="موبایل"><input dir="ltr" inputMode="numeric" value={f.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="09…" /></Field>
+        <Field label="شروع همکاری"><input value={f.since} onChange={(e) => set({ since: e.target.value })} placeholder="۱۴۰۳/۰۷/۰۱" /></Field>
+        <Field label="سهم مربی ٪" tip="درصد از درآمد کلاس‌ها"><input type="number" min="0" max="100" value={f.share} onChange={(e) => set({ share: +e.target.value })} /></Field>
+      </div>
+      <Field label="حساب عضو در اپ" hint={linked ? 'کلاس‌ها و آدینه‌هایی که به‌عنوان بازیکن آمده هم در پرونده‌اش دیده می‌شود' : 'اگر مربی با شماره‌ی خودش در اپ عضو است، وصل کنید'}>
+        <select value={f.member || ''} onChange={(e) => set({ member: e.target.value || null })}><option value="">— وصل نیست —</option>{[...MEMBERS].sort((a, b) => (b.phone === phone) - (a.phone === phone) || a.name.localeCompare(b.name, 'fa')).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.phone})</option>)}</select>
+      </Field>
+      <Field label="یادداشت خصوصی"><textarea rows={2} value={f.note} onChange={(e) => set({ note: e.target.value })} placeholder="قرارداد، ساعت‌های آزاد، …" /></Field>
+      <button className="adm-btn primary full" disabled={!ok} onClick={save}>{co ? 'ذخیره' : 'افزودن مربی'}</button>
+    </div>
   )
 }
 

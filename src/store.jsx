@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { COURTS, PACKAGES, levelById, productById, seedClub, setCatalog, setMembers, todayKey, variantOf } from './data'
+import { COURTS, PACKAGES, levelById, productById, seedClub, setCatalog, setCoaches, setMembers, todayKey, variantOf, withCoaches } from './data'
 import { makeVariants, nextCode } from './catalog'
 import { fits, nextIngCode, nextItemCode, placeCafe, receiveInto } from './cafe'
 import { jMonthLabel } from './jalali'
@@ -26,8 +26,8 @@ function load() {
   let tab = null
   try { tab = sessionStorage.getItem(SESSION_KEY) } catch { /* */ }
   const session = tab !== null ? read(sessionStorage, SESSION_KEY) : read(localStorage, SESSION_KEY)
-  if (club?.v === SEED_V) return { ...blankPlayer, accounts: DEMO_ACCOUNTS, ...me, session, club: withEvents(club) }
-  return { ...blankPlayer, accounts: DEMO_ACCOUNTS, session: null, club: withEvents(withOps(seedClub())) }
+  if (club?.v === SEED_V) return { ...blankPlayer, accounts: DEMO_ACCOUNTS, ...me, session, club: withCoaches(withEvents(club)) }
+  return { ...blankPlayer, accounts: DEMO_ACCOUNTS, session: null, club: withCoaches(withEvents(withOps(seedClub()))) }
 }
 // حساب بازیکن با ترتیب ثابت کلیدها، تا تب‌ها یک رشته‌ی یکسان بنویسند و رفت‌وبرگشت بی‌پایان پیش نیاید
 const personalOf = (s) => JSON.stringify(Object.fromEntries([...Object.keys(blankPlayer), 'accounts'].map((k) => [k, s[k]])))
@@ -60,7 +60,8 @@ export function StoreProvider({ children }) {
   ref.current = state
   // کاتالوگ فروشگاه از داده‌ی باشگاه خوانده می‌شود تا کالاهای تازه‌ی مدیر در اپ بازیکن هم دیده شوند
   setCatalog(state.club.products)
-  setMembers(state.club.members)
+  setMembers(state.club.members, state.club.memberEdits)
+  setCoaches(state.club.coaches)
 
   const mine = personalOf(state)
   // اگر حافظه‌ی مرورگر پر شود (مثلاً عکس‌های زیاد) به مدیر هشدار داده می‌شود
@@ -236,7 +237,7 @@ export function StoreProvider({ children }) {
           if (clash) { out = { error: clash }; return s }
           const recs = list.map((x, k) => ({ id: `${sid}-${k}`, by: ME, status: 'ok', source: 'app', at: Date.now(), method: 'package', series: sid, levels: null, ...x, paid: x.price }))
           const bookings = [...s.club.bookings, ...recs]
-          const saleRec = { id: 'S-' + Date.now(), kind: sale.kind, item: sale.item, pack: sale.pack, name: sale.name, by: ME, price: sale.total, method, at: Date.now() }
+          const saleRec = { id: 'S-' + Date.now(), kind: sale.kind, item: sale.item, pack: sale.pack, series: sid, name: sale.name, by: ME, price: sale.total, method, at: Date.now() }
           const r = reward(pay(s, sale.total, method), 40 + list.length * 15, [
             'first', 'loyal', sale.kind === 'coach' && 'student', list.some((x) => x.start < 9) && 'early',
             list.some((x) => x.start + x.dur > 22) && 'night', myCourts(bookings).size >= 4 && 'quad',
@@ -327,6 +328,23 @@ export function StoreProvider({ children }) {
           return { ...c, members: [...(c.members || []), { id, games: 0, wins: 0, points: levelById(m.level).base, joined: 0, at: Date.now(), source: 'desk', member: null, ...m }] }
         })
         return id
+      },
+      // ویرایش عضو: عضو ثبت‌شده در پذیرش مستقیم، عضو نمونه با club.memberEdits
+      adminMemberEdit(id, patch) {
+        club((c) => {
+          if ((c.members || []).some((m) => m.id === id)) return { ...c, members: c.members.map((m) => (m.id === id ? { ...m, ...patch } : m)) }
+          return { ...c, memberEdits: { ...(c.memberEdits || {}), [id]: { ...(c.memberEdits?.[id] || {}), ...patch } } }
+        })
+      },
+      // مربی جدید یا ویرایش؛ بخش «نمایش در اپ» و «فقط مدیر» در یک رکورد، ولی اپ فقط بخش عمومی را نشان می‌دهد
+      adminCoachSave(co) {
+        let saved
+        club((c) => {
+          const old = c.coaches.find((x) => x.id === co.id)
+          saved = old ? { ...old, ...co } : { active: true, packs: { one: true, five: true, ten: true, group: true }, prices: {}, record: [], ...co, id: 'k' + Date.now() }
+          return { ...c, coaches: old ? c.coaches.map((x) => (x.id === old.id ? saved : x)) : [...c.coaches, saved] }
+        })
+        return saved
       },
       adminAddBooking(b) { club((c) => ({ ...c, bookings: [...c.bookings, { id: 'd' + Date.now(), status: 'ok', source: 'desk', at: Date.now(), ...b }] })) },
       // تسویه: مبلغ و زمان پرداخت جدا ثبت می‌شود تا سند حسابداری در همان روز بخورد

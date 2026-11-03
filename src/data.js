@@ -48,8 +48,8 @@ export const DAYPARTS = [
   { id: 'night', name: 'شب', from: 21, to: 24 },
 ]
 
-// مربی‌های باشگاه — سابقه و افتخارات نمونه‌اند و باید با اطلاعات واقعی هر مربی جایگزین شوند
-export const COACHES = [
+// مربی‌های نمونه — مدیر در پنل مربی اضافه یا ویرایش می‌کند و فهرست زنده از club.coaches خوانده می‌شود
+export const BASE_COACHES = [
   { id: 'k1', name: 'فراز گلچین', title: 'سرمربی باشگاه', level: 'A', exp: 10, rating: 4.9, price: 2000000, img: img('overhead'),
     record: ['۱۰ سال سابقه‌ی مربیگری پدل', 'مدرک مربیگری فدراسیون', 'دارنده‌ی مدال مسابقات کشوری'], bio: 'سرمربی کوادرا؛ برنامه‌ی تمرینی مرحله‌به‌مرحله برای بازیکن‌های همه‌ی سطح‌ها.' },
   { id: 'k2', name: 'سهیل سهرابی', title: 'مربی پیشرفته و مسابقه', level: 'B+', exp: 8, rating: 4.9, price: 1900000, img: img('action'),
@@ -59,7 +59,28 @@ export const COACHES = [
   { id: 'k4', name: 'زهرا کهریزی', title: 'مربی پایه و نوجوانان', level: 'A', exp: 5, rating: 4.8, price: 1400000, img: img('coach-a'),
     record: ['۵ سال سابقه‌ی مربیگری', 'مدرک مربیگری فدراسیون', 'سابقه‌ی حضور در مسابقات کشوری'], bio: 'بهترین انتخاب برای شروع پدل و آموزش نوجوانان.' },
 ]
+// فهرست زنده‌ی مربی‌ها (club.coaches)؛ مربی غیرفعال در اپ نشان داده نمی‌شود ولی سابقه‌اش می‌ماند
+export const COACHES = [...BASE_COACHES]
+let liveCoaches = null
+export function setCoaches(list) {
+  if (!list || list === liveCoaches) return
+  liveCoaches = list
+  COACHES.length = 0
+  COACHES.push(...list)
+}
 export const coachById = (id) => COACHES.find((c) => c.id === id)
+// اطلاعات خصوصی نمونه؛ فقط در پنل مدیر دیده می‌شود
+const COACH_PRIVATE = [
+  { phone: '09121234501', since: '1400/06/01', share: 60, note: 'قرارداد سالانه؛ تمدید در شهریور' },
+  { phone: '09121234502', since: '1401/02/15', share: 55, note: '' },
+  { phone: '09121234503', since: '1401/09/01', share: 55, note: 'فقط کلاس بانوان' },
+  { phone: '09121234504', since: '1402/07/01', share: 50, note: 'کلاس‌های نوجوانان عصرها' },
+]
+// داده‌ی قبلی بدون مربی: مربی‌های نمونه با همه‌ی پکیج‌ها فعال اضافه می‌شوند
+export function withCoaches(club) {
+  if (club.coaches) return club
+  return { ...club, coaches: BASE_COACHES.map((c, i) => ({ ...c, active: true, packs: { one: true, five: true, ten: true, group: true }, prices: {}, member: null, ...COACH_PRIVATE[i] })) }
+}
 
 // پکیج‌های مربی — قیمت بر اساس نرخ جلسه‌ی مربی
 export const COACH_PACKS = [
@@ -68,7 +89,9 @@ export const COACH_PACKS = [
   { id: 'ten', name: 'پکیج ۱۰ جلسه', sessions: 10, off: 0.15, people: 1, tag: '۱۵٪ تخفیف' },
   { id: 'group', name: 'گروهی ۴ نفره', sessions: 1, off: 0, people: 4, mult: 0.4, tag: 'هر نفر' },
 ]
-export const coachPackPrice = (coach, pack) => Math.round(coach.price * pack.sessions * (1 - pack.off) * (pack.mult || 1) / 10000) * 10000
+// قیمت پکیج: اگر مدیر برای این مربی قیمت دستی گذاشته همان، وگرنه از نرخ جلسه و تخفیف پکیج
+export const coachPackPrice = (coach, pack) => coach.prices?.[pack.id] || Math.round(coach.price * pack.sessions * (1 - pack.off) * (pack.mult || 1) / 10000) * 10000
+export const coachPacks = (coach) => COACH_PACKS.filter((p) => coach?.packs?.[p.id] !== false)
 
 export const PACKAGES = [
   { id: 'p5', kind: 'series', name: 'پکیج ۵ جلسه زمین', sub: 'هفته‌ای یک جلسه، همان روز و ساعت', sessions: 5, off: 0.1, img: img('court-indoor'), perks: ['۱۰٪ ارزان‌تر از رزرو تکی', 'هر ۵ جلسه همان لحظه در تقویم رزرو می‌شود', 'مدت ۱، ۲ یا ۳ ساعت'] },
@@ -219,11 +242,15 @@ const BASE_MEMBERS = Array.from({ length: 56 }, (_, i) => {
   }
 })
 // فهرست زنده‌ی اعضا: اعضای نمونه + کسانی که از اپ ثبت‌نام کرده‌اند یا در پذیرش اضافه شده‌اند (club.members)
+// ویرایش مدیر روی اعضای نمونه در club.memberEdits نگه داشته می‌شود
 export const MEMBERS = [...BASE_MEMBERS]
-export function setMembers(extra = []) {
-  if (MEMBERS.length === BASE_MEMBERS.length + extra.length && extra.every((m, i) => MEMBERS[BASE_MEMBERS.length + i] === m)) return
-  MEMBERS.length = BASE_MEMBERS.length
-  MEMBERS.push(...extra)
+const NO_LIST = [], NO_EDITS = {}
+let liveMembers = [NO_LIST, NO_EDITS]
+export function setMembers(extra = NO_LIST, edits = NO_EDITS) {
+  if (extra === liveMembers[0] && edits === liveMembers[1]) return
+  liveMembers = [extra, edits]
+  MEMBERS.length = 0
+  MEMBERS.push(...BASE_MEMBERS.map((m) => (edits[m.id] ? { ...m, ...edits[m.id] } : m)), ...extra)
 }
 export const memberById = (id) => MEMBERS.find((m) => m.id === id)
 
@@ -264,7 +291,7 @@ export function ratingOf(club, target) {
   return { avg: Math.round(avg * 10) / 10, count: list.length, list: [...list].sort((a, b) => b.at - a.at) }
 }
 // مربی‌ها به ترتیب امتیاز نظرها
-export const coachesRanked = (club) => COACHES.map((c) => ({ ...c, ...ratingOf(club, 'coach:' + c.id) })).sort((a, b) => b.avg - a.avg || b.count - a.count)
+export const coachesRanked = (club) => COACHES.filter((c) => c.active !== false).map((c) => ({ ...c, ...ratingOf(club, 'coach:' + c.id) })).sort((a, b) => b.avg - a.avg || b.count - a.count)
 
 export function events() {
   const fridays = nextDays(28, 1).filter((d) => d.getDay() === 5).slice(0, 4).map((d, i) => {
