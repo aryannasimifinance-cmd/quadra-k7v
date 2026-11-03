@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { COACHES, EVENT_KIND, coachesRanked, MEMBERS, PACKAGES, PRODUCTS, courtById, dayLabel, dayMonth, events, fa, fromKey, hourLabel, levelById, range, rankOf, short, toman } from '../../data'
+import { COACHES, EVENT_KIND, coachesRanked, MEMBERS, PACKAGES, PRODUCTS, courtById, dayLabel, dayMonth, fa, fromKey, hourLabel, levelById, range, rankOf, short, toman } from '../../data'
 import { celebrate, chime } from '../../fx'
 import { ME, myPoints, useStore } from '../../store'
 import { myBookings, openGames, quests, streak, upcomingSlots } from '../../select'
@@ -9,6 +9,7 @@ import { ProductImage } from '../../components/Merch'
 import { Dish } from '../../components/Dish'
 import { Tracker, courtTargets } from './Cafe'
 import { available } from '../../cafe'
+import { appEvents } from '../../events'
 
 export default function Home({ nav }) {
   const s = useStore()
@@ -20,7 +21,7 @@ export default function Home({ nav }) {
   const slots = upcomingSlots(club, 10)
   const qs = quests(s)
   const st = streak(s)
-  const evs = events()
+  const evs = appEvents(club)
   const nextEv = ['friday', 'official'].map((k) => evs.find((e) => e.kind === k)).filter(Boolean)
   const first = user.name.split(' ')[0]
   const h = new Date().getHours()

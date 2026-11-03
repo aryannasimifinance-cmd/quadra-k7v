@@ -100,6 +100,30 @@ export function coachStats(club) {
   })
 }
 
+// پرونده‌ی یک مربی: هر شاگرد با پکیج‌ها، جلسه‌های گذشته و آینده و پرداختی‌اش
+export function coachFile(club, id, user) {
+  const today = fromKey(todayKey())
+  const bk = club.bookings.filter((b) => b.coach === id && b.status !== 'cancelled')
+  const sales = club.sales.filter((s) => s.kind === 'coach' && s.item === id).sort((a, b) => b.at - a.at)
+  const m = new Map()
+  const get = (pid) => {
+    if (!m.has(pid)) {
+      const mm = memberById(pid)
+      m.set(pid, { id: pid, name: who(pid, user), phone: mm?.phone || (pid === ME ? user?.phone : ''), level: mm?.level || (pid === ME ? user?.level : null), packs: [], past: 0, next: 0, last: null, upcoming: null, paid: 0 })
+    }
+    return m.get(pid)
+  }
+  bk.forEach((b) => b.players.forEach((pid) => {
+    const s = get(pid), d = fromKey(b.date)
+    if (d < today) { s.past++; if (!s.last || d > fromKey(s.last)) s.last = b.date } else { s.next++; if (!s.upcoming || d < fromKey(s.upcoming)) s.upcoming = b.date }
+  }))
+  bk.filter(notPack).forEach((b) => { get(b.by).paid += b.paid })
+  sales.forEach((x) => { const s = get(x.by); s.packs.push(x); s.paid += x.price })
+  const students = [...m.values()].sort((a, b) => (b.next > 0) - (a.next > 0) || b.past - a.past || b.paid - a.paid)
+  const upcoming = bk.filter((b) => fromKey(b.date) >= today).sort((a, b) => fromKey(a.date) - fromKey(b.date) || a.start - b.start)
+  return { students, sales, upcoming, active: students.filter((s) => s.next > 0).length }
+}
+
 export const csv = (rows) => '﻿' + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
 export function download(name, text) {
   const a = document.createElement('a')

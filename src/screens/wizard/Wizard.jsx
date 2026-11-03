@@ -2,11 +2,12 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import {
   BADGES, COACHES, COACH_PACKS, COURTS, DAYPARTS, DURATIONS, EVENT_KIND, LEVELS, MEMBERS, SERIES, coachById, coachPackPrice, courtById, dayKey, dayLabel, dayMonth, dayNum,
-  SIDES, coachesRanked, events, fa, fromKey, hourLabel, isPeak, isWeekend, levelById, levelIndex, nearLevels, nextDays, priceFor, range, short, sideById, toman, weekday,
+  SIDES, coachesRanked, fa, fromKey, hourLabel, isPeak, isWeekend, levelById, levelIndex, nearLevels, nextDays, priceFor, range, short, sideById, toman, weekday,
 } from '../../data'
 import { celebrate, chime, haptic } from '../../fx'
 import { ME, freeStarts, isFree, memberOff, useStore } from '../../store'
 import { openGames, planSeries } from '../../select'
+import { appEvents } from '../../events'
 import { Avatar, Button, Chips, CountUp, CtaBar, Icon, LevelPill, Photo, Sheet, TopBar, rise, stagger } from '../../components/ui'
 import { Loading } from '../../components/Logo'
 
@@ -557,8 +558,8 @@ function StepCoach({ w, set, onNext }) {
 }
 
 function StepEvent({ w, set, onNext }) {
-  const { events: joined } = useStore()
-  const all = events()
+  const { club } = useStore()
+  const all = appEvents(club)
   return (
     <div className="event-pick">
       {Object.entries(EVENT_KIND).filter(([kind]) => w.intent === 'event' || w.intent === kind).map(([kind, k]) => (
@@ -566,9 +567,9 @@ function StepEvent({ w, set, onNext }) {
           <h2 className="wz-h">{k.name}</h2>
           <p className="muted ev-kind-sub">{k.sub}</p>
           {all.filter((e) => e.kind === kind).map((e) => {
-            const has = joined.includes(e.id)
+            const has = e.regs.some((r) => r.by === ME), full = e.taken >= e.cap
             return (
-              <motion.button key={e.id} className={`ev-card ${w.eventId === e.id ? 'on' : ''}`} disabled={has} whileTap={{ scale: 0.98 }} onClick={() => { haptic(8); set({ eventId: e.id }) }}>
+              <motion.button key={e.id} className={`ev-card ${w.eventId === e.id ? 'on' : ''}`} disabled={has || full || e.status !== 'open'} whileTap={{ scale: 0.98 }} onClick={() => { haptic(8); set({ eventId: e.id }) }}>
                 <Photo src={e.img} />
                 <div className="ev-shade" />
                 <div className="ev-txt">
@@ -577,7 +578,7 @@ function StepEvent({ w, set, onNext }) {
                   <small>{e.format}، سطح {e.levels.join(' / ')}</small>
                   <div className="ev-cap"><div className="bar"><i style={{ width: `${(e.taken / e.cap) * 100}%` }} /></div><span>{fa(e.taken)}/{fa(e.cap)}</span></div>
                 </div>
-                <em>{has ? 'ثبت‌نام شدید' : short(e.fee)}</em>
+                <em>{has ? 'ثبت‌نام شدید' : full ? 'تکمیل' : e.status !== 'open' ? 'بسته' : short(e.fee)}</em>
               </motion.button>
             )
           })}
@@ -596,7 +597,7 @@ function StepPay({ w, set, onDone }) {
   const coach = coachById(w.coachId)
   const pack = COACH_PACKS.find((p) => p.id === w.pack)
   const game = w.gameId && club.bookings.find((b) => b.id === w.gameId)
-  const ev = w.eventId && events().find((e) => e.id === w.eventId)
+  const ev = w.eventId && appEvents(club).find((e) => e.id === w.eventId)
   const filled = w.players.filter(Boolean)
   const isOpen = w.intent === 'court' && w.open && filled.length < 4
   const series = SERIES.find((x) => x.id === w.series) || SERIES[0]
@@ -666,7 +667,7 @@ function StepPay({ w, set, onDone }) {
       }
       if (r?.error) {
         setBusy(false); chime('alarm')
-        s.toast({ icon: '⛔', title: 'یکی از ساعت‌ها همین الان پر شد', body: 'برنامه به‌روز شد؛ دوباره بررسی و پرداخت کنید' })
+        s.toast(kind === 'event' ? { icon: '⛔', title: 'ثبت‌نام این مسابقه دیگر ممکن نیست', body: 'ظرفیت همین الان پر شد یا ثبت‌نام بسته شد' } : { icon: '⛔', title: 'یکی از ساعت‌ها همین الان پر شد', body: 'برنامه به‌روز شد؛ دوباره بررسی و پرداخت کنید' })
         return
       }
       chime('success'); celebrate(); haptic([20, 40, 20, 40, 80])

@@ -5,6 +5,7 @@ import { fits, nextIngCode, nextItemCode, placeCafe, receiveInto } from './cafe'
 import { jMonthLabel } from './jalali'
 import { payroll } from './hr'
 import { withOps } from './ops'
+import { withEvents } from './events'
 
 // داده‌ی باشگاه، حساب بازیکن و نشست هر تب جدا ذخیره می‌شوند تا مدیر و بازیکن در دو تب همزمان کار کنند
 const KEY = 'quadra-v1'
@@ -25,8 +26,8 @@ function load() {
   let tab = null
   try { tab = sessionStorage.getItem(SESSION_KEY) } catch { /* */ }
   const session = tab !== null ? read(sessionStorage, SESSION_KEY) : read(localStorage, SESSION_KEY)
-  if (club?.v === SEED_V) return { ...blankPlayer, accounts: DEMO_ACCOUNTS, ...me, session, club }
-  return { ...blankPlayer, accounts: DEMO_ACCOUNTS, session: null, club: withOps(seedClub()) }
+  if (club?.v === SEED_V) return { ...blankPlayer, accounts: DEMO_ACCOUNTS, ...me, session, club: withEvents(club) }
+  return { ...blankPlayer, accounts: DEMO_ACCOUNTS, session: null, club: withEvents(withOps(seedClub())) }
 }
 // حساب بازیکن با ترتیب ثابت کلیدها، تا تب‌ها یک رشته‌ی یکسان بنویسند و رفت‌وبرگشت بی‌پایان پیش نیاید
 const personalOf = (s) => JSON.stringify(Object.fromEntries([...Object.keys(blankPlayer), 'accounts'].map((k) => [k, s[k]])))
@@ -209,13 +210,18 @@ export function StoreProvider({ children }) {
           return { ...r.next, club: { ...s.club, bookings } }
         })
       },
+      // ثبت‌نام بازیکن در آدینه یا تورنمنت؛ اسم و سطح همان لحظه ذخیره می‌شود تا در تیم‌بندی دیده شود
       registerEvent(ev, method) {
         let out
         commit((s) => {
-          const sale = { id: 'S-' + Date.now(), kind: 'event', item: ev.id, name: ev.title, by: ME, price: ev.fee, method, at: Date.now() }
-          const r = reward(pay(s, ev.fee, method), 80, ['champ'])
+          const cur = s.club.events.find((e) => e.id === ev.id)
+          if (!cur || cur.status !== 'open' || cur.regs.length >= cur.cap || cur.regs.some((r) => r.by === ME)) { out = { error: 'closed' }; return s }
+          const sale = { id: 'S-' + Date.now(), kind: 'event', item: ev.id, name: ev.title, by: ME, price: cur.fee, method, at: Date.now() }
+          const reg = { id: 'r' + Date.now(), by: ME, name: s.user?.name || 'کاربر اپ', level: s.user?.level, phone: s.user?.phone, at: Date.now(), method, paid: cur.fee, source: 'app', sale: sale.id }
+          const r = reward(pay(s, cur.fee, method), 80, ['champ'])
           out = r.result
-          return { ...r.next, events: [...s.events, ev.id], club: { ...s.club, sales: [sale, ...s.club.sales] } }
+          const events = s.club.events.map((e) => (e.id === ev.id ? { ...e, regs: [...e.regs, reg] } : e))
+          return { ...r.next, events: [...s.events, ev.id], club: { ...s.club, events, sales: [sale, ...s.club.sales] } }
         })
         return out
       },
@@ -434,6 +440,37 @@ export function StoreProvider({ children }) {
           return { ...c, cafeOrders: [order, ...c.cafeOrders], cafeIngs: r.ings }
         })
         return order
+      },
+      // ---------- آدینه‌ها و تورنمنت‌ها ----------
+      adminEventSave(ev) {
+        let saved
+        club((c) => {
+          const old = c.events.find((e) => e.id === ev.id)
+          saved = old ? { ...old, ...ev } : { regs: [], teams: [], groups: [], matches: [], courts: [1, 2, 3, 4], note: '', ...ev, id: 'ev' + Date.now() }
+          return { ...c, events: old ? c.events.map((e) => (e.id === old.id ? saved : e)) : [saved, ...c.events] }
+        })
+        return saved
+      },
+      // فقط رویدادی که ورودی پرداخت‌شده ندارد پاک می‌شود؛ بقیه «لغو» می‌شوند
+      adminEventDel(id) { club((c) => ({ ...c, events: c.events.filter((e) => e.id !== id) })) },
+      // تغییر تیم‌ها، گروه‌ها و نتیجه‌ها با توابع events.js
+      adminEventSet(id, fn) { club((c) => ({ ...c, events: c.events.map((e) => (e.id === id ? fn(e) : e)) })) },
+      // ثبت‌نام حضوری؛ ورودی پرداخت‌شده یک فروش «رویداد» است
+      adminEventReg(id, p, method, paid) {
+        club((c) => {
+          const ev = c.events.find((e) => e.id === id)
+          const sale = paid > 0 ? { id: 'S-' + Date.now(), kind: 'event', item: id, name: ev.title, by: p.by, price: paid, method, at: Date.now() } : null
+          const reg = { id: 'r' + Date.now(), at: Date.now(), method: paid > 0 ? method : 'free', paid, source: 'desk', sale: sale?.id || null, ...p }
+          return { ...c, events: c.events.map((e) => (e.id === id ? { ...e, regs: [...e.regs, reg] } : e)), sales: sale ? [sale, ...c.sales] : c.sales }
+        })
+      },
+      // حذف شرکت‌کننده = برگرداندن ورودی؛ فروشش هم پاک می‌شود و از تیم‌ها بیرون می‌رود
+      adminEventUnreg(id, rid) {
+        club((c) => {
+          const ev = c.events.find((e) => e.id === id), reg = ev.regs.find((r) => r.id === rid)
+          const next = { ...ev, regs: ev.regs.filter((r) => r.id !== rid), teams: [], groups: [], matches: [] }
+          return { ...c, events: c.events.map((e) => (e.id === id ? next : e)), sales: c.sales.filter((s) => s.id !== reg?.sale) }
+        })
       },
       adminPricing(p) { club((c) => ({ ...c, pricing: { ...c.pricing, ...p } })) },
       adminCourt(id, off) { club((c) => ({ ...c, off: { ...c.off, [id]: off } })) },

@@ -6,10 +6,10 @@ import {
 import { chime } from '../../fx'
 import { payState, useStore } from '../../store'
 import { Icon, LevelPill } from '../../components/ui'
-import { Card, Empty, Field, Guide, Kpi, More, Search, Seg, Side, Status, XlsxBtn, usePage } from './kit'
+import { Card, Empty, Field, Guide, Kpi, More, Pager, Search, Seg, Side, Status, XlsxBtn, usePage, useSlice } from './kit'
 import { HBars } from './Charts'
-import { SEGMENTS, coachStats, memberStats, payments, who } from './derive'
-import { jDate } from '../../jalali'
+import { SEGMENTS, coachFile, coachStats, memberStats, payments, who } from './derive'
+import { dk, jDate, jDateFa } from '../../jalali'
 import { downloadXlsx, table } from '../../xlsx'
 
 const fmt = new Intl.DateTimeFormat('fa-IR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -174,15 +174,16 @@ function MemberForm({ onClose }) {
 }
 
 export function Coaches() {
-  const { club, user } = useStore()
+  const { club } = useStore()
   const stats = coachStats(club).sort((a, b) => b.rating - a.rating)
-  const sales = club.sales.slice(0, 30)
+  const [sel, setSel] = useState(stats[0]?.id)
   const pk = PACKAGES.map((p) => ({ name: p.name, value: club.sales.filter((s) => s.item === p.id).reduce((a, s) => a + s.price, 0), color: '#E07B39' }))
+  const pick = (id) => { setSel(id); setTimeout(() => document.getElementById('coach-file')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30) }
   return (
     <div className="stack">
       <div className="coach-grid">
         {stats.map((c) => (
-          <div key={c.id} className="coach-adm">
+          <button key={c.id} className={`coach-adm ${sel === c.id ? 'on' : ''}`} onClick={() => pick(c.id)} data-tip="پرونده‌ی شاگردها و پکیج‌های این مربی">
             <div className="ca-photo" style={{ backgroundImage: `url(${c.img})` }} />
             <div className="ca-body">
               <div className="row-between"><b>{c.name}</b><LevelPill id={c.level} /></div>
@@ -195,9 +196,10 @@ export function Coaches() {
               </div>
               {c.comments.map((r) => <p key={r.id} className="ca-quote">{'★'.repeat(r.stars)} «{r.text}»</p>)}
             </div>
-          </div>
+          </button>
         ))}
       </div>
+      {sel && <CoachFile key={sel} c={stats.find((x) => x.id === sel)} stats={stats} onPick={setSel} />}
       <div className="two">
         <Card title="فروش پکیج‌های باشگاه"><HBars rows={pk} /></Card>
         <Card title="نرخ پکیج‌های مربی" sub="محاسبه‌ی خودکار از نرخ جلسه">
@@ -205,11 +207,63 @@ export function Coaches() {
             <tbody>{stats.map((c) => <tr key={c.id}><td>{c.name}</td>{COACH_PACKS.map((p) => <td key={p.id} className="num">{short(coachPackPrice(c, p))}</td>)}</tr>)}</tbody></table></div>
         </Card>
       </div>
-      <Card title="آخرین فروش‌ها">
-        <div className="tbl-wrap"><table className="tbl"><thead><tr><th>زمان</th><th>شرح</th><th>نوع</th><th>مشتری</th><th>روش</th><th>مبلغ</th></tr></thead>
-          <tbody>{sales.map((s) => <tr key={s.id}><td className="nowrap">{fmt.format(s.at)}</td><td>{s.name}</td><td>{{ coach: 'مربی', package: 'پکیج', event: 'تورنمنت' }[s.kind]}</td><td>{who(s.by, user)}</td><td>{METHOD_NAME[s.method]}</td><td className="num">{toman(s.price)}</td></tr>)}</tbody></table></div>
-      </Card>
     </div>
+  )
+}
+
+// پرونده‌ی یک مربی: شاگردها با پکیج‌ها و جلسه‌هایشان، فروش پکیج‌ها و برنامه‌ی پیش‌رو
+function CoachFile({ c, stats, onPick }) {
+  const { club, user } = useStore()
+  const [tab, setTab] = useState('students')
+  const [q, setQ] = useState('')
+  const f = useMemo(() => coachFile(club, c.id, user), [club, c.id, user])
+  const list = f.students.filter((s) => !q || s.name.includes(q) || s.phone?.includes(q))
+  const pg = useSlice(list, 12, q + tab)
+  const exp = () => downloadXlsx(`quadra-coach-${c.id}-${jDate(todayKey()).replace(/\//g, '-')}`, [
+    { name: 'شاگردها', rows: table(`شاگردهای ${c.name}`, ['شاگرد', 'تلفن', 'سطح', 'پکیج‌ها', 'جلسه‌ی برگزارشده', 'جلسه‌ی آینده', 'آخرین جلسه', 'جلسه‌ی بعدی', 'پرداختی'],
+      f.students.map((s) => [s.name, s.phone || '', s.level || '', s.packs.map((p) => p.name).join('، '), s.past, s.next, s.last ? jDate(s.last) : '', s.upcoming ? jDate(s.upcoming) : '', s.paid])) },
+    { name: 'پکیج‌ها', rows: table(null, ['تاریخ', 'شاگرد', 'پکیج', 'مبلغ', 'روش'], f.sales.map((s) => [jDate(dk(s.at)), who(s.by, user), s.name, s.price, METHOD_NAME[s.method] || s.method])) },
+  ])
+  return (
+    <Card className="coach-file" title={<span id="coach-file">پرونده‌ی {c.name}</span>} sub={`${c.title}، ${toman(c.price)} هر جلسه`}
+      right={<div className="row-btns"><select className="coach-sel" value={c.id} onChange={(e) => onPick(e.target.value)}>{stats.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select><XlsxBtn onClick={exp} /></div>}>
+      <div className="kpis four">
+        <Kpi icon="users" label="شاگردها" value={fa(f.students.length)} sub={`${fa(f.active)} نفر جلسه‌ی آینده دارند`} />
+        <Kpi icon="ticket" label="پکیج‌های فروخته" value={fa(f.sales.length)} sub={COACH_PACKS.map((p) => `${p.name.replace('پکیج ', '')} ${fa(f.sales.filter((s) => s.pack === p.id).length)}`).join('، ')} />
+        <Kpi icon="cal" label="جلسه‌ها" value={`${fa(c.sessions)} برگزارشده`} sub={`${fa(c.upcoming)} جلسه‌ی آینده`} />
+        <Kpi icon="cash" label="درآمد" value={short(c.revenue) + ' تومان'} sub={`پکیج‌ها ${short(f.sales.reduce((s, x) => s + x.price, 0))}`} />
+      </div>
+      <div className="row-between coach-bar">
+        <Seg value={tab} onChange={setTab} options={{ students: `شاگردها ${fa(f.students.length)}`, packs: `پکیج‌ها ${fa(f.sales.length)}`, next: `برنامه‌ی پیش‌رو ${fa(f.upcoming.length)}` }} />
+        {tab === 'students' && <Search value={q} onChange={setQ} ph="نام یا شماره‌ی شاگرد" />}
+      </div>
+      {tab === 'students' && (<>
+        <div className="tbl-wrap"><table className="tbl">
+          <thead><tr><th>شاگرد</th><th>سطح</th><th>پکیج‌ها</th><th>جلسه‌ها</th><th>آخرین / بعدی</th><th>پرداختی</th></tr></thead>
+          <tbody>{pg.rows.map((s) => (
+            <tr key={s.id}><td><b>{s.name}</b>{s.phone && <small dir="ltr">{s.phone}</small>}</td><td>{s.level ? <LevelPill id={s.level} /> : '—'}</td>
+              <td>{s.packs.length ? <div className="log-items">{s.packs.map((p, i) => <span key={i}>{p.name.replace('، ' + c.name, '')}</span>)}</div> : <small>تک جلسه</small>}</td>
+              <td className="num">{fa(s.past)} برگزارشده{s.next > 0 && <small>{fa(s.next)} آینده</small>}</td>
+              <td><small>{s.last ? `آخرین: ${jDateFa(s.last)}` : '—'}</small>{s.upcoming && <small className="pos">بعدی: {dayLabel(s.upcoming)} {jDateFa(s.upcoming)}</small>}</td>
+              <td className="num">{toman(s.paid)}</td></tr>
+          ))}</tbody>
+        </table></div>
+        {!list.length && <Empty>{q ? `شاگردی با «${q}» پیدا نشد.` : 'این مربی هنوز شاگردی ندارد.'}</Empty>}
+        <div className="log-foot">{list.length > 0 && <small>{fa(pg.from + 1)} تا {fa(pg.from + pg.rows.length)} از {fa(list.length)}</small>}<Pager {...pg} /></div>
+      </>)}
+      {tab === 'packs' && (
+        <div className="tbl-wrap"><table className="tbl">
+          <thead><tr><th>تاریخ</th><th>شاگرد</th><th>پکیج</th><th>روش</th><th>مبلغ</th></tr></thead>
+          <tbody>{f.sales.map((s) => <tr key={s.id}><td className="nowrap">{fmt.format(s.at)}</td><td>{who(s.by, user)}</td><td>{COACH_PACKS.find((p) => p.id === s.pack)?.name || s.name}</td><td>{METHOD_NAME[s.method]}</td><td className="num">{toman(s.price)}</td></tr>)}</tbody>
+        </table>{!f.sales.length && <Empty>پکیجی فروخته نشده.</Empty>}</div>
+      )}
+      {tab === 'next' && (
+        <div className="tbl-wrap"><table className="tbl">
+          <thead><tr><th>روز</th><th>ساعت</th><th>زمین</th><th>شاگرد</th><th>پرداخت</th></tr></thead>
+          <tbody>{f.upcoming.map((b) => <tr key={b.id}><td>{dayLabel(b.date)} {jDateFa(b.date)}</td><td>{range(b.start, b.dur)}</td><td>{courtById(b.court).name}</td><td>{b.players.map((p) => who(p, user)).join('، ')}</td><td>{b.method === 'package' || b.method === 'coach-pack' ? 'از پکیج' : b.paid >= b.price ? 'پرداخت‌شده' : 'در محل'}</td></tr>)}</tbody>
+        </table>{!f.upcoming.length && <Empty>جلسه‌ی آینده‌ای ندارد.</Empty>}</div>
+      )}
+    </Card>
   )
 }
 

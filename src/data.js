@@ -233,18 +233,18 @@ export const EVENT_KIND = {
   friday: { name: 'مسابقات آدینه', sub: 'هر جمعه صبح، دوستانه با یار جدید در هر بازی' },
   official: { name: 'تورنمنت‌های رسمی', sub: 'گروهی + حذفی، داور، امتیاز رنکینگ کوادرا' },
 }
-const FRIDAY = [
+export const FRIDAY = [
   { title: 'آدینه‌ی دوستانه', format: 'هر بازی با یار جدید' },
   { title: 'میکس بانوان آدینه', format: 'ویژه‌ی بانوان، هر بازی با یار جدید' },
   { title: 'کینگ آف کورت آدینه', format: 'برنده روی زمین می‌مونه' },
   { title: 'میکس دبل آدینه', format: 'تیم‌های مختلط، هر بازی با یار جدید' },
 ]
-const OFFICIAL = [
+export const OFFICIAL = [
   { title: 'تورنمنت ۵۰۰ امتیازی کشوری پدل', format: 'گروهی + حذفی، ۳۲ تیم، ۵۰۰ امتیاز رنکینگ کشوری', prize: 'جایزه‌ی نقدی + جام', in: 9 },
   { title: 'تور رنکینگ کوادرا — مرحله‌ی پاییز', format: 'گروهی + حذفی، ۱۶ تیم، امتیاز ۲ برابر', prize: 'جایزه‌ی نقدی + راکت', in: 23 },
 ]
 // فقط عکس زمین، بدون آدم
-const EV_IMG = [img('court-blue'), img('tiles'), img('court-outdoor'), img('ball-court'), img('welcome-courts'), img('welcome-night')]
+export const EV_IMG = [img('court-blue'), img('tiles'), img('court-outdoor'), img('ball-court'), img('welcome-courts'), img('welcome-night')]
 // مسابقه‌های برگزارشده — برای نظر و امتیاز
 export function pastEvents() {
   const out = []

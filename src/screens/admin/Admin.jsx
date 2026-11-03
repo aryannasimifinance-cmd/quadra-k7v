@@ -16,6 +16,7 @@ import { Coaches, Members, Payments, Settings } from './Lists'
 import { Bookings } from './BookingsBoard'
 import { ShopAdmin } from './ShopAdmin'
 import { CafeAdmin } from './CafeAdmin'
+import { Events } from './Events'
 import { Accounting } from './Accounting'
 import { Hr } from './Hr'
 import { LiveCourts, TYPE_CLS, Timeline } from './Live'
@@ -29,6 +30,7 @@ const NAV = [
     { id: 'overview', name: 'داشبورد', icon: 'grid', tip: 'خلاصه‌ی امروز، زمین‌های زنده و کارهای مانده' },
     { id: 'calendar', name: 'تقویم زمین‌ها', icon: 'court', tip: 'برنامه‌ی ساعتی ۴ زمین؛ رزرو دستی با کلیک روی جای خالی' },
     { id: 'bookings', name: 'رزروها', icon: 'cal', tip: 'فهرست همه‌ی رزروها با جستجو و فیلتر' },
+    { id: 'events', name: 'آدینه‌ها و مسابقات', icon: 'trophy', tip: 'تعریف آدینه و تورنمنت، ثبت‌نام، تیم‌بندی، نتایج و برنده‌ها' },
   ] },
   { group: 'فروش و مالی', items: [
     { id: 'shop', name: 'فروشگاه و انبار', icon: 'bag', tip: 'کالاها، سفارش‌های اپ، فروش حضوری و موجودی' },
@@ -52,7 +54,7 @@ export default function Admin() {
   const [menu, setMenu] = useState(false)
   const [drawer, setDrawer] = useState(null) // {kind:'booking', id} | {kind:'new', court, date, start}
   const ctx = { go: (s) => { setSec(s); window.scrollTo(0, 0) }, open: setDrawer }
-  const S = { overview: Overview, calendar: Calendar, bookings: Bookings, payments: Payments, shop: ShopAdmin, cafe: CafeAdmin, accounting: Accounting, coaches: Coaches, members: Members, hr: Hr, settings: Settings }[sec]
+  const S = { overview: Overview, calendar: Calendar, bookings: Bookings, payments: Payments, shop: ShopAdmin, cafe: CafeAdmin, accounting: Accounting, coaches: Coaches, events: Events, members: Members, hr: Hr, settings: Settings }[sec]
   const badges = { shop: club.orders.filter((o) => o.status === 'new').length, cafe: club.cafeOrders.filter((o) => o.status !== 'delivered').length, hr: club.leaves.filter((l) => l.status === 'pending').length }
   return (
     <div className="adm" dir="rtl">

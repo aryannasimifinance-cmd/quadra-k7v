@@ -1,12 +1,14 @@
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
-import { BADGES, COACHES, COACH_PACKS, coachesRanked, pastEvents, ratingOf, EVENT_KIND, LEVELS, PACKAGES, RANKS, XP_GUIDE, rankOf, coachPackPrice, dayLabel, dayMonth, events, fa, fromKey, hourLabel, levelById, short, toman } from '../../data'
+import { BADGES, COACHES, COACH_PACKS, coachesRanked, ratingOf, EVENT_KIND, LEVELS, PACKAGES, RANKS, XP_GUIDE, rankOf, coachPackPrice, dayLabel, dayMonth, fa, fromKey, hourLabel, levelById, short, toman } from '../../data'
 import { celebrate, chime, haptic } from '../../fx'
 import { ME, myPoints, useStore } from '../../store'
 import { activeMembership, quests } from '../../select'
 import { Avatar, Button, Chips, Icon, LevelPill, Photo, Sheet, Stars, TopBar, rise, stagger } from '../../components/ui'
 import { leaderboard } from './Home'
 import { Loading } from '../../components/Logo'
+import { EV_FORMAT, appEvents, finished, isLive } from '../../events'
+import { Bracket, Groups, Podium, Teams, champion } from '../../components/Tournament'
 
 // برگه‌ی امتیاز ناشناس
 export function RateSheet({ target, title, onClose }) {
@@ -168,11 +170,13 @@ export function Ranking({ onBack }) {
 }
 
 export function Events({ nav, onBack, kind: initial = 'friday' }) {
-  const { events: joined, club, rated = [] } = useStore()
+  const { club, rated = [] } = useStore()
   const [rate, setRate] = useState(null)
-  const past = pastEvents().filter((e) => e.kind === initial || true)
+  const [open, setOpen] = useState(null)
   const [kind, setKind] = useState(initial)
-  const list = events().filter((e) => e.kind === kind)
+  const list = appEvents(club).filter((e) => e.kind === kind)
+  const past = finished(club).filter((e) => e.kind === kind).slice(0, 8)
+  const sel = open && (club.events || []).find((e) => e.id === open)
   return (
     <div className="page">
       <TopBar onBack={onBack} title="مسابقه‌ها" />
@@ -180,33 +184,73 @@ export function Events({ nav, onBack, kind: initial = 'friday' }) {
         <Chips id="ev-kind" value={kind} onChange={setKind} options={Object.entries(EVENT_KIND).map(([id, k]) => ({ id, name: k.name }))} />
         <p className="muted ev-kind-sub">{EVENT_KIND[kind].sub}</p>
         <motion.div key={kind} className="ev-list" variants={stagger} initial="hidden" animate="show">
-          {list.map((e) => (
-            <motion.button key={e.id} variants={rise} className="ev-card big" whileTap={{ scale: 0.98 }} onClick={() => nav.start({ intent: 'event', eventId: e.id })} disabled={joined.includes(e.id)}>
-              <Photo src={e.img} />
-              <div className="ev-shade" />
-              <div className="ev-txt">
-                <span className={`pill-q ${e.kind === 'official' ? 'gold' : ''}`}>{dayLabel(e.date)} {dayMonth(fromKey(e.date))}، {hourLabel(e.start)}</span>
-                <b>{e.title}</b>
-                <small>{e.format}، سطح {e.levels.join(' / ')}، جایزه: {e.prize}</small>
-                <div className="ev-cap"><div className="bar"><i style={{ width: `${(e.taken / e.cap) * 100}%` }} /></div><span>{fa(e.cap - e.taken)} جای خالی</span></div>
-              </div>
-              <em>{joined.includes(e.id) ? '✓ ثبت‌نام' : short(e.fee)}</em>
-            </motion.button>
-          ))}
+          {list.map((e) => {
+            const mine = e.regs.some((r) => r.by === ME)
+            return (
+              <motion.button key={e.id} variants={rise} className="ev-card big" whileTap={{ scale: 0.98 }} onClick={() => setOpen(e.id)}>
+                <Photo src={e.img} />
+                <div className="ev-shade" />
+                <div className="ev-txt">
+                  <span className={`pill-q ${e.kind === 'official' ? 'gold' : ''}`}>{dayLabel(e.date)} {dayMonth(fromKey(e.date))}، {hourLabel(e.start)}</span>
+                  <b>{e.title}</b>
+                  <small>{e.format}، سطح {e.levels.join(' / ')}، جایزه: {e.prize}</small>
+                  <div className="ev-cap"><div className="bar"><i style={{ width: `${Math.min(100, (e.taken / e.cap) * 100)}%` }} /></div><span>{e.taken >= e.cap ? 'تکمیل' : `${fa(e.cap - e.taken)} جای خالی`}</span></div>
+                </div>
+                <em>{mine ? '✓ ثبت‌نام' : short(e.fee)}</em>
+              </motion.button>
+            )
+          })}
+          {!list.length && <div className="empty-card">فعلاً مسابقه‌ی تازه‌ای اعلام نشده.</div>}
         </motion.div>
-        <p className="label">برگزارشده‌ها، امتیاز ناشناس</p>
+        {past.length > 0 && <p className="label">برگزارشده‌ها؛ نتیجه‌ها و برنده‌ها</p>}
         {past.map((e) => {
           const r = ratingOf(club, 'event:' + e.id), done = rated.includes('event:' + e.id)
+          const ch = champion(e)
           return (
-            <div key={e.id} className="past-ev">
-              <div className="grow"><b>{e.title}</b><small>{dayMonth(fromKey(e.date))}، {e.format}</small>
+            <div key={e.id} className="past-ev" onClick={() => setOpen(e.id)} role="button">
+              <div className="grow"><b>{e.title}</b><small>{dayMonth(fromKey(e.date))}، {fa(e.teams.length)} تیم</small>
+                {ch && <small className="past-champ">🏆 {ch.name}</small>}
                 <div className="cb-score dark"><Stars value={r.avg} size={13} /><b>{fa(r.avg)}</b><small>{fa(r.count)} نظر</small></div></div>
-              <Button small variant={done ? 'ghost' : 'dark'} disabled={done} onClick={() => setRate(e)}>{done ? '✓ ثبت شد' : 'امتیاز بدهید'}</Button>
+              <Button small variant={done ? 'ghost' : 'dark'} disabled={done} onClick={(x) => { x.stopPropagation(); setRate(e) }}>{done ? '✓ ثبت شد' : 'امتیاز بدهید'}</Button>
             </div>
           )
         })}
       </div>
+      <Sheet open={!!sel} onClose={() => setOpen(null)} title={sel?.title} tall>
+        {sel && <EventInfo ev={sel} onJoin={() => { setOpen(null); nav.start({ intent: 'event', eventId: sel.id }) }} />}
+      </Sheet>
       <RateSheet target={rate && 'event:' + rate.id} title={rate && `امتیاز به ${rate.title}`} onClose={() => setRate(null)} />
+    </div>
+  )
+}
+
+// جزئیات یک مسابقه در اپ: شرکت‌کننده‌ها، تیم‌ها، گروه‌ها، جدول حذفی و برنده‌ها
+function EventInfo({ ev, onJoin }) {
+  const mine = ev.regs.some((r) => r.by === ME)
+  const tabs = [['people', `شرکت‌کننده‌ها ${fa(ev.regs.length)}`], ev.teams.length && ['teams', 'تیم‌ها'], ev.groups.length && ['groups', 'گروه‌ها'], ev.matches.some((m) => m.stage === 'ko') && ['ko', 'حذفی']].filter(Boolean)
+  const [tab, setTab] = useState(() => (ev.matches.some((m) => m.stage === 'ko') ? 'ko' : ev.groups.length ? 'groups' : ev.teams.length ? 'teams' : 'people'))
+  const can = ev.status === 'open' && !mine && ev.regs.length < ev.cap
+  return (
+    <div className="ev-info">
+      <div className="ev-meta">
+        <span>{dayLabel(ev.date)} {dayMonth(fromKey(ev.date))}، {hourLabel(ev.start)} تا {hourLabel(ev.start + ev.dur)}</span>
+        <span>{ev.desc || EV_FORMAT[ev.format]}، سطح {ev.levels.join(' / ')}</span>
+        <span>ورودی {toman(ev.fee)}، جایزه: {ev.prize}</span>
+        {ev.note && <span>{ev.note}</span>}
+      </div>
+      <Podium ev={ev} />
+      <Chips id={'evt-' + ev.id} small value={tab} onChange={setTab} options={tabs.map(([id, name]) => ({ id, name }))} />
+      {tab === 'people' && (
+        <div className="ev-people">
+          {ev.regs.map((r) => <div key={r.id} className={r.by === ME ? 'me' : ''}><Avatar name={r.name} size={30} me={r.by === ME} /><b>{r.by === ME ? 'شما' : r.name}</b>{r.level && <LevelPill id={r.level} />}</div>)}
+          {!ev.regs.length && <p className="muted">هنوز کسی ثبت‌نام نکرده؛ اولین نفر باشید.</p>}
+          {!ev.teams.length && ev.regs.length > 0 && <p className="muted small">تیم‌ها قبل از شروع مسابقه، هم‌سطح چیده و همین‌جا اعلام می‌شوند.</p>}
+        </div>
+      )}
+      {tab === 'teams' && <Teams ev={ev} />}
+      {tab === 'groups' && <Groups ev={ev} />}
+      {tab === 'ko' && <Bracket ev={ev} />}
+      {isLive(ev) && <div className="ev-cta"><Button full variant="q" disabled={!can} onClick={onJoin}>{mine ? '✓ ثبت‌نام کرده‌اید' : ev.status !== 'open' ? 'ثبت‌نام بسته شد' : ev.regs.length >= ev.cap ? 'ظرفیت تکمیل است' : `ثبت‌نام، ${toman(ev.fee)}`}</Button></div>}
     </div>
   )
 }

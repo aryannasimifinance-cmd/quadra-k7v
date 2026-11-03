@@ -1,7 +1,7 @@
 // کافه: سفارش‌ها (اپ، حضوری، سر زمین)، منو با دستور تهیه، انبار مواد اولیه، خریدها و گزارش فروش
 import { motion } from 'framer-motion'
 import { Fragment, useMemo, useState } from 'react'
-import { MEMBERS, METHOD_NAME, addDays, dayLabel, fa, short, toman, todayKey } from '../../data'
+import { METHOD_NAME, addDays, dayLabel, fa, fromKey, short, toman, todayKey } from '../../data'
 import {
   BIG_K, CAFE_CATS, DRINKS, ING_CATS, NOTES, UNITS, bigCost, cafeCat, fits, fmtQty, ingAcc, itemAcc, itemCost, moreOf, nextIngCode, nextItemCode, portions, priceOf, shortage,
 } from '../../cafe'
@@ -17,6 +17,7 @@ import { who } from './derive'
 import { Badge, Card, Empty, Field, Guide, ImageUpload, Kpi, Money, More, PeriodBar, Search, Seg, Side, Tabs, XlsxBtn, usePage } from './kit'
 import { CustomerField, Qty, Ticket, useCustomer } from './PosKit'
 import { OrderLog } from './OrderLog'
+import { eventAt } from '../../events'
 
 const fmt = new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' })
 const NEXT = { new: ['prep', 'شروع آماده‌سازی'], prep: ['ready', 'آماده شد'], ready: ['delivered', 'تحویل داده شد'] }
@@ -48,6 +49,7 @@ export function CafeAdmin() {
           ['report', 'گزارش فروش', null, 'پرفروش‌ها، ساعت‌های شلوغ و سود کافه'],
         ]} />
         <div className="sec-actions">
+          <button className="adm-btn ghost sm" onClick={() => setTab('history')} data-tip="همه‌ی سفارش‌ها؛ با نام یا شماره‌ی مشتری ببینید چه کسی چه سفارش داده"><Icon name="search" size={16} />جستجوی سفارش‌ها</button>
           <button className={`adm-btn ${tab === 'orders' ? 'primary' : 'ghost'} sm`} onClick={() => setPos(true)} data-tip="ثبت دستی سفارش مشتری‌ای که حضوری به کافه آمده"><Icon name="plus" size={16} />ثبت سفارش حضوری</button>
           <button className="adm-btn ghost sm" onClick={() => setRecv(true)} data-tip="قهوه، شیر، نان و… که خریدید را وارد انبار کنید"><Icon name="box" size={16} />خرید مواد اولیه</button>
           {tab === 'stock'
@@ -112,7 +114,7 @@ function Orders({ onAll }) {
                 return (
                   <motion.div key={o.id} layout className={`kb-card cafe-card ${k !== 'delivered' && age > 20 ? 'late' : ''}`}>
                     <div className="row-between"><b dir="ltr">{o.id}</b><small>{fmt.format(o.at)}{k !== 'delivered' && `، ${fa(age)} دقیقه`}</small></div>
-                    <span className={`dest ${o.to ? 'court' : ''}`}><Icon name={o.to ? 'court' : 'bag'} size={14} />{dest(o)}</span>
+                    <div className="row-gap"><span className={`dest ${o.to ? 'court' : ''}`}><Icon name={o.to ? 'court' : 'bag'} size={14} />{dest(o)}</span>{eventAt(club.events, o.at) && <span className="dest ev" data-tip={eventAt(club.events, o.at).title}>🏆 آدینه</span>}</div>
                     <small>{who(o.by, user)}، {o.source === 'desk' ? 'حضوری' : 'اپ'}، {METHOD_NAME[o.method]}</small>
                     <ul>{o.items.map((x, i) => <li key={i}><b>{fa(x.qty)}×</b> {x.name}{x.big ? '، بزرگ' : ''}{x.note && <em>{x.note}</em>}</li>)}</ul>
                     <div className="row-between"><b>{toman(o.total)}</b>
@@ -458,6 +460,7 @@ function Pos({ onClose }) {
   const lack = shortage(ings, all, lines)
   const inCart = (id) => lines.filter((x) => x.iid === id).reduce((s, x) => s + x.qty, 0)
   const instant = now && !to
+  const live = eventAt(club.events, Date.now())
   const save = () => {
     const o = adminCafePos(lines, method, cu.by, to || null, instant)
     if (!o) { chime('alarm'); toast({ icon: '⚠️', title: 'موجودی کافی نیست', body: 'انبار همین حالا تغییر کرده؛ سفارش را دوباره بررسی کنید.' }); return }
@@ -468,6 +471,7 @@ function Pos({ onClose }) {
   return (
     <div className="pos2">
       <div className="pos-cat">
+        {live && <p className="ev-live">🏆 الان «{live.title}» در جریان است؛ این سفارش جزو فروش همین مسابقه حساب می‌شود.</p>}
         <Search value={q} onChange={setQ} ph="جستجوی نام یا کد آیتم" />
         <div className="pick-chips">{[['all', 'همه', '✦'], ...CAFE_CATS.map((c) => [c.id, c.name, c.ic])].map(([k, n, ic]) => <button key={k} type="button" className={cat === k ? 'on' : ''} onClick={() => setCat(k)}>{ic} {n}</button>)}</div>
         <div className="cafe-pos">
@@ -509,6 +513,31 @@ function Pos({ onClose }) {
         })}
       </Ticket>
     </div>
+  )
+}
+
+// فروش کافه در زمان آدینه‌ها و مسابقه‌ها، جدا از روزهای عادی
+function EventSplit({ orders }) {
+  const { club } = useStore()
+  const by = new Map()
+  let normal = 0, normalN = 0
+  orders.forEach((o) => {
+    const e = eventAt(club.events, o.at)
+    if (!e) { normal += o.total; normalN++; return }
+    const r = by.get(e.id) || { e, n: 0, rev: 0 }
+    r.n++; r.rev += o.total; by.set(e.id, r)
+  })
+  const evs = [...by.values()].sort((a, b) => fromKey(b.e.date) - fromKey(a.e.date))
+  const evRev = evs.reduce((s, r) => s + r.rev, 0), all = normal + evRev
+  return (
+    <Card title="روزهای عادی و روزهای مسابقه" sub="سفارش‌های یک ساعت قبل تا یک ساعت بعد از هر آدینه یا تورنمنت، فروش همان مسابقه حساب می‌شوند">
+      <div className="ev-split">
+        <div><small>روزهای عادی</small><b>{toman(normal)}</b><em>{fa(normalN)} سفارش، {fa(all ? Math.round((normal / all) * 100) : 0)}٪</em></div>
+        <div className="ev"><small>🏆 آدینه‌ها و مسابقه‌ها</small><b>{toman(evRev)}</b><em>{fa(evs.reduce((s, r) => s + r.n, 0))} سفارش، {fa(all ? Math.round((evRev / all) * 100) : 0)}٪</em></div>
+      </div>
+      {evs.length > 0 && <div className="tbl-wrap"><table className="tbl"><thead><tr><th>مسابقه</th><th>تاریخ</th><th>سفارش</th><th>فروش</th><th>میانگین</th></tr></thead>
+        <tbody>{evs.map((r) => <tr key={r.e.id}><td>{r.e.title}</td><td>{dayLabel(r.e.date)} {jDateFa(r.e.date)}</td><td className="num">{fa(r.n)}</td><td className="num">{toman(r.rev)}</td><td className="num">{toman(Math.round(r.rev / r.n))}</td></tr>)}</tbody></table></div>}
+    </Card>
   )
 }
 
@@ -593,6 +622,7 @@ function Report() {
         <Kpi icon="box" label="بهای تمام‌شده (مواد اولیه)" value={short(T.cogs) + ' تومان'} />
         <Kpi icon="chart" label="سود ناخالص" value={short(T.rev - T.cogs) + ' تومان'} sub={T.rev ? `حاشیه ${fa(Math.round(((T.rev - T.cogs) / T.rev) * 100))}٪` : null} />
       </div>
+      <EventSplit orders={orders} />
       <div className="two">
         <Card title="فروش به تفکیک دسته">{byCat.length ? <HBars rows={byCat} /> : <Empty>فروشی در این بازه نیست.</Empty>}</Card>
         <Card title="ساعت‌های شلوغ کافه" sub="فروش هر ساعت">{byHour.length ? <HBars rows={byHour} /> : <Empty>—</Empty>}</Card>
