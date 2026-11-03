@@ -1,21 +1,35 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { COURTS, PACKAGES, levelById, productById, seedClub, todayKey } from './data'
+import { COURTS, PACKAGES, levelById, productById, seedClub, setCatalog, setMembers, todayKey, variantOf } from './data'
+import { makeVariants, nextCode } from './catalog'
+import { nextIngCode, nextItemCode, placeCafe, receiveInto } from './cafe'
+import { jMonthLabel } from './jalali'
+import { payroll } from './hr'
+import { withOps } from './ops'
 
+// داده‌ی باشگاه، حساب بازیکن و نشست هر تب جدا ذخیره می‌شوند تا مدیر و بازیکن در دو تب همزمان کار کنند
 const KEY = 'quadra-v1'
-const SEED_V = 9
-const blankPlayer = { user: null, xp: 0, badges: [], wallet: 0, rated: [], membership: null, cart: [], wish: [], notifications: [], quests: {}, events: [] }
+const CLUB_KEY = 'quadra-club-v1'
+const SESSION_KEY = 'quadra-session'
+const SEED_V = 14
+const blankPlayer = { user: null, xp: 0, badges: [], wallet: 0, rated: [], membership: null, cart: [], wish: [], notifications: [], quests: {}, events: [], cafeCart: [] }
 
 // حساب نمونه برای «ورود سریع نمایشی»
 const DEMO_ACCOUNTS = {
   '09120000000': { user: { name: 'آریان نسیمی‌فر', phone: '09120000000', level: 'C+', side: 'right', joined: Date.now() - 90 * 864e5 }, xp: 340, wallet: 800000, badges: ['first', 'host', 'social'] },
 }
+const read = (store, k) => { try { return JSON.parse(store.getItem(k)) } catch { return null } }
 function load() {
-  try {
-    const s = JSON.parse(localStorage.getItem(KEY))
-    if (s && s.club?.v === SEED_V) return { session: null, ...blankPlayer, accounts: DEMO_ACCOUNTS, ...s }
-  } catch { /* داده‌ی خراب یا حالت خصوصی */ }
-  return { session: null, ...blankPlayer, accounts: DEMO_ACCOUNTS, club: seedClub() }
+  const club = read(localStorage, CLUB_KEY)
+  const me = read(localStorage, KEY)
+  // نشست: اول همین تب، بعد آخرین ورود روی این دستگاه
+  let tab = null
+  try { tab = sessionStorage.getItem(SESSION_KEY) } catch { /* */ }
+  const session = tab !== null ? read(sessionStorage, SESSION_KEY) : read(localStorage, SESSION_KEY)
+  if (club?.v === SEED_V) return { ...blankPlayer, accounts: DEMO_ACCOUNTS, ...me, session, club }
+  return { ...blankPlayer, accounts: DEMO_ACCOUNTS, session: null, club: withOps(seedClub()) }
 }
+// حساب بازیکن با ترتیب ثابت کلیدها، تا تب‌ها یک رشته‌ی یکسان بنویسند و رفت‌وبرگشت بی‌پایان پیش نیاید
+const personalOf = (s) => JSON.stringify(Object.fromEntries([...Object.keys(blankPlayer), 'accounts'].map((k) => [k, s[k]])))
 // بخش‌هایی از وضعیت که مال هر حساب است و با خروج کنار گذاشته می‌شود
 const PERSONAL = Object.keys(blankPlayer)
 
@@ -43,24 +57,44 @@ export function StoreProvider({ children }) {
   const toastId = useRef(0)
   const ref = useRef(state)
   ref.current = state
+  // کاتالوگ فروشگاه از داده‌ی باشگاه خوانده می‌شود تا کالاهای تازه‌ی مدیر در اپ بازیکن هم دیده شوند
+  setCatalog(state.club.products)
+  setMembers(state.club.members)
 
+  const mine = personalOf(state)
+  // اگر حافظه‌ی مرورگر پر شود (مثلاً عکس‌های زیاد) به مدیر هشدار داده می‌شود
   useEffect(() => {
-    try { localStorage.setItem(KEY, JSON.stringify(state)) } catch { /* حالت خصوصی مرورگر */ }
-  }, [state])
+    try { localStorage.setItem(CLUB_KEY, JSON.stringify(state.club)) } catch (e) {
+      if (e?.name === 'QuotaExceededError') toastRef.current?.({ icon: '⚠️', title: 'حافظه‌ی مرورگر پر است', body: 'آخرین تغییر ذخیره نشد؛ چند عکس را حذف یا کوچک‌تر کنید.', duration: 6000 })
+    }
+  }, [state.club])
+  useEffect(() => { try { localStorage.setItem(KEY, mine) } catch { /* */ } }, [mine])
+  useEffect(() => {
+    try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(state.session)); localStorage.setItem(SESSION_KEY, JSON.stringify(state.session)) } catch { /* */ }
+  }, [state.session])
 
   // همگام‌سازی بین تب‌ها: مدیر و بازیکن در دو تب همزمان
   useEffect(() => {
-    const on = (e) => { if (e.key === KEY && e.newValue) try { setState(JSON.parse(e.newValue)) } catch { /* نادیده */ } }
+    // داده‌ی باشگاه و حساب بازیکن همگام می‌شوند؛ نشست هر تب سر جای خودش می‌ماند
+    const on = (e) => {
+      if (!e.newValue || (e.key !== CLUB_KEY && e.key !== KEY)) return
+      try {
+        const v = JSON.parse(e.newValue)
+        setState((s) => { const next = e.key === CLUB_KEY ? { ...s, club: v } : { ...s, ...v }; ref.current = next; return next })
+      } catch { /* نادیده */ }
+    }
     window.addEventListener('storage', on)
     return () => window.removeEventListener('storage', on)
   }, [])
 
+  const toastRef = useRef(null)
   const toast = useCallback((t) => {
     const id = ++toastId.current
     setToasts((x) => [...x, { id, ...t }])
     setTimeout(() => setToasts((x) => x.filter((y) => y.id !== id)), t.duration || 3200)
   }, [])
 
+  toastRef.current = toast
   const api = useMemo(() => {
     const commit = (fn) => { const next = fn(ref.current); ref.current = next; setState(next); return next }
     const club = (fn) => commit((s) => ({ ...s, club: fn(s.club) }))
@@ -89,6 +123,8 @@ export function StoreProvider({ children }) {
         if (saved) { commit((s) => ({ ...s, ...blankPlayer, ...saved, user: { ...saved.user }, session: { role: 'player' } })); return }
         commit((s) => ({
           ...s, session: { role: 'player' }, user, ...(s.user ? {} : { xp: 20, wallet: 500000 }),
+          club: (s.club.members || []).some((m) => m.phone === user.phone) ? s.club
+            : { ...s.club, members: [...(s.club.members || []), { id: 'a' + user.phone, name: user.name, phone: user.phone, level: user.level, side: user.side || 'both', games: 0, wins: 0, points: levelById(user.level).base, joined: 0, at: Date.now(), source: 'app', member: null }] },
           notifications: s.user ? s.notifications : [{
             id: 'welcome', at: Date.now(), read: false, icon: '👋', title: `${user.name}، به کوادرا خوش اومدید`,
             body: '۲۰ امتیاز و ۵۰۰ هزار تومان اعتبار هدیه گرفتید. اولین بازیتون رو بسازید تا نشان «اولین سرو» باز بشه.',
@@ -104,7 +140,7 @@ export function StoreProvider({ children }) {
           return { ...s, ...blankPlayer, accounts, session: null }
         })
       },
-      resetDemo() { try { localStorage.removeItem(KEY) } catch { /* */ } location.reload() },
+      resetDemo() { try { [KEY, CLUB_KEY, SESSION_KEY].forEach((k) => localStorage.removeItem(k)); sessionStorage.removeItem(SESSION_KEY) } catch { /* */ } location.reload() },
       updateUser(p) { commit((s) => ({ ...s, user: { ...s.user, ...p } })) },
 
       // رزرو زمین یا کلاس — b شامل court,date,start,dur,type,price و ...
@@ -231,14 +267,32 @@ export function StoreProvider({ children }) {
       checkout(method) {
         let out
         commit((s) => {
-          const items = s.cart.map((x) => ({ ...x, price: productById(x.pid).price }))
+          const items = s.cart.map((x) => { const p = productById(x.pid); return { ...x, price: p.price, cost: p.cost, sku: variantOf(p, x.size, x.color)?.sku } })
           const total = items.reduce((a, x) => a + x.qty * x.price, 0)
-          const order = { id: 'Q-' + String(Date.now()).slice(-5), by: ME, items, total, method, status: 'new', at: Date.now() }
-          const stock = { ...s.club.stock }
-          items.forEach((x) => { stock[x.pid] = Math.max(0, stock[x.pid] - x.qty) })
+          const order = { id: 'Q-' + String(Date.now()).slice(-5), by: ME, items, total, method, status: 'new', source: 'app', at: Date.now() }
           const r = reward(pay({ ...s, cart: [] }, total, method), Math.max(10, Math.round(total / 200000)), ['shopper'])
           out = { ...r.result, order }
-          return { ...r.next, club: { ...s.club, orders: [order, ...s.club.orders], stock } }
+          return { ...r.next, club: { ...s.club, orders: [order, ...s.club.orders], products: takeStock(s.club.products, items) } }
+        })
+        return out
+      },
+      // کافه — سبد جدا از فروشگاه؛ تحویل در کافه یا سر زمین
+      cafeAdd(item) {
+        commit((s) => {
+          const cart = s.cafeCart || []
+          const k = cart.findIndex((x) => x.iid === item.iid && !!x.big === !!item.big && (x.note || '') === (item.note || ''))
+          return { ...s, cafeCart: k < 0 ? [...cart, item] : cart.map((x, i) => (i === k ? { ...x, qty: x.qty + item.qty } : x)) }
+        })
+      },
+      cafeQty(i, qty) { commit((s) => ({ ...s, cafeCart: qty <= 0 ? s.cafeCart.filter((_, k) => k !== i) : s.cafeCart.map((x, k) => (k === i ? { ...x, qty } : x)) })) },
+      cafeCheckout(method, to) {
+        let out
+        commit((s) => {
+          const r = placeCafe(s.club.cafeIngs, s.club.cafeItems, s.cafeCart)
+          const order = { id: 'K-' + String(Date.now()).slice(-5), by: ME, items: r.lines, use: r.use, total: r.total, method, to: to || null, status: 'new', source: 'app', at: Date.now() }
+          const g = reward(pay({ ...s, cafeCart: [] }, r.total, method), Math.max(5, Math.round(r.total / 100000)), [])
+          out = { ...g.result, order }
+          return { ...g.next, club: { ...s.club, cafeOrders: [order, ...s.club.cafeOrders], cafeIngs: r.ings } }
         })
         return out
       },
@@ -257,20 +311,176 @@ export function StoreProvider({ children }) {
       readAll() { commit((s) => ({ ...s, notifications: s.notifications.map((n) => ({ ...n, read: true })) })) },
 
       // ---------- مدیر ----------
+      // عضو تازه از پذیرش
+      adminMember(m) {
+        let id
+        club((c) => {
+          id = 'd' + Date.now()
+          return { ...c, members: [...(c.members || []), { id, games: 0, wins: 0, points: levelById(m.level).base, joined: 0, at: Date.now(), source: 'desk', member: null, ...m }] }
+        })
+        return id
+      },
       adminAddBooking(b) { club((c) => ({ ...c, bookings: [...c.bookings, { id: 'd' + Date.now(), status: 'ok', source: 'desk', at: Date.now(), ...b }] })) },
-      adminSettle(id, method) { club((c) => ({ ...c, bookings: c.bookings.map((b) => (b.id === id ? { ...b, paid: b.price, method } : b)) })) },
+      // تسویه: مبلغ و زمان پرداخت جدا ثبت می‌شود تا سند حسابداری در همان روز بخورد
+      adminSettle(id, method) {
+        club((c) => ({ ...c, bookings: c.bookings.map((b) => (b.id === id && b.paid < b.price
+          ? { ...b, paid: b.price, method: b.method || method, settled: [...(b.settled || []), { amt: b.price - b.paid, at: Date.now(), method }] } : b)) }))
+      },
       adminCancel(id, refund) { club((c) => ({ ...c, bookings: c.bookings.map((b) => (b.id === id ? { ...b, status: 'cancelled', refunded: refund && b.paid > 0 } : b)) })) },
       adminMove(id, patch) { club((c) => ({ ...c, bookings: c.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)) })) },
       adminOrder(id, status) { club((c) => ({ ...c, orders: c.orders.map((o) => (o.id === id ? { ...o, status } : o)) })) },
-      adminStock(pid, n) { club((c) => ({ ...c, stock: { ...c.stock, [pid]: Math.max(0, n) } })) },
+      // ---------- فروشگاه و انبار ----------
+      adminProduct(p) {
+        let saved
+        club((c) => {
+          const old = c.products.find((x) => x.id === p.id)
+          const code = old?.code || nextCode(c.products, p.cat)
+          saved = { ...old, ...p, id: old?.id || 'p' + Date.now(), code, active: p.active ?? true }
+          saved.variants = makeVariants(saved, old?.variants)
+          return { ...c, products: old ? c.products.map((x) => (x.id === old.id ? saved : x)) : [...c.products, saved] }
+        })
+        return saved
+      },
+      // اصلاح موجودی یک SKU (کسری یا اضافه) — سند حسابداری با بهای میانگین
+      adminAdjust(pid, sku, delta, note = '') {
+        club((c) => {
+          const p = c.products.find((x) => x.id === pid), v = p.variants.find((x) => x.sku === sku)
+          const qty = Math.max(-v.stock, delta)
+          if (!qty) return c
+          return {
+            ...c, products: c.products.map((x) => (x.id !== pid ? x : { ...x, variants: x.variants.map((y) => (y.sku === sku ? { ...y, stock: y.stock + qty } : y)) })),
+            stockMoves: [{ id: 'M' + Date.now(), date: todayKey(), kind: 'adjust', pid, code: p.code, sku, qty, cost: p.cost, note }, ...(c.stockMoves || [])],
+          }
+        })
+      },
+      // ورود کالا با فاکتور خرید؛ بهای هر کالا به روش میانگین موزون به‌روز می‌شود
+      adminReceive(r) {
+        club((c) => {
+          const products = c.products.map((p) => {
+            const lines = r.items.filter((x) => x.pid === p.id)
+            if (!lines.length) return p
+            const have = p.variants.reduce((s, v) => s + v.stock, 0), add = lines.reduce((s, x) => s + x.qty, 0)
+            const cost = Math.round((have * p.cost + lines.reduce((s, x) => s + x.qty * x.cost, 0)) / (have + add))
+            return { ...p, cost, variants: p.variants.map((v) => ({ ...v, stock: v.stock + lines.filter((x) => x.sku === v.sku).reduce((s, x) => s + x.qty, 0) })) }
+          })
+          const rec = { id: 'R-' + String(Date.now()).slice(-5), at: Date.now(), ...r, items: r.items.map((x) => ({ ...x, code: c.products.find((p) => p.id === x.pid).code })), total: r.items.reduce((s, x) => s + x.qty * x.cost, 0) }
+          const suppliers = c.suppliers.includes(r.supplier) ? c.suppliers : [...c.suppliers, r.supplier]
+          return { ...c, products, receipts: [rec, ...c.receipts], suppliers }
+        })
+      },
+      // فروش حضوری در پذیرش — تحویل همان لحظه
+      adminPos(items, method, by) {
+        let order
+        club((c) => {
+          const lines = items.map((x) => { const p = c.products.find((y) => y.id === x.pid); return { ...x, price: p.price, cost: p.cost } })
+          order = { id: 'Q-' + String(Date.now()).slice(-5), by: by || 'walkin', items: lines, total: lines.reduce((s, x) => s + x.qty * x.price, 0), method, status: 'delivered', source: 'desk', at: Date.now() }
+          return { ...c, orders: [order, ...c.orders], products: takeStock(c.products, lines) }
+        })
+        return order
+      },
+      adminApPay(p) { club((c) => ({ ...c, apPays: [{ id: 'AP' + Date.now(), date: todayKey(), ...p }, ...c.apPays] })) },
+      // ---------- کافه ----------
+      adminCafeItem(it) {
+        let saved
+        club((c) => {
+          const old = c.cafeItems.find((x) => x.id === it.id)
+          saved = { ...old, ...it, id: old?.id || 'k' + Date.now(), code: old?.code || nextItemCode(c.cafeItems, it.cat), active: it.active ?? true }
+          return { ...c, cafeItems: old ? c.cafeItems.map((x) => (x.id === old.id ? saved : x)) : [...c.cafeItems, saved] }
+        })
+        return saved
+      },
+      adminCafeIng(g) {
+        let saved
+        club((c) => {
+          const old = c.cafeIngs.find((x) => x.id === g.id)
+          saved = { stock: 0, ...old, ...g, id: old?.id || 'g' + Date.now(), code: old?.code || nextIngCode(c.cafeIngs, g.cat), active: g.active ?? true }
+          return { ...c, cafeIngs: old ? c.cafeIngs.map((x) => (x.id === old.id ? saved : x)) : [...c.cafeIngs, saved] }
+        })
+        return saved
+      },
+      // خرید مواد اولیه؛ مقدار و بها به واحد پایه (گرم / میلی‌لیتر / عدد)
+      adminCafeReceive(r) {
+        club((c) => {
+          const items = r.items.map((x) => { const g = c.cafeIngs.find((y) => y.id === x.ing); return { ...x, code: g.code, name: g.name } })
+          const rec = { id: 'CR-' + String(Date.now()).slice(-5), at: Date.now(), ...r, items, total: items.reduce((s, x) => s + Math.round(x.qty * x.cost), 0) }
+          const suppliers = c.suppliers.includes(r.supplier) ? c.suppliers : [...c.suppliers, r.supplier]
+          return { ...c, cafeIngs: receiveInto(c.cafeIngs, items), cafeReceipts: [rec, ...c.cafeReceipts], suppliers }
+        })
+      },
+      // ضایعات (منفی) یا اضافه‌ی شمارش (مثبت) به واحد پایه
+      adminCafeAdjust(id, delta, note = '') {
+        club((c) => {
+          const g = c.cafeIngs.find((x) => x.id === id)
+          const qty = Math.max(-g.stock, delta), amount = Math.round(qty * g.cost)
+          if (!qty) return c
+          return {
+            ...c, cafeIngs: c.cafeIngs.map((x) => (x.id === id ? { ...x, stock: Math.max(0, x.stock + qty) } : x)),
+            cafeMoves: amount ? [{ id: 'CM' + Date.now(), date: todayKey(), ing: id, code: g.code, name: g.name, qty, amount, note }, ...c.cafeMoves] : c.cafeMoves,
+          }
+        })
+      },
+      adminCafeOrder(id, status) { club((c) => ({ ...c, cafeOrders: c.cafeOrders.map((o) => (o.id === id ? { ...o, status } : o)) })) },
+      adminCafePos(lines, method, by, to) {
+        let order
+        club((c) => {
+          const r = placeCafe(c.cafeIngs, c.cafeItems, lines)
+          order = { id: 'K-' + String(Date.now()).slice(-5), by: by || 'walkin', items: r.lines, use: r.use, total: r.total, method, to: to || null, status: 'prep', source: 'desk', at: Date.now() }
+          return { ...c, cafeOrders: [order, ...c.cafeOrders], cafeIngs: r.ings }
+        })
+        return order
+      },
       adminPricing(p) { club((c) => ({ ...c, pricing: { ...c.pricing, ...p } })) },
       adminCourt(id, off) { club((c) => ({ ...c, off: { ...c.off, [id]: off } })) },
+      // ---------- حسابداری ----------
       adminExpense(e) { club((c) => ({ ...c, expenses: [{ id: 'e' + Date.now(), at: Date.now(), ...e }, ...c.expenses] })) },
+      adminExpenseDel(id) { club((c) => ({ ...c, expenses: c.expenses.filter((e) => e.id !== id) })) },
+      adminJournal(j) { club((c) => ({ ...c, journals: [{ id: 'J' + Date.now(), at: Date.now(), ...j }, ...c.journals] })) },
+      adminJournalDel(id) { club((c) => ({ ...c, journals: c.journals.filter((j) => j.id !== id) })) },
+
+      // ---------- منابع انسانی ----------
+      adminStaff(p) {
+        let id = p.id
+        club((c) => {
+          if (id && c.staff.some((s) => s.id === id)) return { ...c, staff: c.staff.map((s) => (s.id === id ? { ...s, ...p } : s)) }
+          id = 'h' + Date.now()
+          return { ...c, staff: [...c.staff, { status: 'active', docs: {}, ...p, id }], shifts: { ...c.shifts, [id]: ['off', 'off', 'off', 'off', 'off', 'off', 'off'] } }
+        })
+        return id
+      },
+      adminShift(staffId, day, code) { club((c) => ({ ...c, shifts: { ...c.shifts, [staffId]: c.shifts[staffId].map((x, i) => (i === day ? code : x)) } })) },
+      adminAttend(date, staffId, patch) {
+        club((c) => {
+          const day = { ...(c.attendance[date] || {}) }
+          const rec = { ...(day[staffId] || {}), ...patch }
+          if (rec.in == null) delete day[staffId]; else day[staffId] = rec
+          return { ...c, attendance: { ...c.attendance, [date]: day } }
+        })
+      },
+      adminLeave(l) { club((c) => ({ ...c, leaves: [{ id: 'L' + Date.now(), at: Date.now(), status: 'pending', ...l }, ...c.leaves] })) },
+      adminLeaveStatus(id, status) { club((c) => ({ ...c, leaves: c.leaves.map((l) => (l.id === id ? { ...l, status } : l)) })) },
+      adminAdvance(a) { club((c) => ({ ...c, advances: [{ id: 'A' + Date.now(), date: todayKey(), ...a }, ...c.advances] })) },
+      adminHrCfg(p) { club((c) => ({ ...c, hrCfg: { ...c.hrCfg, ...p } })) },
+      // ثبت سند حقوق یک ماه با تصویر محاسبه در همان لحظه
+      adminPayroll(mk) {
+        club((c) => (c.payrolls.some((p) => p.month === mk) ? c
+          : { ...c, payrolls: [{ id: 'PR-' + mk, month: mk, label: jMonthLabel(mk), date: todayKey(), rows: payroll(c, mk), at: Date.now() }, ...c.payrolls] }))
+      },
+      adminPayrollPay(mk, field) { club((c) => ({ ...c, payrolls: c.payrolls.map((p) => (p.month === mk ? { ...p, [field]: todayKey() } : p)) })) },
+      adminPayrollUndo(mk) { club((c) => ({ ...c, payrolls: c.payrolls.filter((p) => p.month !== mk || p.paidAt) })) },
       toast,
     }
   }, [toast])
 
   return <Ctx.Provider value={{ ...state, ...api, toasts }}>{children}</Ctx.Provider>
+}
+
+// کم کردن موجودی تنوع‌های فروخته‌شده
+function takeStock(products, items) {
+  return products.map((p) => {
+    const lines = items.filter((x) => x.pid === p.id)
+    if (!lines.length) return p
+    return { ...p, variants: p.variants.map((v) => ({ ...v, stock: Math.max(0, v.stock - lines.filter((x) => (x.sku ? x.sku === v.sku : v === variantOf(p, x.size, x.color))).reduce((s, x) => s + x.qty, 0)) })) }
+  })
 }
 
 // ---------- انتخاب‌گرهای مشترک ----------

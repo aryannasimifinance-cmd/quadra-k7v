@@ -96,7 +96,7 @@ export const CATEGORIES = [
 ]
 const S = ['S', 'M', 'L', 'XL']
 const SHOE = ['۳۹', '۴۰', '۴۱', '۴۲', '۴۳', '۴۴', '۴۵']
-export const PRODUCTS = [
+export const BASE_PRODUCTS = [
   { id: 'r1', cat: 'racket', brand: 'Volt', name: 'راکت Volt Carbon 18K', price: 14900000, was: 16900000, img: img('racket-orange'), rating: 4.9, reviews: 64, tag: 'پرفروش', stock: 6, gender: 'unisex', level: 'پیشرفته', desc: 'قاب کربن ۱۸K با تعادل بالا برای ضربه‌های قدرتی؛ مناسب اسمش و ویبورا.', specs: [['وزن', '۳۶۵ گرم'], ['شکل', 'الماسی'], ['هسته', 'EVA سخت'], ['تعادل', 'بالا']] },
   { id: 'r2', cat: 'racket', brand: 'Nordic', name: 'راکت Nordic Control', price: 9800000, img: img('racket-ball'), rating: 4.7, reviews: 41, stock: 9, gender: 'unisex', level: 'متوسط', desc: 'سر گرد و نقطه‌ی شیرین بزرگ؛ کنترل و دقت برای بازیکن‌های متوسط.', specs: [['وزن', '۳۵۵ گرم'], ['شکل', 'گرد'], ['هسته', 'EVA نرم'], ['تعادل', 'پایین']] },
   { id: 'r3', cat: 'racket', brand: 'Atlas', name: 'راکت Atlas Hybrid', price: 7400000, was: 8200000, img: img('rackets'), rating: 4.6, reviews: 28, tag: 'تخفیف', stock: 4, gender: 'unisex', level: 'مبتدی', desc: 'سبک و بخشنده؛ بهترین شروع برای سال اول پدل.', specs: [['وزن', '۳۴۵ گرم'], ['شکل', 'قطره‌ای'], ['هسته', 'فوم'], ['تعادل', 'متوسط']] },
@@ -121,13 +121,25 @@ export const PRODUCTS = [
   { id: 'x3', cat: 'acc', brand: 'Quadra', name: 'قمقمه‌ی حرارتی کوادرا', price: 850000, art: { type: 'bottle', color: '#19C9C1' }, colors: [{ n: 'فیروزه‌ای', c: '#19C9C1' }, { n: 'مشکی', c: '#141413' }, { n: 'سفید', c: '#F4F2EC' }], rating: 4.9, reviews: 58, tag: 'پرفروش', stock: 25, gender: 'unisex', desc: '۷۵۰ میلی‌لیتر؛ ۱۲ ساعت سرد.', specs: [['حجم', '۷۵۰ml'], ['جنس', 'استیل']] },
   { id: 'x4', cat: 'acc', brand: 'Quadra', name: 'حوله‌ی ورزشی کوادرا', price: 690000, art: { type: 'towel', color: '#F4F2EC' }, colors: [{ n: 'سفید', c: '#F4F2EC' }, { n: 'مشکی', c: '#141413' }], rating: 4.6, reviews: 21, stock: 2, gender: 'unisex', desc: 'میکروفایبر، سریع‌خشک.', specs: [['ابعاد', '۴۰×۸۰']] },
 ]
+// کاتالوگ زنده: مدیر کالا اضافه یا ویرایش می‌کند و store با setCatalog همین‌جا جایگزینش می‌کند
+export let PRODUCTS = BASE_PRODUCTS
+export let BRANDS = [...new Set(PRODUCTS.map((p) => p.brand))]
+export function setCatalog(list) {
+  if (!list || list === PRODUCTS) return
+  PRODUCTS = list
+  BRANDS = [...new Set(list.filter((p) => p.active !== false).map((p) => p.brand))]
+}
 export const productById = (id) => PRODUCTS.find((p) => p.id === id)
-export const BRANDS = [...new Set(PRODUCTS.map((p) => p.brand))]
+// موجودی کل کالا = جمع موجودی همه‌ی تنوع‌ها (سایز × رنگ)
+export const stockOf = (p) => (p?.variants || []).reduce((s, v) => s + v.stock, 0)
+export const variantOf = (p, size, color) => p?.variants?.find((v) => (v.size || null) === (size || null) && (v.color || null) === (color || null)) || p?.variants?.[0]
 
 // ---------- ابزار ----------
 export function hash(str) {
   let h = 2166136261
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) }
+  // ترکیب نهایی تا ورودی‌هایی که فقط در حرف آخر فرق دارند هم نتیجه‌ی کاملاً متفاوت بدهند
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16
   return (h >>> 0) / 4294967295
 }
 export const fa = (n) => Number(n).toLocaleString('fa-IR')
@@ -191,7 +203,7 @@ export const SIDES = [
   { id: 'both', name: 'هر دو سمت', short: 'هر دو', desc: 'هر جا تیم لازم داشت بازی می‌کنید' },
 ]
 export const sideById = (id) => SIDES.find((x) => x.id === id)
-export const MEMBERS = Array.from({ length: 56 }, (_, i) => {
+const BASE_MEMBERS = Array.from({ length: 56 }, (_, i) => {
   const r = (k) => hash('m' + i + k)
   const level = LEVELS[Math.min(8, Math.floor(r('lv') * r('lv2') * 9 + r('l3') * 3))].id
   const games = 3 + Math.floor(r('g') * 160)
@@ -206,6 +218,13 @@ export const MEMBERS = Array.from({ length: 56 }, (_, i) => {
     member: r('mb') < 0.18 ? 'gold' : r('mb') < 0.24 ? 'black' : null,
   }
 })
+// فهرست زنده‌ی اعضا: اعضای نمونه + کسانی که از اپ ثبت‌نام کرده‌اند یا در پذیرش اضافه شده‌اند (club.members)
+export const MEMBERS = [...BASE_MEMBERS]
+export function setMembers(extra = []) {
+  if (MEMBERS.length === BASE_MEMBERS.length + extra.length && extra.every((m, i) => MEMBERS[BASE_MEMBERS.length + i] === m)) return
+  MEMBERS.length = BASE_MEMBERS.length
+  MEMBERS.push(...extra)
+}
 export const memberById = (id) => MEMBERS.find((m) => m.id === id)
 
 // ---------- رویدادها ----------
@@ -273,7 +292,7 @@ export function events() {
 // ---------- داده‌ی اولیه‌ی باشگاه (برای پنل مدیر) ----------
 const METHODS = ['online', 'online', 'online', 'card', 'cash', 'wallet', 'package']
 export const METHOD_NAME = { online: 'درگاه آنلاین', card: 'کارتخوان', cash: 'نقدی', wallet: 'کیف پول', package: 'پکیج', 'coach-pack': 'پکیج مربی' }
-export const TYPE_NAME = { private: 'رزرو خصوصی', open: 'بازی باز', coach: 'کلاس مربی', event: 'تورنمنت', block: 'تعمیرات' }
+export const TYPE_NAME = { private: 'رزرو زمین', open: 'بازی باز', coach: 'کلاس مربی', event: 'تورنمنت', block: 'تعمیرات' }
 
 export function seedClub() {
   const bookings = []
@@ -301,13 +320,15 @@ export function seedClub() {
           ? Array.from({ length: past ? 4 : 1 + Math.floor(hash(`p${k}${c.id}${h}`) * 3) }, (_, j) => j === 0 ? m.id : MEMBERS[(MEMBERS.indexOf(m) + 1 + j * 7 + Math.floor(hash(`q${k}${c.id}${h}`) * 5)) % MEMBERS.length].id)
           : [m.id]
         const pr = hash(`pay${k}${c.id}${h}`)
-        const paid = type === 'open' ? Math.round(price / 4) * players.length : (past ? (pr < 0.95 ? price : 0) : pr < 0.6 ? price : pr < 0.75 ? Math.round(price / 2) : 0)
+        const source = hash('src' + k + c.id + h) < 0.75 ? 'app' : 'desk'
+        // مثل اپ: رزرو از اپ همان موقع کامل پرداخت می‌شود، رزرو پذیرش در محل؛ در بازی باز هر بازیکن سهم خودش را می‌دهد
+        const paid = type === 'open' ? Math.round(price / 4) * players.length : source === 'app' ? price : past ? (pr < 0.95 ? price : 0) : 0
         const cancelled = hash(`x${k}${c.id}${h}`) < 0.03
         bookings.push({
           id: `b${k}-${c.id}-${h}`, court: c.id, date: k, start: h, dur, type, by: m.id, players,
           levels: type === 'open' ? [m.level, ...nearLevels(m.level, 1)].filter((v, i, a) => a.indexOf(v) === i) : null,
           coach: coach?.id || null, price, paid, method: METHODS[Math.floor(pr * 70) % METHODS.length],
-          status: cancelled ? 'cancelled' : 'ok', refunded: cancelled && paid > 0, source: hash('src' + k + h) < 0.8 ? 'app' : 'desk',
+          status: cancelled ? 'cancelled' : 'ok', refunded: cancelled && paid > 0, source,
           at: fromKey(addDays(k, -1 - Math.floor(pr * 5))).getTime() + 36e5 * 10,
         })
         h += dur + (hash(`g${k}${c.id}${h}`) < 0.5 ? 0 : 1)
@@ -327,7 +348,7 @@ export function seedClub() {
     const r = (k) => hash('o' + i + k)
     const n = 1 + Math.floor(r('n') * 3)
     const items = Array.from({ length: n }, (_, j) => {
-      const p = PRODUCTS[Math.floor(hash('oi' + i + j) * PRODUCTS.length)]
+      const p = BASE_PRODUCTS[Math.floor(hash('oi' + i + j) * BASE_PRODUCTS.length)]
       return { pid: p.id, qty: 1 + Math.floor(hash('oq' + i + j) * (p.cat === 'balls' ? 3 : 1.2)), price: p.price, size: p.sizes?.[1] || null }
     })
     const ago = Math.floor(r('d') * r('d2') * 28)
@@ -371,8 +392,7 @@ export function seedClub() {
       reviews.push({ id: `r-${e.id}-${k}`, target: 'event:' + e.id, stars: r < 0.55 ? 5 : r < 0.88 ? 4 : 3, text: ['برگزاری منظم بود', 'جو خیلی خوبی داشت', 'داوری می‌تونست بهتر باشه', ''][k % 4], at: fromKey(e.date).getTime() + 864e5 })
     }
   })
-  const stock = Object.fromEntries(PRODUCTS.map((p) => [p.id, p.stock]))
-  return { v: 9, pricing, off: {}, bookings, orders, sales, stock, expenses: [], reviews }
+  return { v: 14, pricing, off: {}, bookings, orders, sales, expenses: [], reviews }
 }
 
 // ---------- گیمیفیکیشن ----------
@@ -426,4 +446,36 @@ export const CREDITS = [
   'ChaussuresTennis (CC BY-SA 4.0, Wikimedia Commons)',
   'Cmglee — tennis balls (CC BY-SA 4.0, Wikimedia Commons)',
   'A type of tennis ball; Closeup of a tennis ball (CC0, Wikimedia Commons)',
+  // عکس‌های منوی کافه
+  "Kritzolina — Cup of espresso 02.jpg (CC BY-SA 4.0, Wikimedia Commons)",
+  "Firzafp — A cup of Americano in Lano Coffee (Palembang, SS).jpg (CC BY-SA 4.0, Wikimedia Commons)",
+  "Peachyeung316 — Classical Cappuccino in Savour Cafe.jpg (CC BY-SA 4.0, Wikimedia Commons)",
+  "Maksym Kozlenko — Caffe Latte cup.jpg (CC BY-SA 4.0, Wikimedia Commons)",
+  "Andy Li — Mocha - Potatoast 2025-12-30.jpg (CC0, Wikimedia Commons)",
+  "Mulo Emmanuel — Caffe macchiato.jpg (CC BY-SA 3.0, Wikimedia Commons)",
+  "Quercus acuta — Japanese iced coffee - 01.jpg (CC BY-SA 4.0, Wikimedia Commons)",
+  "Tony Webster — Iced Coffee in Glass - Sunshine Coffee - Laramie Cafe (53838344552).jpg (CC BY 2.0, Wikimedia Commons)",
+  "christopher cornelius — Cold brew for Terra.jpg (CC BY 2.0, Wikimedia Commons)",
+  "Richard Huber — Affogato al Caffe.jpg (CC BY-SA 3.0, Wikimedia Commons)",
+  "Sm faysal — A cup of black tea from Srimangal Bangladesh.jpg (CC BY-SA 4.0, Wikimedia Commons)",
+  "Douglas P Perkins — White cup with green tea in it.jpg (CC BY 3.0, Wikimedia Commons)",
+  "David.Monniaux — Hot chocolate p1150797.jpg (CC BY-SA 3.0, Wikimedia Commons)",
+  "NuCastiel from Bangkok, Thailand — Matcha Green Tea Latte (35487991553).jpg (CC BY 2.0, Wikimedia Commons)",
+  "Kurt Kaiser — Glass of water ouside.jpg (CC0, Wikimedia Commons)",
+  "pic_p_ter — Glass cola.jpg (Public domain, Wikimedia Commons)",
+  "k7hpn — Mint Lemonade, Honest Burgers Brewer Street, Soho 2026-08-15.jpg (CC BY 4.0, Wikimedia Commons)",
+  "Vodopivez at Italian Wikipedia — Mojito-party.jpg (Public domain, Wikimedia Commons)",
+  "Pink Sherbet Photography from USA — Refreshing Sugar Sweet Red Strawberry Martini Drink (3405075157).jpg (CC BY 2.0, Wikimedia Commons)",
+  "Shixart1985 — Tequila sunrise in a stylish glass.jpg (CC BY 2.0, Wikimedia Commons)",
+  "에그란 — Homemade chicken tender sandwich 1.jpg (CC BY 4.0, Wikimedia Commons)",
+  "jeffreyw — Ham and cheese sandwich.jpg (CC BY 2.0, Wikimedia Commons)",
+  "jeffreyw — Tuna salad sandwich (1).jpg (CC BY 2.0, Wikimedia Commons)",
+  "Andy Li — Panini (Spinach, mushrooms & fresh tomato) - Breakfast At Tiffany's Brighton 2023-11-23.jpg (CC0, Wikimedia Commons)",
+  "BrokenSphere — Chicken penne alfredo.JPG (CC BY-SA 3.0, Wikimedia Commons)",
+  "hozinja — Spaghetti bolognese (hozinja) (cropped).jpg (CC BY 2.0, Wikimedia Commons)",
+  "StockSnap — French Fries.JPG (CC0, Wikimedia Commons)",
+  "Daderot — Chicken Caesar salad - Auckland, New Zealand.jpg (CC0, Wikimedia Commons)",
+  "Flunse — Orange juice without any fruits.jpg (CC BY-SA 3.0, Wikimedia Commons)",
+  "Evening42 — Homemade Mint Lemonade,Bangladesh.jpg (CC BY-SA 4.0, Wikimedia Commons)",
+  "OrangeRaver — EnergyDrinkBubbles.jpg (CC BY-SA 4.0, Wikimedia Commons)",
 ]

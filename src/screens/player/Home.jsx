@@ -1,11 +1,14 @@
 import { motion } from 'framer-motion'
 import { COACHES, EVENT_KIND, coachesRanked, MEMBERS, PACKAGES, PRODUCTS, courtById, dayLabel, dayMonth, events, fa, fromKey, hourLabel, levelById, range, rankOf, short, toman } from '../../data'
 import { celebrate, chime } from '../../fx'
-import { myPoints, useStore } from '../../store'
+import { ME, myPoints, useStore } from '../../store'
 import { myBookings, openGames, quests, streak, upcomingSlots } from '../../select'
 import { Avatar, Icon, LevelPill, Photo, Ring, SectionHead, Tilt, rise, stagger } from '../../components/ui'
 import { Logo } from '../../components/Logo'
 import { ProductImage } from '../../components/Merch'
+import { Dish } from '../../components/Dish'
+import { Tracker, courtTargets } from './Cafe'
+import { available } from '../../cafe'
 
 export default function Home({ nav }) {
   const s = useStore()
@@ -161,9 +164,23 @@ export default function Home({ nav }) {
         </motion.button>
 
         <section className="h-sec">
+          <SectionHead title="کافه‌ی کوادرا" sub={courtTargets(club).length ? 'سفارش بدید، سر زمینتون میاریم' : 'قهوه، نوشیدنی، ماکتل و غذا'} action="منوی کامل" onAction={() => nav.tab('cafe')} />
+          {club.cafeOrders.filter((o) => o.by === ME && o.status !== 'delivered').slice(0, 1).map((o) => <Tracker key={o.id} o={o} onClick={() => nav.tab('cafe')} />)}
+          <div className="shop-peek">
+            {club.cafeItems.filter((it) => it.tag && available(it, club.cafeIngs)).slice(0, 8).map((it) => (
+              <motion.button key={it.id} className="peek cafe-peek" whileTap={{ scale: 0.95 }} onClick={() => nav.tab('cafe')}>
+                <Dish it={it} big />
+                <small>{it.name}</small>
+                <b>{toman(it.price)}</b>
+              </motion.button>
+            ))}
+          </div>
+        </section>
+
+        <section className="h-sec">
           <SectionHead title="از فروشگاه" action="همه" onAction={() => nav.tab('shop')} />
           <div className="shop-peek">
-            {PRODUCTS.filter((p) => p.tag).slice(0, 6).map((p) => (
+            {PRODUCTS.filter((p) => p.tag && p.active !== false).slice(0, 6).map((p) => (
               <motion.button key={p.id} className="peek" whileTap={{ scale: 0.95 }} onClick={() => nav.tab('shop')}>
                 <ProductImage p={p} />
                 <small>{p.name}</small>

@@ -1,11 +1,13 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
-import { BRANDS, CATEGORIES, PRODUCTS, fa, productById, toman } from '../../data'
+import { BRANDS, CATEGORIES, PRODUCTS, fa, productById, stockOf, toman, variantOf } from '../../data'
+import { COLORS } from '../../catalog'
 import { celebrate, chime, haptic } from '../../fx'
 import { useStore } from '../../store'
 import { Button, Chips, Icon, Sheet, Stepper } from '../../components/ui'
 import { MerchArt, ProductImage } from '../../components/Merch'
 import { Loading } from '../../components/Logo'
+import { ShopSwitch } from './Cafe'
 
 const PRICES = [
   { id: 'any', name: 'همه', min: 0, max: Infinity },
@@ -17,9 +19,9 @@ const PRICES = [
 const SORTS = [{ id: 'pop', name: 'محبوب‌ترین' }, { id: 'cheap', name: 'ارزان‌ترین' }, { id: 'exp', name: 'گران‌ترین' }, { id: 'rate', name: 'بیشترین امتیاز' }]
 const GENDERS = [{ id: 'any', name: 'همه' }, { id: 'men', name: 'آقایان' }, { id: 'women', name: 'بانوان' }, { id: 'unisex', name: 'یونیسکس' }]
 const CAT_ICON = { all: '✦', racket: '🏓', shoes: '👟', apparel: '👕', balls: '🎾', bags: '🎒', acc: '🧢' }
-const blank = { brands: [], price: 'any', gender: 'any', stock: false, sale: false }
+const blank = { brands: [], sizes: [], colors: [], price: 'any', gender: 'any', stock: false, sale: false }
 
-export default function Shop() {
+export default function Shop({ nav }) {
   const { cart, wish, club, toggleWish } = useStore()
   const [cat, setCat] = useState('all')
   const [q, setQ] = useState('')
@@ -28,24 +30,27 @@ export default function Shop() {
   const [showF, setShowF] = useState(false)
   const [showCart, setShowCart] = useState(false)
   const [sel, setSel] = useState(null)
-  const active = f.brands.length + (f.price !== 'any') + (f.gender !== 'any') + f.stock + f.sale
+  const active = f.brands.length + f.sizes.length + f.colors.length + (f.price !== 'any') + (f.gender !== 'any') + f.stock + f.sale
   const cartN = cart.reduce((s, x) => s + x.qty, 0)
 
   const list = useMemo(() => {
     const pr = PRICES.find((p) => p.id === f.price)
-    let l = PRODUCTS.filter((p) => (cat === 'all' || p.cat === cat)
+    let l = PRODUCTS.filter((p) => p.active !== false && (cat === 'all' || p.cat === cat)
       && (!q || (p.name + p.brand).toLowerCase().includes(q.toLowerCase()))
       && (!f.brands.length || f.brands.includes(p.brand))
+      && (!f.sizes.length || f.sizes.some((z) => p.sizes?.includes(z)))
+      && (!f.colors.length || f.colors.some((c) => p.colors?.some((x) => x.n === c)))
       && p.price >= pr.min && p.price < pr.max
       && (f.gender === 'any' || p.gender === f.gender || p.gender === 'unisex')
-      && (!f.stock || club.stock[p.id] > 0) && (!f.sale || p.was))
+      && (!f.stock || stockOf(p) > 0) && (!f.sale || p.was))
     const by = { pop: (a, b) => b.reviews - a.reviews, cheap: (a, b) => a.price - b.price, exp: (a, b) => b.price - a.price, rate: (a, b) => b.rating - a.rating }[sort]
     return [...l].sort(by)
-  }, [cat, q, f, sort, club.stock])
+  }, [cat, q, f, sort, club.products])
 
   return (
     <div className="page shop">
       <header className="page-head">
+        <ShopSwitch value="shop" nav={nav} />
         <div className="row-between">
           <h1>فروشگاه</h1>
           <motion.button className="cart-btn" whileTap={{ scale: 0.9 }} onClick={() => setShowCart(true)} aria-label="سبد خرید">
@@ -95,7 +100,7 @@ export default function Shop() {
               <motion.button className={`wish ${wish.includes(p.id) ? 'on' : ''}`} whileTap={{ scale: 0.7 }} onClick={(e) => { e.stopPropagation(); haptic(8); toggleWish(p.id) }} aria-label="علاقه‌مندی">
                 <Icon name="heart" size={16} fill={wish.includes(p.id) ? 'currentColor' : 'none'} />
               </motion.button>
-              {club.stock[p.id] <= 3 && <span className="p-low">{club.stock[p.id] ? `فقط ${fa(club.stock[p.id])} عدد` : 'ناموجود'}</span>}
+              {stockOf(p) <= 3 && <span className="p-low">{stockOf(p) ? `فقط ${fa(stockOf(p))} عدد` : 'ناموجود'}</span>}
               <div className="p-info">
                 <small>{p.brand}، ★ {fa(p.rating)}</small>
                 <b>{p.name}</b>
@@ -120,10 +125,18 @@ export default function Shop() {
 
 function Filters({ f, setF, count, onClose }) {
   const set = (p) => setF((x) => ({ ...x, ...p }))
+  const flip = (k, v) => set({ [k]: f[k].includes(v) ? f[k].filter((x) => x !== v) : [...f[k], v] })
+  const live = PRODUCTS.filter((p) => p.active !== false)
+  const sizes = [...new Set(live.flatMap((p) => p.sizes || []))]
+  const colors = COLORS.filter((c) => live.some((p) => p.colors?.some((x) => x.n === c.n)))
   return (
     <div className="filters">
       <p className="label">برند</p>
       <Chips id="fb" value={f.brands} onChange={(b) => set({ brands: f.brands.includes(b) ? f.brands.filter((x) => x !== b) : [...f.brands, b] })} options={BRANDS.map((b) => ({ id: b, name: b }))} />
+      <p className="label">سایز</p>
+      <Chips id="fz" small value={f.sizes} onChange={(z) => flip('sizes', z)} options={sizes.map((z) => ({ id: z, name: z }))} />
+      <p className="label">رنگ</p>
+      <div className="swatches">{colors.map((c) => <motion.button key={c.id} whileTap={{ scale: 0.85 }} className={f.colors.includes(c.n) ? 'on' : ''} style={{ '--c': c.c }} onClick={() => flip('colors', c.n)} aria-label={c.n} title={c.n} />)}</div>
       <p className="label">قیمت</p>
       <Chips id="fp" value={f.price} onChange={(price) => set({ price })} options={PRICES} />
       <p className="label">مناسب برای</p>
@@ -150,12 +163,12 @@ function ProductSheet({ id, onClose }) {
 }
 
 function Product({ p, onClose }) {
-  const { addToCart, club, toast } = useStore()
+  const { addToCart, toast } = useStore()
   const [size, setSize] = useState(p.sizes?.[1] || p.sizes?.[0] || null)
   const [color, setColor] = useState(p.colors?.[0] || null)
   const [qty, setQty] = useState(1)
   const [added, setAdded] = useState(false)
-  const stock = club.stock[p.id]
+  const stock = variantOf(p, size, color?.n)?.stock ?? stockOf(p)
   const add = () => {
     addToCart({ pid: p.id, size, color: color?.n || null, colorHex: color?.c || null, qty })
     setAdded(true); chime('success'); haptic([10, 30, 10])

@@ -8,6 +8,7 @@ import { Icon } from '../../components/ui'
 import Home from './Home'
 import Games from './Games'
 import Shop from './Shop'
+import Cafe from './Cafe'
 import Me from './Me'
 import { Coaches, Events, Journey, Notifications, Packages, Ranking } from './Pages'
 import Wizard from '../wizard/Wizard'
@@ -22,7 +23,7 @@ const TABS = [
 const PAGES = { coaches: Coaches, packages: Packages, ranking: Ranking, events: Events, notifs: Notifications, journey: Journey }
 
 export default function Main() {
-  const { cart } = useStore()
+  const { cart, cafeCart = [] } = useStore()
   const [tab, setTab] = useState('home')
   const [page, setPage] = useState(null)
   // اپ مستقیم از صفحه‌ی + باز می‌شود؛ در مرحله‌ی اول ویزارد نوار پایین دیده می‌شود تا هر بخش دیگری را انتخاب کنند
@@ -30,8 +31,9 @@ export default function Main() {
   const [wzStep, setWzStep] = useState('intent')
   const [wzKey, setWzKey] = useState(0)
   const scrollRef = useRef(null)
-  const cartN = cart.reduce((s, x) => s + x.qty, 0)
+  const cartN = cart.reduce((s, x) => s + x.qty, 0) + cafeCart.reduce((s, x) => s + x.qty, 0)
   useMatchmaking(setTab)
+  useCafeReady(setTab)
 
   const nav = {
     tab: (t) => { setPage(null); setWizard(null); haptic(6); setTab(t); scrollRef.current?.scrollTo({ top: 0 }) },
@@ -39,6 +41,7 @@ export default function Main() {
     start: (preset = {}) => { setPage(null); setWizard(preset); setWzKey((k) => k + 1); scrollRef.current?.scrollTo({ top: 0 }) },
   }
   const Page = page && PAGES[page.name]
+  const on = (id) => !wizard && (tab === id || (id === 'shop' && tab === 'cafe'))
 
   return (
     <motion.div className="main" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -57,6 +60,7 @@ export default function Main() {
               {tab === 'home' && <Home nav={nav} />}
               {tab === 'games' && <Games nav={nav} />}
               {tab === 'shop' && <Shop nav={nav} />}
+              {tab === 'cafe' && <Cafe nav={nav} />}
               {tab === 'me' && <Me nav={nav} />}
             </motion.div>
           )}
@@ -70,13 +74,13 @@ export default function Main() {
                 <Icon name="plus" size={28} stroke={2.6} />
               </motion.button>
             ) : (
-              <button key={t.id} className={`nav-i ${tab === t.id && !wizard ? 'on' : ''}`} onClick={() => nav.tab(t.id)}>
-                {tab === t.id && !wizard && <motion.span layoutId="nav-pill" className="nav-pill" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />}
+              <button key={t.id} className={`nav-i ${on(t.id) ? 'on' : ''}`} onClick={() => nav.tab(t.id === 'shop' && tab === 'cafe' ? 'cafe' : t.id)}>
+                {on(t.id) && <motion.span layoutId="nav-pill" className="nav-pill" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />}
                 <span className="nav-ic">
-                  <Icon name={t.icon} size={22} stroke={tab === t.id && !wizard ? 2.5 : 1.8} />
+                  <Icon name={t.id === 'shop' && tab === 'cafe' ? 'cup' : t.icon} size={22} stroke={on(t.id) ? 2.5 : 1.8} />
                   {t.id === 'shop' && cartN > 0 && <motion.i key={cartN} className="nav-badge" initial={{ scale: 0 }} animate={{ scale: 1 }}>{fa(cartN)}</motion.i>}
                 </span>
-                <small>{t.name}</small>
+                <small>{t.id === 'shop' && tab === 'cafe' ? 'کافه' : t.name}</small>
               </button>
             ))}
           </motion.nav>
@@ -84,6 +88,25 @@ export default function Main() {
       </AnimatePresence>
     </motion.div>
   )
+}
+
+// وقتی کافه سفارش کاربر را آماده کرد، اعلان و پیام داده می‌شود (پنل مدیر در تب دیگر)
+function useCafeReady(setTab) {
+  const { club, toast, notify } = useStore()
+  const seen = useRef(null)
+  useEffect(() => {
+    const st = Object.fromEntries(club.cafeOrders.filter((o) => o.by === ME).slice(0, 10).map((o) => [o.id, o.status]))
+    if (seen.current) Object.entries(st).forEach(([id, s]) => {
+      if (s === 'ready' && seen.current[id] && seen.current[id] !== 'ready') {
+        const o = club.cafeOrders.find((x) => x.id === id)
+        const body = o.to ? `داریم میاریم سر ${courtById(o.to).name}.` : 'از کافه تحویل بگیرید.'
+        chime('alarm'); haptic([40, 30, 40]); systemNotify('کافه‌ی کوادرا', `سفارش ${id} آماده‌ست. ${body}`)
+        notify({ icon: '☕', title: `سفارش ${id} آماده‌ست`, body })
+        toast({ icon: '☕', title: 'سفارش کافه آماده‌ست', body, duration: 6000, action: { label: 'ببینید', run: () => setTab('cafe') } })
+      }
+    })
+    seen.current = st
+  }, [club.cafeOrders])
 }
 
 // شبیه‌ساز مچ‌میکینگ: بازیکن‌های هم‌سطح برای جاهای خالی بازی‌های باز کاربر درخواست می‌دهند

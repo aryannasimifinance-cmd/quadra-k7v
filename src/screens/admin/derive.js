@@ -8,7 +8,7 @@ export const SERIES = [
   { id: 'shop', name: 'فروشگاه', color: '#B44C9A' },
 ]
 export const STATUS = {
-  paid: { name: 'پرداخت‌شده', cls: 'ok' }, partial: { name: 'بیعانه', cls: 'warn' }, pending: { name: 'در انتظار', cls: 'bad' },
+  paid: { name: 'پرداخت‌شده', cls: 'ok' }, partial: { name: 'بخشی پرداخت‌شده', cls: 'warn' }, pending: { name: 'پرداخت‌نشده', cls: 'bad' },
   refunded: { name: 'مسترد', cls: 'mute' }, void: { name: 'لغو', cls: 'mute' },
 }
 export const OPEN_H = 17 // ساعت‌های کاری روزانه (۷ تا ۲۴)
@@ -16,6 +16,7 @@ export const OPEN_H = 17 // ساعت‌های کاری روزانه (۷ تا ۲�
 export function who(id, user) {
   if (!id) return '—'
   if (id === ME) return user?.name ? `${user.name} (اپ)` : 'کاربر اپ'
+  if (id === 'walkin') return 'مشتری حضوری'
   if (id.startsWith('f:')) return id.slice(2) + ' (مهمان)'
   return memberById(id)?.name || id
 }
@@ -28,12 +29,13 @@ export function payments(club, user) {
     const st = payState(b)
     out.push({
       id: b.id, ref: b, at: fromKey(b.date).getTime() + b.start * 36e5, kind: b.type === 'coach' ? 'coach' : 'court',
-      title: b.type === 'coach' ? `کلاس ${coachById(b.coach)?.name}` : `${courtById(b.court).name}، ${b.type === 'open' ? 'بازی باز' : 'خصوصی'}`,
+      title: b.type === 'coach' ? `کلاس ${coachById(b.coach)?.name}` : `${courtById(b.court).name}، ${b.type === 'open' ? 'بازی باز' : 'رزرو زمین'}`,
       sub: `${dayMonth(fromKey(b.date))}، ${range(b.start, b.dur)}`, who: who(b.by, user), amount: b.price, paid: st === 'refunded' ? 0 : b.paid,
       due: st === 'paid' || st === 'void' || st === 'refunded' ? 0 : b.price - b.paid, method: b.method, status: st,
     })
   })
   club.orders.forEach((o) => out.push({ id: o.id, at: o.at, kind: 'shop', title: `سفارش ${o.id}`, sub: o.items.map((x) => productById(x.pid)?.name).join('، '), who: who(o.by, user), amount: o.total, paid: o.total, due: 0, method: o.method, status: 'paid' }))
+  ;(club.cafeOrders || []).forEach((o) => out.push({ id: o.id, at: o.at, kind: 'cafe', title: `کافه ${o.id}`, sub: o.items.map((x) => x.name).join('، '), who: who(o.by, user), amount: o.total, paid: o.total, due: 0, method: o.method, status: 'paid' }))
   club.sales.forEach((s) => out.push({ id: s.id, at: s.at, kind: s.kind === 'coach' ? 'coach' : 'pack', title: s.name, sub: s.kind === 'event' ? 'ثبت‌نام تورنمنت' : s.kind === 'coach' ? 'پکیج مربی' : 'پکیج / عضویت', who: who(s.by, user), amount: s.price, paid: s.price, due: 0, method: s.method, status: 'paid' }))
   return out.sort((a, b) => b.at - a.at)
 }
@@ -72,17 +74,17 @@ export function heat(club) {
 const notPack = (b) => b.method !== 'package' && b.method !== 'coach-pack'
 
 export function memberStats(club, user) {
-  const rows = MEMBERS.map((m) => {
+  const rows = MEMBERS.filter((m) => !(user && m.source === 'app' && m.phone === user.phone)).map((m) => {
     const bk = club.bookings.filter((b) => b.status !== 'cancelled' && (b.by === m.id || b.players?.includes(m.id)))
     const spent = bk.filter((b) => b.by === m.id && notPack(b)).reduce((s, b) => s + b.paid, 0) + club.orders.filter((o) => o.by === m.id).reduce((s, o) => s + o.total, 0) + club.sales.filter((x) => x.by === m.id).reduce((s, x) => s + x.price, 0)
     const lastB = bk.map((b) => fromKey(b.date).getTime()).filter((t) => t <= Date.now()).sort((a, b) => b - a)[0]
     const lastDays = lastB ? Math.floor((Date.now() - lastB) / 864e5) : 99
-    const seg = m.member ? 'vip' : lastDays > 10 ? 'risk' : m.joined < 30 ? 'new' : 'active'
-    return { ...m, visits: bk.length, spent, lastDays, seg }
+    const seg = m.member ? 'vip' : m.source || m.joined < 30 ? 'new' : lastDays > 10 ? 'risk' : 'active'
+    return { ...m, visits: bk.length, spent, lastDays, seg, source: m.source || 'seed' }
   })
   if (user) {
     const bk = club.bookings.filter((b) => b.status !== 'cancelled' && (b.by === ME || b.players?.includes(ME)))
-    rows.unshift({ id: ME, name: user.name + ' (اپ)', phone: user.phone, level: user.level, games: bk.length, visits: bk.length, wins: 0, points: 0, joined: 0, spent: bk.filter((b) => b.by === ME && notPack(b)).reduce((s, b) => s + b.paid, 0) + club.orders.filter((o) => o.by === ME).reduce((s, o) => s + o.total, 0) + club.sales.filter((x) => x.by === ME).reduce((s, x) => s + x.price, 0), lastDays: 0, seg: 'new', member: null })
+    rows.unshift({ id: ME, name: user.name + ' (اپ)', phone: user.phone, level: user.level, games: bk.length, visits: bk.length, wins: 0, points: 0, joined: 0, source: 'app', spent: bk.filter((b) => b.by === ME && notPack(b)).reduce((s, b) => s + b.paid, 0) + club.orders.filter((o) => o.by === ME).reduce((s, o) => s + o.total, 0) + club.sales.filter((x) => x.by === ME).reduce((s, x) => s + x.price, 0), lastDays: 0, seg: 'new', member: null })
   }
   return rows
 }

@@ -1,166 +1,174 @@
-import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
 import {
-  CATEGORIES, COACH_PACKS, COURTS, METHOD_NAME, PACKAGES, PRODUCTS, TYPE_NAME, addDays, coachPackPrice, courtById, dayLabel, dayMonth, fa, fromKey,
-  levelById, mil, priceFor, productById, range, short, toman, todayKey,
+  COACH_PACKS, COURTS, LEVELS, MEMBERS, METHOD_NAME, PACKAGES, TYPE_NAME, coachPackPrice, courtById, dayLabel, dayMonth, fa, fromKey,
+  levelById, priceFor, range, short, toman, todayKey,
 } from '../../data'
 import { chime } from '../../fx'
 import { payState, useStore } from '../../store'
 import { Icon, LevelPill } from '../../components/ui'
-import { ProductImage } from '../../components/Merch'
-import { Card, Status } from './Admin'
+import { Card, Empty, Field, Guide, Kpi, More, Search, Seg, Side, Status, XlsxBtn, usePage } from './kit'
 import { HBars } from './Charts'
-import { SEGMENTS, STATUS, coachStats, csv, download, memberStats, payments, who } from './derive'
+import { SEGMENTS, coachStats, memberStats, payments, who } from './derive'
+import { jDate } from '../../jalali'
+import { downloadXlsx, table } from '../../xlsx'
 
 const fmt = new Intl.DateTimeFormat('fa-IR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-const Search = ({ value, onChange, ph }) => <label className="adm-search"><Icon name="search" size={16} /><input placeholder={ph} value={value} onChange={(e) => onChange(e.target.value)} /></label>
-const Seg = ({ value, onChange, options }) => (
-  <div className="seg-adm">{Object.entries(options).map(([k, v]) => <button key={k} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>{v}</button>)}</div>
-)
-function usePage(list, size = 25) {
-  const [n, setN] = useState(size)
-  return [list.slice(0, n), list.length > n ? () => setN(n + size) : null]
-}
 
-export function Bookings({ ctx }) {
-  const { club, user } = useStore()
-  const [range7, setRange] = useState('next')
-  const [type, setType] = useState('all')
-  const [st, setSt] = useState('all')
-  const [q, setQ] = useState('')
-  const t = todayKey()
-  const list = useMemo(() => club.bookings.filter((b) => {
-    if (b.type === 'block' && type !== 'block') return false
-    const d = b.date
-    const inR = range7 === 'today' ? d === t : range7 === 'next' ? fromKey(d) >= fromKey(t) && fromKey(d) <= fromKey(addDays(t, 7)) : range7 === 'past' ? fromKey(d) < fromKey(t) && fromKey(d) >= fromKey(addDays(t, -7)) : true
-    return inR && (type === 'all' || b.type === type) && (st === 'all' || payState(b) === st) && (!q || who(b.by, user).includes(q))
-  }).sort((a, b) => (range7 === 'past' ? -1 : 1) * (fromKey(a.date) - fromKey(b.date) || a.start - b.start)), [club, range7, type, st, q])
-  const [rows, more] = usePage(list)
-  const exp = () => download('quadra-bookings.csv', csv([['تاریخ', 'ساعت', 'زمین', 'نوع', 'مشتری', 'مبلغ', 'دریافتی', 'وضعیت'], ...list.map((b) => [b.date, range(b.start, b.dur), courtById(b.court).name, TYPE_NAME[b.type], who(b.by, user), b.price, b.paid, STATUS[payState(b)].name])]))
-  return (
-    <Card>
-      <div className="filters-bar">
-        <Seg value={range7} onChange={setRange} options={{ today: 'امروز', next: '۷ روز آینده', past: '۷ روز گذشته', all: 'همه' }} />
-        <select value={type} onChange={(e) => setType(e.target.value)}><option value="all">همه‌ی انواع</option>{Object.entries(TYPE_NAME).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-        <select value={st} onChange={(e) => setSt(e.target.value)}><option value="all">همه‌ی وضعیت‌ها</option>{Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}</select>
-        <Search value={q} onChange={setQ} ph="نام مشتری" />
-        <button className="adm-btn ghost sm" onClick={exp}><Icon name="download" size={16} />CSV</button>
-      </div>
-      <p className="count">{fa(list.length)} رزرو، {toman(list.reduce((s, b) => s + b.price, 0))}</p>
-      <div className="tbl-wrap"><table className="tbl">
-        <thead><tr><th>تاریخ</th><th>ساعت</th><th>زمین</th><th>نوع</th><th>رزروکننده</th><th>بازیکن</th><th>مبلغ</th><th>وضعیت</th><th>منبع</th></tr></thead>
-        <tbody>{rows.map((b) => (
-          <tr key={b.id} className="click" onClick={() => ctx.open({ kind: 'booking', id: b.id })}>
-            <td className="nowrap">{dayLabel(b.date)} <small>{dayMonth(fromKey(b.date))}</small></td>
-            <td className="nowrap num">{range(b.start, b.dur)}</td><td>{courtById(b.court).name}</td>
-            <td><span className={`type-pill t-${b.type}`}>{TYPE_NAME[b.type]}</span></td>
-            <td>{who(b.by, user)}</td><td className="num">{fa(b.players.length)}{b.type === 'open' ? '/۴' : ''}</td>
-            <td className="num">{toman(b.price)}</td><td><Status s={payState(b)} /></td><td><small>{b.source === 'app' ? 'اپ' : 'پذیرش'}</small></td>
-          </tr>))}</tbody>
-      </table></div>
-      {more && <button className="adm-btn ghost full" onClick={more}>نمایش بیشتر</button>}
-    </Card>
-  )
-}
+// ---------- دریافت‌ها: دو کار ساده — گرفتن مانده‌ها، و دیدن پول‌های رسیده ----------
+const KINDS = [['court', 'زمین'], ['coach', 'کلاس'], ['pack', 'پکیج و تورنمنت'], ['shop', 'فروشگاه'], ['cafe', 'کافه']]
+const WHEN = { today: 'امروز', week: '۷ روز', month: '۳۰ روز' }
+const isToday = (t) => { const d = new Date(t), n = new Date(); return d.toDateString() === n.toDateString() }
 
 export function Payments({ ctx }) {
   const { club, user, adminSettle, toast } = useStore()
   const pays = useMemo(() => payments(club, user), [club])
-  const [st, setSt] = useState('all')
+  const [tab, setTab] = useState('due')
+  const [when, setWhen] = useState('week')
   const [kind, setKind] = useState('all')
   const [q, setQ] = useState('')
-  const [when, setWhen] = useState('past')
-  const month = pays.filter((p) => p.at > Date.now() - 30 * 864e5 && p.at <= Date.now())
-  const got = month.reduce((s, p) => s + p.paid, 0)
-  const due = pays.filter((p) => p.due > 0 && p.at < Date.now())
-  const ahead = pays.filter((p) => p.due > 0 && p.at >= Date.now())
-  const refunded = pays.filter((p) => p.status === 'refunded')
-  const list = pays.filter((p) => (when === 'past' ? p.at <= Date.now() : p.at > Date.now()) && (st === 'all' || p.status === st) && (kind === 'all' || p.kind === kind) && (!q || (p.who + p.title).includes(q)))
-  const [rows, more] = usePage(list)
-  const exp = () => download('quadra-payments.csv', csv([['زمان', 'شرح', 'مشتری', 'روش', 'مبلغ', 'دریافتی', 'مانده', 'وضعیت'], ...list.map((p) => [new Date(p.at).toISOString(), p.title, p.who, METHOD_NAME[p.method] || '', p.amount, p.paid, p.due, STATUS[p.status].name])]))
+  const now = Date.now()
+  const endToday = new Date(); endToday.setHours(23, 59, 59, 999)
+  const dueNow = pays.filter((p) => p.due > 0 && p.at <= endToday.getTime()).sort((a, b) => b.at - a.at)
+  const dueLater = pays.filter((p) => p.due > 0 && p.at > endToday.getTime()).sort((a, b) => a.at - b.at)
+  const gotToday = pays.filter((p) => p.at <= now && isToday(p.at)).reduce((s, p) => s + p.paid, 0)
+  const since = now - { today: 0, week: 7, month: 30 }[when] * 864e5
+  const hist = pays.filter((p) => p.paid > 0 && p.at <= now && (when === 'today' ? isToday(p.at) : p.at >= since) && (kind === 'all' || p.kind === kind) && (!q || (p.who + p.title + p.sub).includes(q)))
+  const [rows, more] = usePage(hist, 30)
+  const settle = (p, m) => { adminSettle(p.id, m); chime('success'); toast({ icon: '✅', title: `${toman(p.due)} دریافت شد`, body: `${p.who}، ${METHOD_NAME[m]}` }) }
+  const exp = () => downloadXlsx('quadra-payments', [{ name: 'دریافت‌ها', rows: table(`دریافت‌های باشگاه کوادرا — ${WHEN[when]}`, ['تاریخ', 'ساعت', 'شرح', 'جزئیات', 'مشتری', 'روش', 'مبلغ'],
+    hist.map((p) => { const d = new Date(p.at); return [jDate(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`), d.toTimeString().slice(0, 5), p.title, p.sub, p.who, METHOD_NAME[p.method] || '', p.paid] }), ['جمع', '', '', '', '', '', hist.reduce((s, p) => s + p.paid, 0)]) }])
+  const Due = ({ p }) => (
+    <div className="pay-due">
+      <div className="grow" onClick={() => p.ref && ctx.open({ kind: 'booking', id: p.id })}>
+        <b>{p.who}</b><small>{p.title}، {p.sub}</small>
+      </div>
+      <b className="num">{toman(p.due)}</b>
+      <div className="row-btns">
+        <button className="adm-btn primary sm" onClick={() => settle(p, 'card')} data-tip="مشتری با کارتخوان پرداخت کرد">کارتخوان</button>
+        <button className="adm-btn ghost sm" onClick={() => settle(p, 'cash')} data-tip="پول نقد به صندوق آمد">نقدی</button>
+      </div>
+    </div>
+  )
   return (
     <div className="stack">
-      <div className="kpis four">
-        <div className="kpi"><div className="kpi-h"><span><Icon name="cash" size={16} />دریافتی ۳۰ روز</span></div><b>{mil(got)}</b></div>
-        <div className="kpi warn"><div className="kpi-h"><span><Icon name="clock" size={16} />معوق ({fa(due.length)})</span></div><b>{mil(due.reduce((s, p) => s + p.due, 0))}</b></div>
-        <div className="kpi"><div className="kpi-h"><span><Icon name="cal" size={16} />مانده‌ی رزروهای آینده ({fa(ahead.length)})</span></div><b>{mil(ahead.reduce((s, p) => s + p.due, 0))}</b></div>
-        <div className="kpi"><div className="kpi-h"><span><Icon name="refresh" size={16} />مسترد ({fa(refunded.length)})</span></div><b>{mil(refunded.reduce((s, p) => s + p.amount, 0))}</b></div>
+      <div className="kpis three">
+        <Kpi icon="cash" label="امروز دریافت شد" value={toman(gotToday)} tip="جمع پول‌های امروز: رزرو، کلاس، پکیج، فروشگاه و کافه" />
+        <Kpi icon="clock" label="باید همین حالا گرفته شود" tone={dueNow.length ? 'warn' : ''} value={toman(dueNow.reduce((s, p) => s + p.due, 0))} sub={`${fa(dueNow.length)} رزرو امروز یا گذشته`} onClick={() => setTab('due')} tip="بازی انجام شده یا امروز است و هنوز کامل پرداخت نشده" />
+        <Kpi icon="cal" label="در پذیرش گرفته می‌شود" value={toman(dueLater.reduce((s, p) => s + p.due, 0))} sub={`${fa(dueLater.length)} رزرو آینده`} tip="رزروهای آینده‌ای که موقع بازی پرداخت می‌شوند" />
       </div>
-      <Card>
-        <div className="filters-bar">
-          <Seg value={when} onChange={setWhen} options={{ past: 'تا امروز', future: 'رزروهای آینده' }} />
-          <Seg value={st} onChange={setSt} options={{ all: 'همه', paid: 'پرداخت‌شده', partial: 'بیعانه', pending: 'در انتظار', refunded: 'مسترد' }} />
-          <select value={kind} onChange={(e) => setKind(e.target.value)}>{Object.entries({ all: 'همه‌ی منابع', court: 'زمین', coach: 'مربی', pack: 'پکیج و تورنمنت', shop: 'فروشگاه' }).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-          <Search value={q} onChange={setQ} ph="مشتری یا شرح" />
-          <button className="adm-btn ghost sm" onClick={exp}><Icon name="download" size={16} />CSV</button>
+      <Seg value={tab} onChange={setTab} options={{ due: `باید دریافت شود (${fa(dueNow.length + dueLater.length)})`, got: 'دریافت‌شده‌ها' }} tips={{ due: 'مانده‌ها را با یک کلیک تسویه کنید', got: 'تاریخچه‌ی پول‌های رسیده' }} />
+      {tab === 'due' ? (
+        <div className="two">
+          <Card title="امروز و گذشته" sub="اول این‌ها را بگیرید">
+            <div className="pay-list">{dueNow.map((p) => <Due key={p.id} p={p} />)}{!dueNow.length && <div className="all-good"><Icon name="check" size={20} /><b>چیزی برای گرفتن نمانده</b></div>}</div>
+          </Card>
+          <Card title="رزروهای آینده" sub="روز بازی در پذیرش گرفته می‌شود">
+            <div className="pay-list">{dueLater.slice(0, 30).map((p) => <Due key={p.id} p={p} />)}{!dueLater.length && <Empty>رزرو پرداخت‌نشده‌ای در آینده نیست.</Empty>}</div>
+          </Card>
         </div>
-        <div className="tbl-wrap"><table className="tbl">
-          <thead><tr><th>زمان</th><th>شرح</th><th>مشتری</th><th>روش</th><th>مبلغ</th><th>مانده</th><th>وضعیت</th><th /></tr></thead>
-          <tbody>{rows.map((p) => (
-            <tr key={p.id} className={p.ref ? 'click' : ''} onClick={() => p.ref && ctx.open({ kind: 'booking', id: p.id })}>
-              <td className="nowrap">{fmt.format(p.at)}</td><td><b>{p.title}</b><small>{p.sub}</small></td><td>{p.who}</td>
-              <td>{METHOD_NAME[p.method] || '—'}</td><td className="num">{toman(p.amount)}</td><td className="num">{p.due ? toman(p.due) : '—'}</td><td><Status s={p.status} /></td>
-              <td>{p.due > 0 && <button className="adm-btn primary sm" onClick={(e) => { e.stopPropagation(); adminSettle(p.id, 'card'); chime('success'); toast({ icon: '✅', title: 'تسویه شد', body: toman(p.due) }) }}>تسویه</button>}</td>
-            </tr>))}</tbody>
-        </table></div>
-        {more && <button className="adm-btn ghost full" onClick={more}>نمایش بیشتر</button>}
-      </Card>
+      ) : (
+        <Card>
+          <div className="bk-row">
+            <Seg value={when} onChange={setWhen} options={WHEN} />
+            <select value={kind} onChange={(e) => setKind(e.target.value)} data-tip="از کدام بخش"><option value="all">همه‌ی بخش‌ها</option>{KINDS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>
+            <Search value={q} onChange={setQ} ph="مشتری یا شرح" />
+            <XlsxBtn onClick={exp} />
+          </div>
+          <p className="count">{fa(hist.length)} دریافت، جمع <b>{toman(hist.reduce((s, p) => s + p.paid, 0))}</b></p>
+          <div className="tbl-wrap"><table className="tbl">
+            <thead><tr><th>زمان</th><th>شرح</th><th>مشتری</th><th>روش</th><th>مبلغ</th></tr></thead>
+            <tbody>{rows.map((p) => (
+              <tr key={p.id} className={p.ref ? 'click' : ''} onClick={() => p.ref && ctx.open({ kind: 'booking', id: p.id })}>
+                <td className="nowrap">{fmt.format(p.at)}</td><td><b>{p.title}</b><small>{p.sub}</small></td><td>{p.who}</td>
+                <td>{METHOD_NAME[p.method] || '—'}</td><td className="num">{toman(p.paid)}</td>
+              </tr>))}</tbody>
+          </table></div>
+          {!hist.length && <Empty>در این بازه دریافتی نیست.</Empty>}
+          <More more={more} />
+        </Card>
+      )}
     </div>
   )
 }
 
-export function ShopAdmin() {
-  const { club, user, adminOrder, adminStock } = useStore()
-  const [tab, setTab] = useState('orders')
-  const [cat, setCat] = useState('all')
-  const cols = [['new', 'جدید'], ['ready', 'آماده‌ی تحویل'], ['delivered', 'تحویل‌شده']]
-  const sold = useMemo(() => {
-    const m = {}
-    club.orders.forEach((o) => o.items.forEach((x) => { m[x.pid] = (m[x.pid] || 0) + x.qty * x.price }))
-    return Object.entries(m).map(([pid, v]) => ({ name: productById(pid).name, value: v, color: '#B44C9A' })).sort((a, b) => b.value - a.value).slice(0, 6)
-  }, [club.orders])
+// ---------- اعضا ----------
+const SRC = { all: 'همه', app: 'از اپ', desk: 'پذیرش' }
+export function Members() {
+  const { club, user } = useStore()
+  const all = useMemo(() => memberStats(club, user), [club])
+  const [seg, setSeg] = useState('all')
+  const [src, setSrc] = useState('all')
+  const [q, setQ] = useState('')
+  const [sort, setSort] = useState('spent')
+  const [sel, setSel] = useState(null)
+  const [add, setAdd] = useState(false)
+  const list = all.filter((m) => (seg === 'all' || m.seg === seg) && (src === 'all' || (src === 'desk' ? m.source !== 'app' : m.source === 'app')) && (!q || m.name.includes(q) || m.phone?.includes(q)))
+    .sort((a, b) => sort === 'last' ? a.lastDays - b.lastDays : sort === 'new' ? (b.at || 0) - (a.at || 0) : b[sort] - a[sort])
+  const counts = Object.fromEntries(Object.keys(SEGMENTS).map((k) => [k, k === 'all' ? all.length : all.filter((m) => m.seg === k).length]))
+  const m = sel && all.find((x) => x.id === sel)
+  const exp = () => downloadXlsx('quadra-members', [{ name: 'اعضا', rows: table('اعضای باشگاه کوادرا', ['نام', 'موبایل', 'سطح', 'عضویت از', 'بخش', 'تعداد حضور', 'آخرین حضور (روز پیش)', 'رنکینگ', 'مجموع خرید'],
+    list.map((x) => [x.name, x.phone, x.level, x.source === 'app' ? 'اپ' : 'پذیرش', SEGMENTS[x.seg], x.visits, x.lastDays >= 99 ? '' : x.lastDays, x.points || '', x.spent]), ['جمع', '', '', '', '', list.reduce((s, x) => s + x.visits, 0), '', '', list.reduce((s, x) => s + x.spent, 0)]) }])
   return (
     <div className="stack">
-      <Seg value={tab} onChange={setTab} options={{ orders: `سفارش‌ها (${fa(club.orders.filter((o) => o.status !== 'delivered').length)} باز)`, stock: 'موجودی انبار', top: 'پرفروش‌ها' }} />
-      {tab === 'orders' && (
-        <div className="kanban">
-          {cols.map(([k, n]) => (
-            <div key={k} className="kb-col">
-              <h4>{n} <span>{fa(club.orders.filter((o) => o.status === k).length)}</span></h4>
-              {club.orders.filter((o) => o.status === k).slice(0, k === 'delivered' ? 8 : 40).map((o) => (
-                <motion.div key={o.id} layout className="kb-card">
-                  <div className="row-between"><b dir="ltr">{o.id}</b><small>{fmt.format(o.at)}</small></div>
-                  <small>{who(o.by, user)}</small>
-                  <ul>{o.items.map((x, i) => <li key={i}>{fa(x.qty)}× {productById(x.pid).name}{x.size ? `، ${x.size}` : ''}</li>)}</ul>
-                  <div className="row-between"><b>{toman(o.total)}</b>
-                    {k !== 'delivered' && <button className="adm-btn primary sm" onClick={() => { adminOrder(o.id, k === 'new' ? 'ready' : 'delivered'); chime('tap') }}>{k === 'new' ? 'آماده شد' : 'تحویل داده شد'}</button>}
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+      <div className="sec-bar">
+        <div className="segs-big">
+          {Object.entries(SEGMENTS).map(([k, v]) => (
+            <button key={k} className={seg === k ? 'on' : ''} onClick={() => setSeg(k)} data-tip={SEG_TIP[k]}><b>{fa(counts[k])}</b><small>{v}</small></button>
           ))}
         </div>
-      )}
-      {tab === 'stock' && (
-        <Card>
-          <div className="filters-bar"><Seg value={cat} onChange={setCat} options={Object.fromEntries(CATEGORIES.map((c) => [c.id, c.name]))} /></div>
-          <div className="tbl-wrap"><table className="tbl">
-            <thead><tr><th>کالا</th><th>دسته</th><th>برند</th><th>قیمت</th><th>موجودی</th><th>وضعیت</th></tr></thead>
-            <tbody>{PRODUCTS.filter((p) => cat === 'all' || p.cat === cat).map((p) => {
-              const n = club.stock[p.id]
-              return (
-                <tr key={p.id}>
-                  <td><div className="prod-cell"><ProductImage p={p} /><b>{p.name}</b></div></td>
-                  <td>{CATEGORIES.find((c) => c.id === p.cat).name}</td><td>{p.brand}</td><td className="num">{toman(p.price)}</td>
-                  <td><div className="qty"><button onClick={() => adminStock(p.id, n - 1)}>−</button><b>{fa(n)}</b><button onClick={() => adminStock(p.id, n + 1)}>+</button><button className="plus10" onClick={() => adminStock(p.id, n + 10)}>+۱۰</button></div></td>
-                  <td>{n === 0 ? <span className="badge-st bad"><i />ناموجود</span> : n <= 3 ? <span className="badge-st warn"><i />کم</span> : <span className="badge-st ok"><i />موجود</span>}</td>
-                </tr>
-              )
-            })}</tbody>
-          </table></div>
+        <div className="sec-actions"><button className="adm-btn primary sm" onClick={() => setAdd(true)} data-tip="ثبت عضوی که حضوری یا تلفنی آمده"><Icon name="plus" size={16} />عضو جدید</button></div>
+      </div>
+      <Guide>کسی که در اپ ثبت‌نام کند خودکار اینجا اضافه می‌شود. عضوی که در پذیرش ثبت کنید هم در «رزرو دستی» قابل انتخاب است.</Guide>
+      <Card>
+        <div className="bk-row">
+          <Search value={q} onChange={setQ} ph="نام یا موبایل" />
+          <Seg value={src} onChange={setSrc} options={SRC} tips={{ app: 'کسانی که خودشان در اپ ثبت‌نام کرده‌اند', desk: 'اعضای ثبت‌شده در پذیرش' }} />
+          <select value={sort} onChange={(e) => setSort(e.target.value)} data-tip="ترتیب فهرست"><option value="spent">بیشترین خرید</option><option value="visits">بیشترین حضور</option><option value="last">آخرین حضور</option><option value="new">تازه‌ترین عضو</option><option value="points">رنکینگ</option></select>
+          <XlsxBtn onClick={exp} />
+        </div>
+        <p className="count">{fa(list.length)} عضو</p>
+        <div className="tbl-wrap"><table className="tbl">
+          <thead><tr><th>عضو</th><th>موبایل</th><th>سطح</th><th data-tip="چند بار رزرو یا بازی داشته">حضور</th><th>آخرین حضور</th><th data-tip="جمع پول رزرو، فروشگاه، کافه و پکیج">مجموع خرید</th><th>وضعیت</th></tr></thead>
+          <tbody>{list.map((x) => (
+            <tr key={x.id} className={`click ${sel === x.id ? 'sel' : ''}`} onClick={() => setSel(sel === x.id ? null : x.id)}>
+              <td><div className="prod-cell"><span className="adm-av sm">{x.name[0]}</span><div><b>{x.name}</b><small>{x.source === 'app' ? 'از اپ' : x.source === 'desk' ? 'ثبت در پذیرش' : 'عضو باشگاه'}</small></div>{x.member && <span className="vip">{x.member === 'black' ? 'BLACK' : 'GOLD'}</span>}</div></td>
+              <td dir="ltr" className="num">{x.phone}</td><td><LevelPill id={x.level} /></td><td className="num">{fa(x.visits)}</td>
+              <td>{x.lastDays === 0 ? 'امروز' : x.lastDays >= 99 ? '—' : `${fa(x.lastDays)} روز پیش`}</td>
+              <td className="num">{toman(x.spent)}</td><td><span className={`seg-pill s-${x.seg}`}>{SEGMENTS[x.seg]}</span></td>
+            </tr>))}</tbody>
+        </table></div>
+        {!list.length && <Empty>عضوی پیدا نشد.</Empty>}
+      </Card>
+      {m && (
+        <Card title={m.name} sub={`${levelById(m.level).title}، ${fa(m.visits)} حضور`} right={<button className="adm-btn ghost sm" onClick={() => setSel(null)}>بستن</button>}>
+          <div className="tbl-wrap"><table className="tbl"><thead><tr><th>تاریخ</th><th>ساعت</th><th>زمین</th><th>نوع</th><th>مبلغ</th><th>پرداخت</th></tr></thead>
+            <tbody>{club.bookings.filter((b) => b.by === m.id || b.players?.includes(m.id)).sort((a, b) => fromKey(b.date) - fromKey(a.date)).slice(0, 12).map((b) => (
+              <tr key={b.id}><td>{dayLabel(b.date)} {dayMonth(fromKey(b.date))}</td><td className="num" dir="ltr">{range(b.start, b.dur)}</td><td>{courtById(b.court).name}</td><td>{TYPE_NAME[b.type]}</td><td className="num">{toman(b.price)}</td><td><Status s={payState(b)} /></td></tr>
+            ))}</tbody></table></div>
+          {!club.bookings.some((b) => b.by === m.id || b.players?.includes(m.id)) && <Empty>هنوز رزروی ندارد.</Empty>}
         </Card>
       )}
-      {tab === 'top' && <Card title="پرفروش‌ترین کالاها" sub="بر اساس مبلغ فروش"><HBars rows={sold} /></Card>}
+      <Side open={add} onClose={() => setAdd(false)} title="عضو جدید">{add && <MemberForm onClose={() => setAdd(false)} />}</Side>
+    </div>
+  )
+}
+const SEG_TIP = { all: 'همه‌ی اعضا', vip: 'عضویت طلایی یا مشکی دارند', active: 'در ۱۰ روز اخیر آمده‌اند', new: 'تازه عضو شده‌اند', risk: 'بیش از ۱۰ روز است نیامده‌اند' }
+
+function MemberForm({ onClose }) {
+  const { adminMember, toast } = useStore()
+  const [f, setF] = useState({ name: '', phone: '09', level: 'C', side: 'both' })
+  const set = (x) => setF((o) => ({ ...o, ...x }))
+  const phone = f.phone.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '')
+  const dup = MEMBERS.some((m) => m.phone === phone)
+  const ok = f.name.trim().length > 2 && /^09\d{9}$/.test(phone) && !dup
+  const save = () => { adminMember({ name: f.name.trim(), phone, level: f.level, side: f.side }); chime('success'); toast({ icon: '👤', title: 'عضو اضافه شد', body: f.name.trim() }); onClose() }
+  return (
+    <div className="form">
+      <Field label="نام و نام خانوادگی"><input value={f.name} onChange={(e) => set({ name: e.target.value })} placeholder="مثلاً سارا محمدی" /></Field>
+      <Field label="موبایل" hint={dup ? 'این شماره قبلاً عضو شده است' : 'با همین شماره می‌تواند در اپ وارد شود'}><input dir="ltr" inputMode="numeric" value={f.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
+      <Field label="سطح بازی" tip="اگر نمی‌دانید C بگذارید؛ بعداً با بازی‌ها دقیق می‌شود"><select value={f.level} onChange={(e) => set({ level: e.target.value })}>{LEVELS.map((l) => <option key={l.id} value={l.id}>{l.id}، {l.title}</option>)}</select></Field>
+      <Field label="سمت بازی"><Seg value={f.side} onChange={(side) => set({ side })} options={{ right: 'راست', left: 'چپ', both: 'هر دو' }} /></Field>
+      <button className="adm-btn primary full" disabled={!ok} onClick={save}>ثبت عضو</button>
     </div>
   )
 }
@@ -205,51 +213,6 @@ export function Coaches() {
   )
 }
 
-export function Members() {
-  const { club, user } = useStore()
-  const all = useMemo(() => memberStats(club, user), [club])
-  const [seg, setSeg] = useState('all')
-  const [q, setQ] = useState('')
-  const [sort, setSort] = useState('spent')
-  const [sel, setSel] = useState(null)
-  const list = all.filter((m) => (seg === 'all' || m.seg === seg) && (!q || m.name.includes(q) || m.phone?.includes(q))).sort((a, b) => sort === 'last' ? a.lastDays - b.lastDays : b[sort] - a[sort])
-  const counts = Object.fromEntries(Object.keys(SEGMENTS).map((k) => [k, k === 'all' ? all.length : all.filter((m) => m.seg === k).length]))
-  const m = sel && all.find((x) => x.id === sel)
-  return (
-    <div className="stack">
-      <div className="segs-big">
-        {Object.entries(SEGMENTS).map(([k, v]) => (
-          <button key={k} className={seg === k ? 'on' : ''} onClick={() => setSeg(k)}><b>{fa(counts[k])}</b><small>{v}</small></button>
-        ))}
-      </div>
-      <Card>
-        <div className="filters-bar">
-          <Search value={q} onChange={setQ} ph="نام یا موبایل" />
-          <select value={sort} onChange={(e) => setSort(e.target.value)}><option value="spent">بیشترین خرید</option><option value="visits">بیشترین حضور</option><option value="points">رنکینگ</option><option value="last">آخرین حضور</option></select>
-        </div>
-        <div className="tbl-wrap"><table className="tbl">
-          <thead><tr><th>عضو</th><th>موبایل</th><th>سطح</th><th>حضور</th><th>آخرین حضور</th><th>رنکینگ</th><th>مجموع خرید</th><th>بخش</th></tr></thead>
-          <tbody>{list.map((x) => (
-            <tr key={x.id} className={`click ${sel === x.id ? 'sel' : ''}`} onClick={() => setSel(sel === x.id ? null : x.id)}>
-              <td><div className="prod-cell"><span className="adm-av sm">{x.name[0]}</span><b>{x.name}</b>{x.member && <span className="vip">{x.member === 'black' ? 'BLACK' : 'GOLD'}</span>}</div></td>
-              <td dir="ltr" className="num">{x.phone}</td><td><LevelPill id={x.level} /></td><td className="num">{fa(x.visits)}</td>
-              <td>{x.lastDays === 0 ? 'امروز' : x.lastDays >= 99 ? '—' : `${fa(x.lastDays)} روز پیش`}</td><td className="num">{x.points ? fa(x.points) : '—'}</td>
-              <td className="num">{toman(x.spent)}</td><td><span className={`seg-pill s-${x.seg}`}>{SEGMENTS[x.seg]}</span></td>
-            </tr>))}</tbody>
-        </table></div>
-      </Card>
-      {m && (
-        <Card title={m.name} sub={`${levelById(m.level).title}، ${m.games ? fa(m.games) + ' بازی' : ''} ${m.wins ? '، ' + fa(m.wins) + ' برد' : ''}`} right={<button className="adm-btn ghost sm" onClick={() => setSel(null)}>بستن</button>}>
-          <div className="tbl-wrap"><table className="tbl"><thead><tr><th>تاریخ</th><th>ساعت</th><th>زمین</th><th>نوع</th><th>مبلغ</th><th>وضعیت</th></tr></thead>
-            <tbody>{club.bookings.filter((b) => b.by === m.id || b.players?.includes(m.id)).sort((a, b) => fromKey(b.date) - fromKey(a.date)).slice(0, 12).map((b) => (
-              <tr key={b.id}><td>{dayLabel(b.date)} {dayMonth(fromKey(b.date))}</td><td className="num">{range(b.start, b.dur)}</td><td>{courtById(b.court).name}</td><td>{TYPE_NAME[b.type]}</td><td className="num">{toman(b.price)}</td><td><Status s={payState(b)} /></td></tr>
-            ))}</tbody></table></div>
-        </Card>
-      )}
-    </div>
-  )
-}
-
 export function Settings() {
   const { club, adminPricing, adminCourt, resetDemo, toast } = useStore()
   const [p, setP] = useState(club.pricing)
@@ -267,7 +230,7 @@ export function Settings() {
             <div><small>۱ ساعت، ساعت ۱۰ (امروز)</small><b>{toman(ex(10))}</b><small>هر نفر {toman(ex(10) / 4)}</small></div>
             <div><small>۱ ساعت، ساعت ۲۰ (امروز)</small><b>{toman(ex(20))}</b><small>هر نفر {toman(ex(20) / 4)}</small></div>
           </div>
-          <button className="adm-btn primary" onClick={save}>ذخیره‌ی نرخ‌ها</button>
+          <button className="adm-btn primary" onClick={save} data-tip="قیمت تازه فقط برای رزروهای بعدی اعمال می‌شود">ذخیره‌ی نرخ‌ها</button>
         </div>
       </Card>
       <div className="stack">
