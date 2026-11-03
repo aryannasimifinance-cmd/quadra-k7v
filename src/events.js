@@ -46,6 +46,35 @@ function named(ev, t) {
   return { ...t, name: t.players.map((p) => short(ev.regs.find((r) => r.id === p)?.name)).join(' / ') }
 }
 const teamPower = (ev, t) => t.players.reduce((s, p) => s + regPower(ev.regs.find((r) => r.id === p) || {}), 0)
+// ---------- تیم‌سازی دستی مدیر ----------
+// کسانی که هنوز در هیچ تیمی نیستند (ثبت‌نام تکی یا «منتظر یار»)
+export const singles = (ev) => { const inT = new Set(ev.teams.flatMap((t) => t.players)); return ev.regs.filter((r) => !inT.has(r.id)) }
+// زوج‌هایی که با هم ثبت‌نام کرده‌اند و هنوز تیم نشده‌اند
+export const loosePairs = (ev) => { const m = new Map(); singles(ev).filter((r) => r.pair).forEach((r) => m.set(r.pair, [...(m.get(r.pair) || []), r.id])); return [...m.values()].filter((p) => p.length === 2) }
+export const withPairs = (ev) => loosePairs(ev).reduce((e, p, i) => ({ ...e, teams: [...e.teams, named(e, { id: 't' + e.teams.length + 'p' + i + Date.now().toString(36), players: p, pair: true })] }), ev)
+export const pairUp = (ev, a, b) => ({ ...ev, teams: [...ev.teams, named(ev, { id: 't' + Date.now().toString(36), players: [a, b].filter(Boolean) })], groups: [], matches: [] })
+export const unpair = (ev, tid) => ({ ...ev, teams: ev.teams.filter((t) => t.id !== tid), groups: [], matches: [] })
+// تیم‌های موجود می‌مانند؛ زوج‌های ثبت‌نامی تیم می‌شوند و منتظرها هم‌سطح جفت می‌شوند
+export function fillTeams(ev) {
+  let e = ev
+  const pairs = new Map()
+  singles(e).filter((r) => r.pair).forEach((r) => pairs.set(r.pair, [...(pairs.get(r.pair) || []), r.id]))
+  ;[...pairs.values()].filter((p) => p.length === 2).forEach((p) => { e = { ...e, teams: [...e.teams, named(e, { id: 't' + e.teams.length + Date.now().toString(36), players: p, pair: true })] } })
+  const rest = singles(e).sort((a, b) => regPower(b) - regPower(a))
+  while (rest.length > 1) { const a = rest.shift(), b = rest.pop(); e = { ...e, teams: [...e.teams, named(e, { id: 't' + e.teams.length + Date.now().toString(36), players: [a.id, b.id] })] } }
+  return { ...e, groups: [], matches: [] }
+}
+// انتقال یا افزودن یک تیم به گروه؛ بازی‌های دو گروه درگیر از نو ساخته می‌شوند و حذفی پاک می‌شود
+export function moveTeam(ev, tid, gid) {
+  const from = ev.groups.find((g) => g.teams.includes(tid))?.id
+  const groups = ev.groups.map((g) => ({ ...g, teams: g.id === gid ? [...g.teams.filter((x) => x !== tid), tid] : g.teams.filter((x) => x !== tid) }))
+  const touched = [from, gid]
+  const keep = ev.matches.filter((m) => m.stage === 'group' && !touched.includes(m.group))
+  const fresh = groups.filter((g) => touched.includes(g.id)).flatMap((g) => roundRobin(g.teams).map(([a, b], k) => ({ id: `g${g.id}${k + 1}`, stage: 'group', group: g.id, a, b, sa: null, sb: null, court: ev.courts?.[k % (ev.courts?.length || 1)] || 1 })))
+  return { ...ev, groups, matches: [...keep, ...fresh] }
+}
+export const showsResults = (ev) => ev.showResults !== false
+
 // جابه‌جا کردن دو بازیکن بین تیم‌ها (یا داخل یک تیم که اثری ندارد)
 export function swapPlayers(ev, p1, p2) {
   const teams = ev.teams.map((t) => ({ ...t, players: t.players.map((p) => (p === p1 ? p2 : p === p2 ? p1 : p)) })).map((t) => named(ev, t))

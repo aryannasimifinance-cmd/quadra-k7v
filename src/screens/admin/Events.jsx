@@ -1,15 +1,15 @@
 // آدینه‌ها و تورنمنت‌ها: تعریف مسابقه، ثبت‌نام‌های دونفره، تیم‌بندی، طراحی گروه‌ها، مرحله‌ی حذفی، برنده‌ها، ورودی‌ها و فروش کافه‌ی روز مسابقه
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { EVENT_KIND, EV_IMG, LEVELS, MEMBERS, METHOD_NAME, dayLabel, fa, fromKey, hourLabel, short, toman, todayKey } from '../../data'
 import {
-  EV_FORMAT, EV_STATUS, ROUND, cafeOf, clashes, entryTotal, eventAt, finished, groupsDone, makeGroups, makeKnockout, makeTeams, plan, podium, regPower, setScore, swapPlayers, teamName, upcoming,
+  EV_FORMAT, EV_STATUS, ROUND, cafeOf, clashes, entryTotal, eventAt, fillTeams, finished, groupsDone, isLive, loosePairs, withPairs, koRounds, makeGroups, makeKnockout, makeTeams, moveTeam, pairUp, plan, podium, regPower, setScore, showsResults, singles, standings, teamName, unpair, upcoming,
 } from '../../events'
 import { dk, jDate, jDateFa, jMonthKey, jMonthLabel } from '../../jalali'
 import { downloadXlsx, table } from '../../xlsx'
 import { chime } from '../../fx'
 import { useStore } from '../../store'
 import { Icon, LevelPill } from '../../components/ui'
-import { Bracket, Groups, Podium, Teams } from '../../components/Tournament'
+import { Bracket, Groups } from '../../components/Tournament'
 import { who } from './derive'
 import { Badge, Card, Empty, Field, Guide, ImageUpload, Kpi, Money, Pager, Search, Seg, Side, Tabs, XlsxBtn, useSlice } from './kit'
 
@@ -134,7 +134,7 @@ function Detail({ ev, onBack, onEdit }) {
   const cafe = cafeOf(club, ev)
   const entry = entryTotal(ev), cafeT = sum(cafe, (o) => o.total)
   const p = podium(ev)
-  const busy = clashes(club.bookings, ev).filter((b) => !b.event)
+  const busy = isLive(ev) && fromKey(ev.date) >= fromKey(todayKey()) ? clashes(club.bookings, ev).filter((b) => !b.event) : []
   const setStatus = (status) => { adminEventSave({ id: ev.id, status }); chime('tap'); toast({ icon: '🏆', title: `«${ev.title}»: ${STATUS_HELP[status][0]}`, body: STATUS_HELP[status][1] }) }
   const del = () => {
     if (ev.regs.some((r) => r.paid > 0)) { if (window.confirm(`«${ev.title}» ورودی پرداخت‌شده دارد؛ لغو شود؟ زمین‌ها آزاد می‌شوند.`)) setStatus('cancelled'); return }
@@ -155,45 +155,69 @@ function Detail({ ev, onBack, onEdit }) {
     : cur[0] === 'teams' ? ['تیم‌هایی که دونفره ثبت‌نام کرده‌اند می‌مانند؛ بقیه هم‌سطح چیده می‌شوند.', 'رفتن به تیم‌ها', () => setTab('teams')]
     : cur[0] === 'groups' ? [ev.groups.length ? 'نتیجه‌ی بازی‌های گروهی را ثبت کنید.' : 'تعداد گروه و صعود از هر گروه را انتخاب کنید.', ev.groups.length ? 'رفتن به گروه‌ها' : 'طراحی گروه‌ها', () => setTab('groups')]
     : ['نتیجه‌ی بازی‌های حذفی را ثبت کنید تا قهرمان مشخص شود.', 'رفتن به حذفی', () => setTab(ko ? 'ko' : 'groups')]
+  const waiting = singles(ev).filter((r) => !r.pair)
+  const show = showsResults(ev)
+  const leaders = ev.groups.map((g) => [g.id, standings(ev, g.id)[0]]).filter(([, r]) => r && r.p > 0)
+  const lastKo = koRounds(ev).slice(-1)[0]
+  const fin = ev.matches.find((m) => m.stage === 'ko' && m.round === 2)
+  const setShow = (v) => { adminEventSave({ id: ev.id, showResults: v }); chime('tap'); toast({ icon: v ? '👁' : '🙈', title: v ? 'نتیجه‌ها در اپ نمایش داده می‌شود' : 'نتیجه‌ها در اپ پنهان شد', body: 'بازیکن‌ها فقط فهرست شرکت‌کننده‌ها را می‌بینند' }) }
+  const work = [
+    ['people', 'شرکت‌کننده‌ها', 'users', `${fa(ev.regs.length)} از ${fa(ev.cap)} نفر`,
+      <div className="evw-avs">{ev.regs.slice(0, 9).map((r) => <i key={r.id} title={r.name}>{r.name[0]}</i>)}{ev.regs.length > 9 && <i>+{fa(ev.regs.length - 9)}</i>}</div>],
+    ['teams', 'تیم‌ها', 'coach', ev.teams.length ? `${fa(ev.teams.length)} تیم` : 'هنوز تیمی نیست',
+      <>{waiting.length > 0 && <em className="evw-warn">⏳ {fa(waiting.length)} نفر منتظر یار</em>}{ev.teams.slice(0, 3).map((t) => <small key={t.id}>{t.name}</small>)}</>],
+    ev.format === 'groups' && ['groups', 'گروه‌ها و نتایج', 'grid', ev.groups.length ? `${fa(ev.groups.length)} گروه، ${left ? `${fa(left)} بازی مانده` : 'تمام شد'}` : 'طراحی نشده',
+      <>{leaders.slice(0, 4).map(([g, r]) => <small key={g}><b>{g}</b> صدر: {r.name}</small>)}</>],
+    ['ko', 'مرحله‌ی حذفی', 'trophy', p ? 'قهرمان مشخص شد' : lastKo ? ROUND[lastKo] : 'هنوز ساخته نشده',
+      p ? <b className="evw-champ">🏆 {teamName(ev, p.first)}</b> : fin?.a && fin?.b ? <small>فینال: {teamName(ev, fin.a)} و {teamName(ev, fin.b)}</small> : null],
+  ].filter(Boolean)
   return (
     <div className="stack">
       <button className="adm-btn ghost sm ev-back" onClick={onBack}><Icon name="fwd" size={16} />همه‌ی مسابقه‌ها</button>
-      <div className="ev-hero">
-        <div className="ev-thumb" style={{ backgroundImage: `url(${ev.img})` }} />
-        <div className="grow">
-          <div className="row-gap"><h2>{ev.title}</h2><Badge tone={ev.kind === 'official' ? 'warn' : 'ok'}>{EVENT_KIND[ev.kind].name}</Badge></div>
-          <div className="ev-facts">
-            <span><Icon name="cal" size={14} />{when(ev)}</span>
-            <span><Icon name="court" size={14} />{courtsText(ev.courts)} در تقویم رزرو مسابقه است</span>
-            <span><Icon name="users" size={14} />سطح {ev.levels.join(' / ')}، {ev.desc || EV_FORMAT[ev.format]}</span>
-            <span><Icon name="cash" size={14} />ورودی {toman(ev.fee)} هر نفر، جایزه: {ev.prize}</span>
+      <div className="evb">
+        <div className="evb-hero" style={{ backgroundImage: `url(${ev.img})` }}>
+          <div className="evb-in">
+            <div className="row-gap"><Badge tone={ev.kind === 'official' ? 'warn' : 'ok'}>{EVENT_KIND[ev.kind].name}</Badge><St s={ev.status} /></div>
+            <h2>{ev.title}</h2>
+            <div className="ev-facts">
+              <span><Icon name="cal" size={14} />{when(ev)}</span>
+              <span><Icon name="court" size={14} />{courtsText(ev.courts)}، در تقویم رزرو مسابقه</span>
+              <span><Icon name="users" size={14} />سطح {ev.levels.join(' / ')}</span>
+              <span><Icon name="cash" size={14} />{toman(ev.fee)} هر نفر؛ جایزه: {ev.prize}</span>
+            </div>
+            {busy.length > 0 && <p className="pt-warn">{fa(busy.length)} رزرو عادی در همین ساعت روی این زمین‌ها هست؛ در تقویم جابه‌جا یا لغوشان کنید.</p>}
+            <div className="row-btns">
+              <button className="adm-btn sm evb-btn" onClick={onEdit}><Icon name="cog" size={15} />ویرایش</button>
+              <button className="adm-btn sm evb-btn" onClick={del}>{ev.regs.some((r) => r.paid > 0) ? 'لغو مسابقه' : 'حذف'}</button>
+            </div>
           </div>
-          {busy.length > 0 && <p className="pt-warn">{fa(busy.length)} رزرو عادی در همین ساعت روی این زمین‌ها هست؛ در تقویم جابه‌جا یا لغوشان کنید.</p>}
         </div>
-        <div className="ev-acts">
-          <button className="adm-btn ghost sm" onClick={onEdit}><Icon name="cog" size={16} />ویرایش</button>
-          <button className="adm-btn ghost sm" onClick={del} data-tip={ev.regs.some((r) => r.paid > 0) ? 'ورودی پرداخت‌شده دارد؛ لغو می‌شود' : 'حذف کامل'}>{ev.regs.some((r) => r.paid > 0) ? 'لغو' : 'حذف'}</button>
+        <div className="evb-k"><small>ثبت‌نام</small><b>{fa(ev.regs.length)}<span>/{fa(ev.cap)}</span></b><i className="evb-bar"><i style={{ width: `${Math.min(100, (ev.regs.length / ev.cap) * 100)}%` }} /></i><em>{fa(new Set(ev.regs.map((r) => r.pair || r.id)).size)} ثبت‌نام، {fa(waiting.length)} منتظر یار</em></div>
+        <div className="evb-k"><small>ورودی‌ها</small><b>{short(entry)}</b><em>{toman(ev.fee)} هر نفر</em></div>
+        <button className="evb-k cafe" onClick={() => setTab('cafe')}><small>☕ کافه‌ی روز مسابقه</small><b>{short(cafeT)}</b><em>{fa(cafe.length)} خرید</em></button>
+        <div className={`evb-k ${p ? 'gold' : ''}`}><small>{p ? '🏆 قهرمان' : 'جمع درآمد'}</small><b className={p ? 'sm' : ''}>{p ? teamName(ev, p.first) : short(entry + cafeT)}</b><em>{p ? `نایب: ${teamName(ev, p.second)}` : 'ورودی + کافه'}</em></div>
+        <div className="evb-k wide">
+          <small>وضعیت در اپ</small>
+          <div className="ev-st-opts">{['draft', 'open', 'closed', 'done'].map((k) => <button key={k} className={ev.status === k ? 'on' : ''} onClick={() => ev.status !== k && setStatus(k)}>{STATUS_HELP[k][0]}</button>)}</div>
+          <em>{STATUS_HELP[ev.status][1]}</em>
+        </div>
+        <div className="evb-k wide">
+          <small>نتیجه‌ها برای بازیکن‌ها</small>
+          <div className="ev-st-opts">{[[true, 'نمایش در اپ'], [false, 'پنهان']].map(([v, n]) => <button key={n} className={show === v ? 'on' : ''} onClick={() => show !== v && setShow(v)}>{n}</button>)}</div>
+          <em>{show ? 'تیم‌ها، جدول گروه‌ها، حذفی و قهرمان در اپ دیده می‌شود.' : 'در اپ فقط شرکت‌کننده‌ها دیده می‌شوند؛ نتیجه‌ها مخفی است.'}</em>
         </div>
       </div>
-      <div className="ev-status">
-        <span className="lbl">وضعیت در اپ</span>
-        <div className="ev-st-opts">{['draft', 'open', 'closed', 'done'].map((k) => <button key={k} className={ev.status === k ? 'on' : ''} onClick={() => ev.status !== k && setStatus(k)}>{STATUS_HELP[k][0]}</button>)}</div>
-        <small>{STATUS_HELP[ev.status][1]}</small>
-      </div>
-      <div className="kpis four">
-        <Kpi icon="users" label="ثبت‌نام" value={`${fa(ev.regs.length)} از ${fa(ev.cap)}`} sub={`${fa(new Set(ev.regs.map((r) => r.pair || r.id)).size)} تیم ثبت‌نامی، ${fa(ev.regs.filter((r) => r.source === 'app').length)} نفر از اپ`} />
-        <Kpi icon="cash" label="ورودی‌ها" value={toman(entry)} sub={`${toman(ev.fee)} هر نفر`} />
-        <Kpi icon="cup" label="کافه‌ی روز مسابقه" value={toman(cafeT)} sub={`${fa(cafe.length)} سفارش`} onClick={() => setTab('cafe')} />
-        <Kpi icon="trophy" label={p ? 'قهرمان' : 'جمع درآمد'} value={p ? teamName(ev, p.first) : toman(entry + cafeT)} sub={p ? `نایب‌قهرمان: ${teamName(ev, p.second)}` : 'ورودی + کافه'} />
-      </div>
-      <Podium ev={ev} />
-      <div className="ev-steps">
-        {steps.map(([k, n, sub, ok], i) => (
-          <button key={k} className={`${tab === k ? 'on' : ''} ${ok ? 'ok' : ''} ${cur?.[0] === k ? 'cur' : ''}`} onClick={() => setTab(k)}>
-            <i>{ok ? '✓' : fa(i + 1)}</i><span><b>{n}</b><small>{sub}</small></span>
-          </button>
-        ))}
-        <button className={`cafe ${tab === 'cafe' ? 'on' : ''}`} onClick={() => setTab('cafe')}><i>☕</i><span><b>کافه</b><small>{fa(cafe.length)} سفارش</small></span></button>
+      <div className="evw">
+        {work.map(([k, n, ic, sub, body], i) => {
+          const ok = { people: steps[0]?.[3], teams: ev.teams.length > 0, groups: groupsDone(ev), ko: !!p }[k]
+          return (
+            <button key={k} className={`evw-t ${tab === k ? 'on' : ''} ${ok ? 'ok' : ''} ${cur?.[0] === k ? 'cur' : ''}`} onClick={() => setTab(k)}>
+              <div className="evw-h"><span className="evw-n">{ok ? '✓' : fa(i + 1)}</span><Icon name={ic} size={16} /><b>{n}</b></div>
+              <span className="evw-sub">{sub}</span>
+              <div className="evw-body">{body}</div>
+            </button>
+          )
+        })}
       </div>
       <div className={`ev-next ${ev.status === 'done' ? 'done' : ''}`}><span>{next[0]}</span>{next[1] && <button className="adm-btn primary sm" onClick={next[2]}>{next[1]}</button>}</div>
       {tab === 'people' && <People ev={ev} />}
@@ -281,32 +305,59 @@ function People({ ev }) {
   )
 }
 
-// ---------- تیم‌ها ----------
+// ---------- تیم‌ها: تیم‌سازی دستی برای منتظرها، جفت‌کردن خودکار، جدا کردن ----------
 function TeamsTab({ ev, go }) {
   const { adminEventSet, toast } = useStore()
-  const [pick, setPick] = useState(null)
+  const [sel, setSel] = useState([])
   const started = ev.matches.some((m) => m.sa != null)
-  const auto = () => {
-    if (ev.teams.length && !window.confirm('تیم‌ها، گروه‌ها و نتیجه‌های فعلی پاک و از نو چیده شوند؟')) return
-    adminEventSet(ev.id, makeTeams); chime('success'); toast({ icon: '🎾', title: 'تیم‌ها چیده شدند', body: 'تیم‌های دونفره‌ی ثبت‌نامی ماندند؛ بقیه هم‌سطح شدند' })
-  }
-  const onPick = (p) => {
-    if (started) { toast({ icon: '⚠️', title: 'بازی‌ها شروع شده‌اند', body: 'برای جابه‌جایی، تیم‌بندی را از نو بچینید' }); return }
-    if (!pick) { setPick(p); return }
-    if (pick !== p) { adminEventSet(ev.id, (e) => ({ ...swapPlayers(e, pick, p), groups: [], matches: [] })); chime('tap') }
-    setPick(null)
-  }
-  const singles = ev.regs.filter((r) => !r.pair).length
+  // زوج‌های ثبت‌نامی خودکار تیم می‌شوند؛ «منتظر یار» فقط کسانی است که واقعاً یار ندارند
+  const loose = loosePairs(ev).length
+  useEffect(() => { if (loose && !started) adminEventSet(ev.id, withPairs) }, [loose, started])
+  const wait = singles(ev).filter((r) => !r.pair)
+  const ok = () => { if (started) { toast({ icon: '⚠️', title: 'بازی‌ها شروع شده‌اند', body: 'اول نتیجه‌ها را پاک کنید یا تیم‌بندی را از نو بچینید' }); return false } return !ev.groups.length || window.confirm('گروه‌ها و برنامه‌ی بازی پاک و باید دوباره ساخته شوند. ادامه؟') }
+  const pick = (id) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id].slice(-2)))
+  const make = () => { if (!ok()) return; adminEventSet(ev.id, (e) => pairUp(e, sel[0], sel[1])); setSel([]); chime('success'); toast({ icon: '🤝', title: 'تیم ساخته شد' }) }
+  const auto = () => { if (!ok()) return; adminEventSet(ev.id, fillTeams); setSel([]); chime('success'); toast({ icon: '🎾', title: 'منتظرها جفت شدند', body: 'تیم‌های ساخته‌شده دست نخوردند؛ بقیه هم‌سطح جفت شدند' }) }
+  const reset = () => { if (!window.confirm('همه‌ی تیم‌ها، گروه‌ها و نتیجه‌ها پاک و از نو چیده شوند؟')) return; adminEventSet(ev.id, makeTeams); chime('success') }
+  const split = (t) => { if (!ok()) return; adminEventSet(ev.id, (e) => unpair(e, t.id)); chime('tap') }
+  const reg = (id) => ev.regs.find((r) => r.id === id) || {}
   return (
-    <Card title="تیم‌ها" sub={ev.teams.length ? (pick ? 'حالا بازیکن دوم را بزنید تا جایشان عوض شود' : 'برای جابه‌جایی، روی یک بازیکن و بعد روی بازیکن دیگر بزنید') : 'هنوز تیم‌بندی نشده'}
-      right={<div className="row-btns">
-        <button className="adm-btn ghost sm" disabled={ev.regs.length < 2} onClick={auto}><Icon name="refresh" size={15} />{ev.teams.length ? 'چیدن دوباره' : 'تیم‌بندی'}</button>
-        {ev.teams.length > 1 && <button className="adm-btn primary sm" onClick={() => go(ev.format === 'knockout' ? 'ko' : 'groups')}>{ev.format === 'knockout' ? 'جدول حذفی' : 'طراحی گروه‌ها'}<Icon name="back" size={15} /></button>}
-      </div>}>
-      {singles % 2 === 1 && <p className="pt-warn">{fa(singles)} نفر تکی ثبت‌نام کرده‌اند؛ یک نفر بدون یار می‌ماند. یک نفر دیگر اضافه یا حذف کنید.</p>}
-      {ev.teams.length ? <Teams ev={ev} onPick={onPick} picked={pick} /> : <Empty>{ev.regs.length < 2 ? 'حداقل دو شرکت‌کننده لازم است.' : '«تیم‌بندی» را بزنید: تیم‌های دونفره‌ی ثبت‌نامی همان می‌مانند و تکی‌ها هم‌سطح جفت می‌شوند.'}</Empty>}
-      {ev.teams.length > 0 && <small className="muted-note">قدرت تیم‌ها (جمع امتیاز سطح): {ev.teams.map((t) => fa(t.players.reduce((s, p) => s + regPower(ev.regs.find((r) => r.id === p) || {}), 0))).join('، ')}</small>}
-    </Card>
+    <div className="two wide-first">
+      <Card title={`تیم‌ها ${ev.teams.length ? `(${fa(ev.teams.length)})` : ''}`} sub="تیم‌هایی که در اپ دونفره ثبت‌نام کرده‌اند با برچسب «ثبت‌نامی» مشخص‌اند"
+        right={<div className="row-btns">
+          {ev.teams.length > 0 && <button className="adm-btn ghost sm" onClick={reset} data-tip="همه از نو، بر اساس سطح">چیدن از نو</button>}
+          {ev.teams.length > 1 && <button className="adm-btn primary sm" onClick={() => go(ev.format === 'knockout' ? 'ko' : 'groups')}>{ev.format === 'knockout' ? 'جدول حذفی' : 'طراحی گروه‌ها'}<Icon name="back" size={15} /></button>}
+        </div>}>
+        <div className="tm-grid">
+          {ev.teams.map((t, i) => (
+            <div key={t.id} className={`tm ${t.pair ? 'pair' : ''}`}>
+              <div className="tm-h"><em>{fa(i + 1)}</em>{t.pair ? <span className="tm-tag">ثبت‌نامی</span> : <span className="tm-tag man">چیده‌شده</span>}
+                <button className="icon-btn" onClick={() => split(t)} data-tip="جدا کردن؛ هر دو به «منتظر یار» برمی‌گردند" aria-label="جدا کردن"><Icon name="close" size={14} /></button></div>
+              {t.players.map((pid) => { const r = reg(pid); return <div key={pid} className="tm-p"><b>{r.name}</b>{r.level && <LevelPill id={r.level} />}</div> })}
+              <small>قدرت {fa(t.players.reduce((s, pid) => s + regPower(reg(pid)), 0))}</small>
+            </div>
+          ))}
+        </div>
+        {!ev.teams.length && <Empty>هنوز تیمی نیست. از ستون «منتظر یار» دو نفر را انتخاب کنید یا «جفت کردن خودکار» را بزنید.</Empty>}
+      </Card>
+      <Card title={`منتظر یار ${wait.length ? `(${fa(wait.length)})` : ''}`} sub={wait.length ? 'دو نفر را انتخاب کنید و «ساخت تیم» را بزنید' : 'همه تیم دارند'}>
+        <div className="wt-list">
+          {wait.map((r) => (
+            <button key={r.id} className={`wt ${sel.includes(r.id) ? 'on' : ''}`} onClick={() => pick(r.id)}>
+              <i>{sel.includes(r.id) ? fa(sel.indexOf(r.id) + 1) : ''}</i>
+              <span className="grow"><b>{r.name}</b><small>{r.pair ? 'یار ثبت‌نامی دارد' : r.waiting ? 'در اپ: منتظر یار' : r.source === 'app' ? 'از اپ' : 'حضوری'}</small></span>
+              {r.level && <LevelPill id={r.level} />}
+            </button>
+          ))}
+        </div>
+        {!wait.length && <div className="all-good"><Icon name="check" size={20} /><b>کسی منتظر یار نیست</b></div>}
+        {wait.length > 0 && <div className="row-btns wt-act">
+          <button className="adm-btn primary sm" disabled={sel.length !== 2} onClick={make}><Icon name="plus" size={15} />ساخت تیم</button>
+          <button className="adm-btn ghost sm" disabled={wait.length < 2} onClick={auto} data-tip="منتظرها بر اساس سطح جفت می‌شوند؛ قوی‌ترین با ضعیف‌ترین">جفت کردن خودکار</button>
+        </div>}
+        {wait.length % 2 === 1 && <p className="pt-warn">{fa(wait.length)} نفر منتظرند؛ یک نفر بی‌یار می‌ماند.</p>}
+      </Card>
+    </div>
   )
 }
 
@@ -374,8 +425,34 @@ function GroupsTab({ ev, go }) {
     <Card title="گروه‌ها و نتایج" sub={done ? 'همه‌ی بازی‌های گروهی نتیجه دارند' : `نتیجه را بنویسید (گیم‌های هر تیم)؛ ${fa(left)} بازی مانده`}
       right={<div className="row-btns"><button className="adm-btn ghost sm" onClick={() => setDesign(true)}>طراحی دوباره</button><button className={`adm-btn ${done ? 'primary' : 'ghost'} sm`} onClick={ko}>ساخت مرحله‌ی حذفی</button></div>}>
       <p className="ds-banner">از هر گروه <b>{fa(adv)} تیم اول</b> به مرحله‌ی حذفی می‌روند؛ ردیف‌های سبز الان در جای صعودند.</p>
+      <GroupMembers ev={ev} />
       <Groups ev={ev} onScore={score} />
     </Card>
+  )
+}
+
+function GroupMembers({ ev }) {
+  const { adminEventSet, toast } = useStore()
+  const where = (tid) => ev.groups.find((g) => g.teams.includes(tid))?.id || ''
+  const outside = ev.teams.filter((t) => !where(t.id))
+  const move = (tid, gid) => {
+    const from = where(tid)
+    const hit = ev.matches.some((m) => m.stage === 'group' && [from, gid].includes(m.group) && m.sa != null)
+    if (hit && !window.confirm('نتیجه‌های ثبت‌شده‌ی این گروه‌ها پاک می‌شود و برنامه‌ی بازی‌شان از نو ساخته می‌شود. ادامه؟')) return
+    adminEventSet(ev.id, (e) => moveTeam(e, tid, gid || null)); chime('tap')
+    toast({ icon: '🔀', title: gid ? `به گروه ${gid} رفت` : 'از گروه‌ها بیرون آمد', body: 'برنامه‌ی بازی همان گروه‌ها به‌روز شد' })
+  }
+  return (
+    <details className="gm" open={outside.length > 0}>
+      <summary>ویرایش اعضای گروه‌ها{outside.length > 0 && <em>{fa(outside.length)} تیم بیرون از گروه‌ها</em>}</summary>
+      <div className="gm-list">
+        {ev.teams.map((t) => (
+          <label key={t.id} className={where(t.id) ? '' : 'out'}><b>{t.name}</b>
+            <select value={where(t.id)} onChange={(e) => move(t.id, e.target.value)}><option value="">بیرون از گروه‌ها</option>{ev.groups.map((g) => <option key={g.id} value={g.id}>گروه {g.id}</option>)}</select>
+          </label>
+        ))}
+      </div>
+    </details>
   )
 }
 

@@ -30,11 +30,13 @@ export const ACCOUNTS = [
   return { code, name, g: g.id, type: g.type, debit: ['asset', 'cogs', 'exp'].includes(g.type) }
 })
 export const accByCode = (c) => ACCOUNTS.find((a) => a.code === c)
+// حساب‌های درآمدی که دریافت دستی می‌تواند به آن برود
+export const INCOME_ACCS = ACCOUNTS.filter((a) => a.g === 6)
 export const EXPENSE_ACCS = ACCOUNTS.filter((a) => a.g === 8 && !['8101', '8102', '8103'].includes(a.code))
 // روش پرداخت ← حساب
 export const PAY_ACC = { cash: '1101', card: '1102', bank: '1102', online: '1103', wallet: '1103', payable: '3101' }
 export const PAY_FROM = { cash: 'صندوق (نقدی)', bank: 'بانک (انتقال / کارت)', payable: 'نسیه — بدهی به تأمین‌کننده' }
-export const KIND_NAME = { opening: 'افتتاحیه', booking: 'رزرو و کلاس', shop: 'فروشگاه', cafe: 'کافه', sale: 'پکیج و رویداد', expense: 'هزینه', stock: 'انبار', payroll: 'حقوق و دستمزد', advance: 'مساعده', ap: 'پرداخت به تأمین‌کننده', manual: 'سند دستی' }
+export const KIND_NAME = { opening: 'افتتاحیه', booking: 'رزرو و کلاس', shop: 'فروشگاه', cafe: 'کافه', sale: 'پکیج و رویداد', payin: 'دریافت دستی', expense: 'هزینه', stock: 'انبار', payroll: 'حقوق و دستمزد', advance: 'مساعده', ap: 'پرداخت به تأمین‌کننده', manual: 'سند دستی' }
 const KIND_ORDER = Object.keys(KIND_NAME)
 
 // ---------- ساخت اسناد ----------
@@ -123,6 +125,13 @@ export function ledger(club) {
     const v = day(dk(s.at), 'sale')
     v.add(PAY_ACC[s.method] || '1103', s.price, 0)
     v.add(s.kind === 'coach' ? '6102' : s.kind === 'event' ? '6104' : '6103', 0, s.price)
+  })
+
+  // دریافت‌های دستی پذیرش (نقدی یا کارتخوان) به حساب درآمد انتخاب‌شده
+  ;(club.payins || []).forEach((p) => {
+    const v = day(p.date, 'payin')
+    v.add(PAY_ACC[p.method] || '1101', p.amount, 0)
+    v.add(p.acc || '6201', 0, p.amount, null, p.title)
   })
 
   for (const { date, kind, b } of days.values()) push(date, kind, `خلاصه‌ی ${KIND_NAME[kind]} روز`, b.lines())

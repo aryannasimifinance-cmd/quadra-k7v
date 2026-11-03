@@ -1101,3 +1101,40 @@ button.trn-pl:hover { background: var(--paper2); }
 .pp-chosen .grow { display: grid; gap: 2px; justify-items: start; }
 .pp-chosen small { font-size: 12px; color: var(--muted); }
 .pp-chosen b { font-size: 16px; }
+
+/* جدول حذفی: براکت و کارت قهرمان */
+.br { display: flex; gap: 26px; overflow-x: auto; padding: 6px 2px 10px; align-items: stretch; }
+.br-round { display: flex; flex-direction: column; min-width: 210px; flex: 1; }
+.br-round h4 { display: flex; justify-content: center; align-items: baseline; gap: 6px; margin: 0 0 10px; font-size: 13px; font-weight: 700; color: var(--ink2); }
+.br-round h4 small { font-size: 10.5px; font-weight: 400; color: var(--muted); }
+.br-col { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: 14px; }
+.br-pair { position: relative; display: flex; flex-direction: column; justify-content: space-around; gap: 14px; flex: 1; }
+/* براکت دو بازی و خط به دور بعد */
+.br-pair.two::before { content: ''; position: absolute; inset-inline-end: -13px; top: 25%; bottom: 25%; width: 12px; border: 2px solid #CFC8B8; border-inline-start: 0; border-start-end-radius: 10px; border-end-end-radius: 10px; }
+.br-pair::after { content: ''; position: absolute; top: 50%; inset-inline-end: -26px; width: 13px; border-top: 2px solid #CFC8B8; }
+.br-pair:not(.two)::after { inset-inline-end: -26px; width: 26px; }
+.br-round.final .trn-match { box-shadow: inset 0 0 0 1.5px #E7C55A; background: #FFFBEF; }
+.br-round.champ { min-width: 170px; flex: 0 0 auto; }
+.br-champ { display: grid; justify-items: center; gap: 4px; padding: 18px 14px; border-radius: 20px; text-align: center; background: var(--paper2); color: var(--muted); }
+.br-champ i { font-style: normal; font-size: 34px; filter: grayscale(1); opacity: .5; }
+.br-champ b { font-size: 15px; } .br-champ small { font-size: 11px; }
+.br-champ.on { background: linear-gradient(160deg, #2A2414, #14140F); color: #fff; box-shadow: 0 10px 30px rgba(201,162,39,.35); }
+.br-champ.on i { filter: none; opacity: 1; animation: champ 2.4s ease-in-out infinite; }
+.br-champ.on b { color: #E7C25A; } .br-champ.on small { color: rgba(255,255,255,.7); }
+@keyframes champ { 50% { transform: translateY(-3px) rotate(-4deg); } }
+.trn-round:not(:last-child) .trn-match::after { display: none; }
+
+/* اپ: منتظر یار و برنامه‌ی کلاس */
+.pp-solo { display: grid; gap: 2px; padding: 12px 14px; border-radius: 16px; border: 1.5px dashed var(--line); color: var(--ink2); font-size: 14px; text-align: center; }
+.pp-solo small { color: var(--muted); font-size: 12px; }
+.pp-chosen.solo { box-shadow: inset 0 0 0 2px #E7A23A; }
+.pp-wait { font-size: 28px; }
+.wait-pill { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 99px; background: #FFF0DB; color: #A6620F; }
+.coach-plan { display: grid; gap: 8px; margin-bottom: 14px; }
+.cp-days { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-days button { height: 36px; padding: 0 12px; border-radius: 12px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--line); font-size: 13px; }
+.cp-days button.on { background: var(--ink); color: #fff; box-shadow: none; }
+.cp-days button:disabled { opacity: 1; cursor: default; }
+.cp-sum { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 12px; border-radius: 18px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--line); }
+.cp-sum > div { display: grid; gap: 1px; padding: 6px 8px; border-radius: 12px; background: var(--paper); }
+.cp-sum small { font-size: 11px; color: var(--muted); } .cp-sum b { font-size: 13.5px; }

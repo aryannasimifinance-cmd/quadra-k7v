@@ -1,13 +1,13 @@
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
-import { BADGES, COACHES, COACH_PACKS, coachesRanked, ratingOf, EVENT_KIND, LEVELS, PACKAGES, RANKS, XP_GUIDE, rankOf, coachPackPrice, coachPacks, dayLabel, dayMonth, fa, fromKey, hourLabel, levelById, short, toman } from '../../data'
+import { BADGES, COACHES, COACH_PACKS, coachesRanked, ratingOf, shownReviews, EVENT_KIND, LEVELS, PACKAGES, RANKS, XP_GUIDE, rankOf, coachPackPrice, coachPacks, dayLabel, dayMonth, fa, fromKey, hourLabel, levelById, short, toman } from '../../data'
 import { celebrate, chime, haptic } from '../../fx'
 import { ME, myPoints, useStore } from '../../store'
 import { activeMembership, quests } from '../../select'
 import { Avatar, Button, Chips, Icon, LevelPill, Photo, Sheet, Stars, TopBar, rise, stagger } from '../../components/ui'
 import { leaderboard } from './Home'
 import { Loading } from '../../components/Logo'
-import { EV_FORMAT, appEvents, finished, isLive } from '../../events'
+import { EV_FORMAT, appEvents, finished, isLive, showsResults } from '../../events'
 import { Bracket, Groups, Podium, Teams, champion } from '../../components/Tournament'
 
 // برگه‌ی امتیاز ناشناس
@@ -17,7 +17,7 @@ export function RateSheet({ target, title, onClose }) {
   const [text, setText] = useState('')
   const send = () => {
     const r = addReview(target, stars, text)
-    chime('success'); toast({ icon: '🙏', title: 'نظر شما ناشناس ثبت شد', body: `+${fa(r.xp)} XP` }); onClose()
+    chime('success'); toast({ icon: '🙏', title: 'امتیاز شما ثبت شد', body: text.trim() ? `متن نظر بعد از تأیید مدیر نمایش داده می‌شود؛ +${fa(r.xp)} XP` : `+${fa(r.xp)} XP` }); onClose()
   }
   return (
     <Sheet open={!!target} onClose={onClose} title={title}>
@@ -25,6 +25,7 @@ export function RateSheet({ target, title, onClose }) {
         <p className="muted">نام شما به هیچ‌کس، حتی مدیر باشگاه، نشان داده نمی‌شود.</p>
         <Stars value={stars} onChange={setStars} size={34} />
         <textarea placeholder="نظرتان را بنویسید (اختیاری)" value={text} onChange={(e) => setText(e.target.value)} maxLength={300} />
+        <p className="muted small">امتیاز ستاره‌ای همان لحظه حساب می‌شود؛ متن نظر بعد از تأیید مدیر برای بقیه نمایش داده می‌شود.</p>
         <Button full variant="q" disabled={!stars} onClick={send}>ثبت ناشناس</Button>
       </div>
     </Sheet>
@@ -54,7 +55,7 @@ export function Coaches({ nav, onBack, focus }) {
                 <small>{c.title}، {fa(c.exp)} سال سابقه</small>
                 <div className="cb-score"><Stars value={c.avg} /><b>{fa(c.avg)}</b><small>از {fa(c.count)} نظر ناشناس</small></div>
                 <ul className="record light">{c.record.map((f) => <li key={f}>{f}</li>)}</ul>
-                {[...new Set(c.list.filter((r) => r.text).map((r) => r.text))].slice(0, 2).map((t) => <p key={t} className="cb-quote">«{t}» <small>— ناشناس</small></p>)}
+                {[...new Set(shownReviews(c.list).map((r) => r.text))].slice(0, 3).map((t) => <p key={t} className="cb-quote">«{t}» <small>— ناشناس</small></p>)}
                 <div className="cb-packs">
                   {coachPacks(c).map((p) => <div key={p.id}><small>{p.name}</small><b>{short(coachPackPrice(c, p))}</b></div>)}
                 </div>
@@ -205,7 +206,7 @@ export function Events({ nav, onBack, kind: initial = 'friday' }) {
         {past.length > 0 && <p className="label">برگزارشده‌ها؛ نتیجه‌ها و برنده‌ها</p>}
         {past.map((e) => {
           const r = ratingOf(club, 'event:' + e.id), done = rated.includes('event:' + e.id)
-          const ch = champion(e)
+          const ch = showsResults(e) && champion(e)
           return (
             <div key={e.id} className="past-ev" onClick={() => setOpen(e.id)} role="button">
               <div className="grow"><b>{e.title}</b><small>{dayMonth(fromKey(e.date))}، {fa(e.teams.length)} تیم</small>
@@ -227,8 +228,9 @@ export function Events({ nav, onBack, kind: initial = 'friday' }) {
 // جزئیات یک مسابقه در اپ: شرکت‌کننده‌ها، تیم‌ها، گروه‌ها، جدول حذفی و برنده‌ها
 function EventInfo({ ev, onJoin }) {
   const mine = ev.regs.some((r) => r.by === ME)
-  const tabs = [['people', `شرکت‌کننده‌ها ${fa(ev.regs.length)}`], ev.teams.length && ['teams', 'تیم‌ها'], ev.groups.length && ['groups', 'گروه‌ها'], ev.matches.some((m) => m.stage === 'ko') && ['ko', 'حذفی']].filter(Boolean)
-  const [tab, setTab] = useState(() => (ev.matches.some((m) => m.stage === 'ko') ? 'ko' : ev.groups.length ? 'groups' : ev.teams.length ? 'teams' : 'people'))
+  const show = showsResults(ev)
+  const tabs = [['people', `شرکت‌کننده‌ها ${fa(ev.regs.length)}`], show && ev.teams.length && ['teams', 'تیم‌ها'], show && ev.groups.length && ['groups', 'گروه‌ها'], show && ev.matches.some((m) => m.stage === 'ko') && ['ko', 'حذفی']].filter(Boolean)
+  const [tab, setTab] = useState(() => (!showsResults(ev) ? 'people' : ev.matches.some((m) => m.stage === 'ko') ? 'ko' : ev.groups.length ? 'groups' : ev.teams.length ? 'teams' : 'people'))
   const can = ev.status === 'open' && !mine && ev.regs.length + 2 <= ev.cap
   return (
     <div className="ev-info">
@@ -238,11 +240,11 @@ function EventInfo({ ev, onJoin }) {
         <span>ورودی {toman(ev.fee)} هر نفر، تیم دونفره؛ جایزه: {ev.prize}</span>
         {ev.note && <span>{ev.note}</span>}
       </div>
-      <Podium ev={ev} />
+      {show ? <Podium ev={ev} /> : ev.teams.length > 0 && <p className="muted small">نتیجه‌های این مسابقه هنوز اعلام نشده است.</p>}
       <Chips id={'evt-' + ev.id} small value={tab} onChange={setTab} options={tabs.map(([id, name]) => ({ id, name }))} />
       {tab === 'people' && (
         <div className="ev-people">
-          {ev.regs.map((r) => <div key={r.id} className={r.by === ME ? 'me' : ''}><Avatar name={r.name} size={30} me={r.by === ME} /><b>{r.by === ME ? 'شما' : r.name}</b>{r.level && <LevelPill id={r.level} />}</div>)}
+          {ev.regs.map((r) => <div key={r.id} className={r.by === ME ? 'me' : ''}><Avatar name={r.name} size={30} me={r.by === ME} /><b>{r.by === ME ? 'شما' : r.name}</b>{r.waiting && !ev.teams.some((t) => t.players.includes(r.id)) && <small className="wait-pill">منتظر یار</small>}{r.level && <LevelPill id={r.level} />}</div>)}
           {!ev.regs.length && <p className="muted">هنوز کسی ثبت‌نام نکرده؛ اولین نفر باشید.</p>}
           {!ev.teams.length && ev.regs.length > 0 && <p className="muted small">تیم‌ها قبل از شروع مسابقه، هم‌سطح چیده و همین‌جا اعلام می‌شوند.</p>}
         </div>

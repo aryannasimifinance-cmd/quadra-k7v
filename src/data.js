@@ -290,6 +290,8 @@ export function ratingOf(club, target) {
   const avg = list.length ? list.reduce((s, r) => s + r.stars, 0) / list.length : 0
   return { avg: Math.round(avg * 10) / 10, count: list.length, list: [...list].sort((a, b) => b.at - a.at) }
 }
+// متن نظر فقط بعد از تأیید مدیر نشان داده می‌شود؛ ستاره‌ها بدون تأیید در میانگین حساب می‌شوند
+export const shownReviews = (list) => list.filter((r) => r.text && r.ok !== false && !r.hidden)
 // مربی‌ها به ترتیب امتیاز نظرها
 export const coachesRanked = (club) => COACHES.filter((c) => c.active !== false).map((c) => ({ ...c, ...ratingOf(club, 'coach:' + c.id) })).sort((a, b) => b.avg - a.avg || b.count - a.count)
 

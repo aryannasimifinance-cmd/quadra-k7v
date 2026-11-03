@@ -6,6 +6,7 @@ import {
 import { chime } from '../../fx'
 import { ME, payState, useStore } from '../../store'
 import { podium } from '../../events'
+import { CHANNEL, TodayIn, channelOf } from './Payins'
 import { Icon, LevelPill } from '../../components/ui'
 import { Badge, Card, Empty, Field, Guide, ImageUpload, Kpi, Money, More, Pager, Search, Seg, Side, Status, Tabs, XlsxBtn, usePage, useSlice } from './kit'
 import { HBars } from './Charts'
@@ -16,7 +17,7 @@ import { downloadXlsx, table } from '../../xlsx'
 const fmt = new Intl.DateTimeFormat('fa-IR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
 // ---------- دریافت‌ها: دو کار ساده — گرفتن مانده‌ها، و دیدن پول‌های رسیده ----------
-const KINDS = [['court', 'زمین'], ['coach', 'کلاس'], ['pack', 'پکیج و تورنمنت'], ['shop', 'فروشگاه'], ['cafe', 'کافه']]
+const KINDS = [['court', 'زمین'], ['coach', 'کلاس'], ['pack', 'پکیج و تورنمنت'], ['shop', 'فروشگاه'], ['cafe', 'کافه'], ['manual', 'دریافت دستی']]
 const WHEN = { today: 'امروز', week: '۷ روز', month: '۳۰ روز' }
 const isToday = (t) => { const d = new Date(t), n = new Date(); return d.toDateString() === n.toDateString() }
 
@@ -27,13 +28,13 @@ export function Payments({ ctx }) {
   const [when, setWhen] = useState('week')
   const [kind, setKind] = useState('all')
   const [q, setQ] = useState('')
+  const [ch, setCh] = useState('all')
   const now = Date.now()
   const endToday = new Date(); endToday.setHours(23, 59, 59, 999)
   const dueNow = pays.filter((p) => p.due > 0 && p.at <= endToday.getTime()).sort((a, b) => b.at - a.at)
   const dueLater = pays.filter((p) => p.due > 0 && p.at > endToday.getTime()).sort((a, b) => a.at - b.at)
-  const gotToday = pays.filter((p) => p.at <= now && isToday(p.at)).reduce((s, p) => s + p.paid, 0)
   const since = now - { today: 0, week: 7, month: 30 }[when] * 864e5
-  const hist = pays.filter((p) => p.paid > 0 && p.at <= now && (when === 'today' ? isToday(p.at) : p.at >= since) && (kind === 'all' || p.kind === kind) && (!q || (p.who + p.title + p.sub).includes(q)))
+  const hist = pays.filter((p) => p.paid > 0 && p.at <= now && (when === 'today' ? isToday(p.at) : p.at >= since) && (kind === 'all' || p.kind === kind) && (ch === 'all' || channelOf(p.method) === ch) && (!q || (p.who + p.title + p.sub).includes(q)))
   const [rows, more] = usePage(hist, 30)
   const settle = (p, m) => { adminSettle(p.id, m); chime('success'); toast({ icon: '✅', title: `${toman(p.due)} دریافت شد`, body: `${p.who}، ${METHOD_NAME[m]}` }) }
   const exp = () => downloadXlsx('quadra-payments', [{ name: 'دریافت‌ها', rows: table(`دریافت‌های باشگاه کوادرا — ${WHEN[when]}`, ['تاریخ', 'ساعت', 'شرح', 'جزئیات', 'مشتری', 'روش', 'مبلغ'],
@@ -52,8 +53,8 @@ export function Payments({ ctx }) {
   )
   return (
     <div className="stack">
-      <div className="kpis three">
-        <Kpi icon="cash" label="امروز دریافت شد" value={toman(gotToday)} tip="جمع پول‌های امروز: رزرو، کلاس، پکیج، فروشگاه و کافه" />
+      <TodayIn />
+      <div className="kpis two-k">
         <Kpi icon="clock" label="باید همین حالا گرفته شود" tone={dueNow.length ? 'warn' : ''} value={toman(dueNow.reduce((s, p) => s + p.due, 0))} sub={`${fa(dueNow.length)} رزرو امروز یا گذشته`} onClick={() => setTab('due')} tip="بازی انجام شده یا امروز است و هنوز کامل پرداخت نشده" />
         <Kpi icon="cal" label="در پذیرش گرفته می‌شود" value={toman(dueLater.reduce((s, p) => s + p.due, 0))} sub={`${fa(dueLater.length)} رزرو آینده`} tip="رزروهای آینده‌ای که موقع بازی پرداخت می‌شوند" />
       </div>
@@ -71,6 +72,7 @@ export function Payments({ ctx }) {
         <Card>
           <div className="bk-row">
             <Seg value={when} onChange={setWhen} options={WHEN} />
+            <Seg value={ch} onChange={setCh} options={{ all: 'همه', app: 'اپ', card: 'کارتخوان', cash: 'نقدی' }} />
             <select value={kind} onChange={(e) => setKind(e.target.value)} data-tip="از کدام بخش"><option value="all">همه‌ی بخش‌ها</option>{KINDS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>
             <Search value={q} onChange={setQ} ph="مشتری یا شرح" />
             <XlsxBtn onClick={exp} />
@@ -81,7 +83,7 @@ export function Payments({ ctx }) {
             <tbody>{rows.map((p) => (
               <tr key={p.id} className={p.ref ? 'click' : ''} onClick={() => p.ref && ctx.open({ kind: 'booking', id: p.id })}>
                 <td className="nowrap">{fmt.format(p.at)}</td><td><b>{p.title}</b><small>{p.sub}</small></td><td>{p.who}</td>
-                <td>{METHOD_NAME[p.method] || '—'}</td><td className="num">{toman(p.paid)}</td>
+                <td><span className={`ch-pill ch-${channelOf(p.method)}`}>{CHANNEL[channelOf(p.method)][0]}</span>{p.manual && <small>ثبت دستی</small>}</td><td className="num">{toman(p.paid)}</td>
               </tr>))}</tbody>
           </table></div>
           {!hist.length && <Empty>در این بازه دریافتی نیست.</Empty>}
@@ -265,7 +267,7 @@ export function Coaches() {
                 <div><b>{fa(x.packsSold)}</b><small>پکیج ({COACH_PACKS.filter((p) => p.sessions > 1).map((p) => `${fa(p.sessions)}: ${fa(x.byPack[p.id])}`).join('، ')})</small></div>
                 <div><b>{short(x.revenue)}</b><small>درآمد</small></div>
               </div>
-              <div className="ca-foot"><span>★ {fa(x.rating)} <small>{fa(x.reviews)} نظر</small></span><span>{fa(x.upcoming)} جلسه‌ی آینده</span></div>
+              <div className="ca-foot"><span>★ {fa(x.rating)} <small>از {fa(x.reviews)} امتیاز</small></span>{x.pending > 0 && <span className="ca-pending">{fa(x.pending)} نظر منتظر تأیید</span>}</div>
             </div>
           </button>
         ))}
@@ -293,11 +295,14 @@ function CoachFile({ c, span, onEdit }) {
   const f = useMemo(() => coachFile(club, c.id, user, span), [club, c.id, user, span])
   const list = f.students.filter((s) => !q || s.name.includes(q) || s.phone?.includes(q))
   const pg = useSlice(list, 12, q + tab)
+  const { adminReview, toast } = useStore()
   const day = (n) => ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه'][n]
+  const pend = f.reviews.filter((r) => r.text && r.ok === false && !r.hidden)
+  const moderate = (r, patch, msg) => { adminReview(r.id, patch); chime('tap'); toast({ icon: '💬', title: msg }) }
   const exp = () => downloadXlsx(`quadra-coach-${c.id}-${jDate(todayKey()).replace(/\//g, '-')}`, [
     { name: 'شاگردها', rows: table(`شاگردهای ${c.name} — ${SPANS[span]}`, ['شاگرد', 'تلفن', 'سطح', 'پکیج‌ها', 'جلسه‌ی برگزارشده', 'جلسه‌ی آینده', 'آخرین جلسه', 'جلسه‌ی بعدی', 'پرداختی'],
       f.students.map((s) => [s.name, s.phone || '', s.level || '', s.packs.map((p) => p.name).join('، '), s.past, s.next, s.last ? jDate(s.last) : '', s.upcoming ? jDate(s.upcoming) : '', s.paid])) },
-    { name: 'پکیج‌ها', rows: table(null, ['تاریخ خرید', 'شاگرد', 'پکیج', 'شروع', 'روز و ساعت', 'جلسه‌ها', 'مبلغ', 'روش'], f.packs.map((p) => [jDate(dk(p.at)), p.student, p.packName, p.first ? jDate(p.first.date) : '', p.slot ? `${day(p.slot.day)} ${p.slot.start}` : '', `${p.used}/${p.total}`, p.price, METHOD_NAME[p.method] || p.method])) },
+    { name: 'پکیج‌ها', rows: table(null, ['تاریخ خرید', 'شاگرد', 'پکیج', 'شروع', 'پایان', 'روزها', 'ساعت', 'جلسه‌ها', 'مبلغ', 'روش'], f.packs.map((p) => [jDate(dk(p.at)), p.student, p.packName, p.first ? jDate(p.first.date) : '', p.last ? jDate(p.last.date) : '', p.days.map(day).join('، '), p.hours.join('، '), `${p.used}/${p.total}`, p.price, METHOD_NAME[p.method] || p.method])) },
     { name: 'نظرها', rows: table(null, ['تاریخ', 'امتیاز', 'نظر'], f.reviews.map((r) => [jDate(dk(r.at)), r.stars, r.text || ''])) },
   ])
   return (
@@ -310,7 +315,7 @@ function CoachFile({ c, span, onEdit }) {
         <Kpi icon="cash" label="درآمد" value={short(c.revenue) + ' تومان'} sub={`★ ${fa(c.rating)} از ${fa(c.reviews)} نظر`} />
       </div>
       <div className="row-between coach-bar">
-        <Seg value={tab} onChange={setTab} options={{ students: `شاگردها ${fa(f.students.length)}`, packs: `پکیج‌ها ${fa(f.packs.length)}`, next: `برنامه‌ی پیش‌رو ${fa(f.upcoming.length)}`, reviews: `نظرها ${fa(f.reviews.length)}` }} />
+        <Seg value={tab} onChange={setTab} options={{ students: `شاگردها ${fa(f.students.length)}`, packs: `پکیج‌ها و جلسه‌ها ${fa(f.packs.length)}`, next: `برنامه‌ی پیش‌رو ${fa(f.upcoming.length)}`, reviews: pend.length ? `نظرها (${fa(pend.length)} منتظر)` : `نظرها ${fa(f.reviews.length)}` }} />
         {tab === 'students' && <Search value={q} onChange={setQ} ph="نام یا شماره‌ی شاگرد" />}
       </div>
       {tab === 'students' && (<>
@@ -327,13 +332,32 @@ function CoachFile({ c, span, onEdit }) {
         {!list.length && <Empty>{q ? `شاگردی با «${q}» پیدا نشد.` : 'در این بازه شاگردی نداشته.'}</Empty>}
         <div className="log-foot">{list.length > 0 && <small>{fa(pg.from + 1)} تا {fa(pg.from + pg.rows.length)} از {fa(list.length)}</small>}<Pager {...pg} /></div>
       </>)}
-      {tab === 'packs' && <MiniTable empty="در این بازه پکیجی فروخته نشده." head={['شاگرد', 'پکیج', 'خرید', 'شروع', 'روز و ساعت', 'جلسه‌ها', 'مبلغ']}
-        rows={f.packs.map((p) => [<b>{p.student}</b>, p.packName, jDateFa(dk(p.at)), p.first ? jDateFa(p.first.date) : <small>هنوز رزرو نشده</small>, p.slot ? `${day(p.slot.day)}ها ${hourLabel(p.slot.start)}` : '—',
-          <span className="num">{fa(p.used)} از {fa(p.total)}{p.nextS && <small>بعدی: {jDateFa(p.nextS.date)}</small>}</span>, <span className="num">{toman(p.price)}<small>{METHOD_NAME[p.method]}</small></span>])} />}
+      {tab === 'packs' && <MiniTable empty="در این بازه پکیج یا جلسه‌ای فروخته نشده." head={['شاگرد', 'پکیج', 'شروع', 'پایان', 'روزها و ساعت', 'جلسه‌ها', 'هزینه']}
+        rows={f.packs.slice(0, 80).map((p) => [<><b>{p.student}</b><small>خرید {jDateFa(dk(p.at))}</small></>, <span className={`pk-pill pk-${p.pack}`}>{p.packName}</span>, p.first ? jDateFa(p.first.date) : <small>هنوز رزرو نشده</small>, p.last ? jDateFa(p.last.date) : '—',
+          p.days.length ? <>{p.days.map(day).join('، ')}<small>{p.hours.map((h) => hourLabel(h)).join('، ')}</small></> : '—',
+          <span className="num">{fa(p.used)} از {fa(p.total)}{p.nextS && <small>بعدی: {jDateFa(p.nextS.date)}</small>}</span>, <span className="num">{toman(p.price)}<small>{METHOD_NAME[p.method] || ''}</small></span>])} />}
       {tab === 'next' && <MiniTable empty="جلسه‌ی آینده‌ای ندارد." head={['روز', 'ساعت', 'زمین', 'شاگرد', 'پرداخت']}
         rows={f.upcoming.map((b) => [`${dayLabel(b.date)} ${jDateFa(b.date)}`, range(b.start, b.dur), courtById(b.court).name, b.players.map((p) => who(p, user)).join('، '), b.method === 'package' || b.method === 'coach-pack' ? 'از پکیج' : b.paid >= b.price ? 'پرداخت‌شده' : 'در محل'])} />}
       {tab === 'reviews' && (f.reviews.length
-        ? <div className="rv-list">{f.reviews.map((r) => <div key={r.id}><span className="rv-stars">{'★'.repeat(r.stars)}<i>{'★'.repeat(5 - r.stars)}</i></span><p>{r.text || <small>بدون متن</small>}</p><small>{jDateFa(dk(r.at))}، ناشناس</small></div>)}</div>
+        ? <div className="rv-list">
+          <p className="ds-banner">امتیاز ستاره‌ای همان لحظه در میانگین حساب می‌شود. <b>متن نظرها</b> فقط بعد از تأیید شما در اپ نمایش داده می‌شود.</p>
+          {[...pend, ...f.reviews.filter((r) => !pend.includes(r))].map((r) => {
+            const st = !r.text ? 'stars' : r.hidden ? 'hidden' : r.ok === false ? 'pending' : 'shown'
+            return (
+              <div key={r.id} className={`rv rv-${st}`}>
+                <div className="row-between"><span className="rv-stars">{'★'.repeat(r.stars)}<i>{'★'.repeat(5 - r.stars)}</i></span>
+                  <span className="rv-st">{{ stars: 'فقط امتیاز', hidden: 'پنهان', pending: 'منتظر تأیید', shown: 'در اپ نمایش داده می‌شود' }[st]}</span></div>
+                {r.text && <p>{r.text}</p>}
+                <div className="row-between"><small>{jDateFa(dk(r.at))}، ناشناس</small>
+                  {r.text && <div className="row-btns">
+                    {st !== 'shown' && <button className="adm-btn primary sm" onClick={() => moderate(r, { ok: true, hidden: false }, 'نظر در اپ نمایش داده می‌شود')}>تأیید و نمایش</button>}
+                    {st !== 'hidden' && <button className="adm-btn ghost sm" onClick={() => moderate(r, { hidden: true }, 'نظر پنهان شد؛ امتیازش می‌ماند')}>پنهان</button>}
+                  </div>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
         : <Empty>هنوز نظری ثبت نشده.</Empty>)}
     </Card>
   )

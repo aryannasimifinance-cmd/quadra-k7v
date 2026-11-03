@@ -82,17 +82,34 @@ export function Groups({ ev, onScore }) {
   )
 }
 
+// جدول حذفی: هر دو بازی با یک براکت به بازی دور بعد وصل می‌شوند و مسیر به کارت قهرمان می‌رسد
 export function Bracket({ ev, onScore }) {
   const rounds = koRounds(ev)
   if (!rounds.length) return null
+  const p = podium(ev)
   return (
-    <div className="trn-bracket">
-      {rounds.map((r) => (
-        <div key={r} className="trn-round">
-          <h4>{ROUND[r] || `دور ${fa(r)} تیمی`}</h4>
-          {ev.matches.filter((m) => m.stage === 'ko' && m.round === r).sort((a, b) => a.idx - b.idx).map((m) => <Match key={`${m.id}-${m.a}-${m.b}`} ev={ev} m={m} onScore={onScore} />)}
-        </div>
-      ))}
+    <div className="br">
+      {rounds.map((r) => {
+        const ms = ev.matches.filter((m) => m.stage === 'ko' && m.round === r).sort((x, y) => x.idx - y.idx)
+        const pairs = []
+        for (let i = 0; i < ms.length; i += 2) pairs.push(ms.slice(i, i + 2))
+        return (
+          <div key={r} className={`br-round ${r === 2 ? 'final' : ''}`}>
+            <h4>{ROUND[r] || `دور ${fa(r)} تیمی`}<small>{fa(ms.filter((m) => winnerOf(m)).length)} از {fa(ms.length)}</small></h4>
+            <div className="br-col">
+              {pairs.map((pr, i) => (
+                <div key={i} className={`br-pair ${pr.length === 2 ? 'two' : ''}`}>
+                  {pr.map((m) => <Match key={`${m.id}-${m.a}-${m.b}`} ev={ev} m={m} onScore={onScore} />)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+      <div className="br-round champ">
+        <h4>قهرمان</h4>
+        <div className="br-col"><div className={`br-champ ${p ? 'on' : ''}`}><i>🏆</i><b>{p ? teamName(ev, p.first) : '؟'}</b><small>{p ? 'قهرمان مسابقه' : 'بعد از فینال مشخص می‌شود'}</small></div></div>
+      </div>
     </div>
   )
 }

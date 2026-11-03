@@ -1,7 +1,7 @@
 // رزروها به شکل بُرد زمین: هر روز یک بخش، هر زمین یک ستون، هر رزرو یک کارت زمین کوچک با بازیکن‌ها
 import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
-import { COURTS, TYPE_NAME, addDays, courtById, dayLabel, dayMonth, fa, fromKey, range, short, toman, todayKey } from '../../data'
+import { COURTS, TYPE_NAME, addDays, coachById, courtById, dayLabel, dayMonth, fa, fromKey, range, short, toman, todayKey } from '../../data'
 import { payState, useStore } from '../../store'
 import { Icon } from '../../components/ui'
 import { jDate } from '../../jalali'
@@ -33,7 +33,7 @@ export function Bookings({ ctx }) {
   const [src, setSrc] = useState('all')
   const [q, setQ] = useState('')
   const [more, setMore] = useState(false)
-  const [view, setView] = useState('board')
+  const [view, setView] = useState('agenda')
   const t = todayKey()
   const days = useMemo(() => {
     if (rng === 'today') return [t]
@@ -64,14 +64,12 @@ export function Bookings({ ctx }) {
       <div className="bk-filters">
         <div className="bk-row">
           <div className="bk-range">{RANGES.map(([k, n, tip]) => <button key={k} className={rng === k ? 'on' : ''} onClick={() => setRng(k)} data-tip={tip}>{rng === k && <motion.i layoutId="bk-rng" className="bk-rng-bg" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}<span>{n}</span></button>)}</div>
-          <div className="bk-courts" data-tip="فقط رزروهای یک زمین">
-            {[['all', 'همه‌ی زمین‌ها'], ...COURTS.map((c) => [String(c.id), c.name])].map(([k, n]) => <button key={k} className={court === k ? 'on' : ''} onClick={() => setCourt(k)}>{n}</button>)}
-          </div>
+          <select className="bk-court-sel" value={court} onChange={(e) => setCourt(e.target.value)} data-tip="فقط رزروهای یک زمین">{[['all', 'همه‌ی زمین‌ها'], ...COURTS.map((c) => [String(c.id), c.name])].map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>
           <Search value={q} onChange={setQ} ph="جستجوی نام" />
           <button className={`adm-btn ghost sm bk-more ${more || extra ? 'on' : ''}`} onClick={() => setMore(!more)} data-tip="فیلتر بر اساس نوع رزرو، پرداخت و منبع">
             <Icon name="filter" size={15} />فیلتر بیشتر{extra > 0 && <em>{fa(extra)}</em>}
           </button>
-          <Seg value={view} onChange={setView} options={{ board: 'نمای زمین', list: 'نمای لیست' }} tips={{ board: 'هر زمین یک ستون، هر رزرو یک کارت', list: 'همه‌ی رزروها در یک فهرست مرتب‌شده بر اساس ساعت' }} />
+          <Seg value={view} onChange={setView} options={{ agenda: 'برنامه', board: 'زمین‌ها', list: 'جدول' }} tips={{ agenda: 'ساده: هر رزرو یک ردیف، به ترتیب ساعت', board: 'هر زمین یک ستون، هر رزرو یک کارت', list: 'جدول کامل با تسویه' }} />
           <XlsxBtn onClick={exp} label="اکسل" />
         </div>
         {more && (
@@ -80,8 +78,6 @@ export function Bookings({ ctx }) {
             <label><small>پرداخت</small><Chips value={pay} onChange={setPay} options={PAYS} /></label>
             <label><small>منبع</small><Chips value={src} onChange={setSrc} options={SOURCES} /></label>
             {active > 0 && <button className="link" onClick={reset}>پاک کردن همه</button>}
-          </motion.div>
-        )}
         <div className="bk-legend">
           <span><i className="lg tp-private" />رزرو زمین</span>
           <span><i className="lg tp-open" />بازی باز</span>
@@ -96,6 +92,8 @@ export function Bookings({ ctx }) {
           <span data-tip="فقط در بازی باز"><i className="lg dot empty" />جای خالی</span>
           <span><i className="lg live" />در حال بازی</span>
         </div>
+          </motion.div>
+        )}
       </div>
 
       <div className="bk-sum">
@@ -106,6 +104,7 @@ export function Bookings({ ctx }) {
       </div>
 
       {view === 'list' && <ListView list={list} ctx={ctx} />}
+      {view === 'agenda' && <Agenda list={list} days={days} ctx={ctx} today={t} />}
 
       {view === 'board' && days.map((k) => {
         const dayList = list.filter((b) => b.date === k)
@@ -163,6 +162,38 @@ function Ticket({ b, today, onClick }) {
       </div>
     </button>
   )
+}
+
+// نمای برنامه: هر روز یک بخش، هر رزرو یک ردیف تمیز به ترتیب ساعت
+function Agenda({ list, days, ctx, today }) {
+  const { user, adminSettle, toast } = useStore()
+  return days.map((k) => {
+    const rows = list.filter((b) => b.date === k).sort((a, b) => a.start - b.start || a.court - b.court)
+    if (!rows.length && days.length > 2) return null
+    return (
+      <section key={k} className="ag-day">
+        <header><h3>{dayLabel(k)}<small>{dayMonth(fromKey(k))}</small></h3><span>{fa(rows.filter((b) => b.status !== 'cancelled').length)} رزرو</span>
+          <button className="adm-btn ghost sm" onClick={() => ctx.open({ kind: 'new', date: k })}><Icon name="plus" size={14} />رزرو</button></header>
+        <div className="ag-list">
+          {rows.map((b) => {
+            const st = payState(b), due = b.status === 'cancelled' ? 0 : Math.max(0, b.price - b.paid)
+            const live = k === today && b.status !== 'cancelled' && nowH() >= b.start && nowH() < b.start + b.dur
+            return (
+              <button key={b.id} className={`ag-row tp-${b.type} ${b.status === 'cancelled' ? 'cancel' : ''} ${live ? 'is-live' : ''}`} onClick={() => ctx.open({ kind: 'booking', id: b.id })}>
+                <span className="ag-time" dir="ltr">{range(b.start, b.dur)}</span>
+                <span className="ag-court">{courtById(b.court).name}</span>
+                <span className="ag-main"><b>{b.type === 'block' ? (b.note || 'تعمیرات') : b.type === 'coach' ? `کلاس ${coachById(b.coach)?.name || ''}` : who(b.by, user)}</b>
+                  <small>{TYPE_NAME[b.type]}{b.type === 'open' ? `، ${fa(b.players.length)} از ۴` : ''}{b.type === 'coach' ? `، ${who(b.by, user)}` : ''}{live ? '، الان در حال بازی' : ''}</small></span>
+                {b.type !== 'block' && <span className="ag-pay">{b.status === 'cancelled' ? <em className="void">لغو شده</em> : <><b>{toman(b.price)}</b><Status s={st} /></>}</span>}
+                {due > 0 && <span className="ag-act" onClick={(e) => { e.stopPropagation(); adminSettle(b.id, 'card'); toast({ icon: '✅', title: 'تسویه شد', body: toman(due) }) }} data-tip="مانده با کارتخوان دریافت شد">تسویه</span>}
+              </button>
+            )
+          })}
+          {!rows.length && <button className="ag-empty" onClick={() => ctx.open({ kind: 'new', date: k })}>رزروی نیست؛ + رزرو دستی</button>}
+        </div>
+      </section>
+    )
+  })
 }
 
 // نمای لیست: همان فیلترها، یک فهرست ساده بر اساس روز و ساعت

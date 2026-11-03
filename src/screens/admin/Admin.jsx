@@ -22,6 +22,7 @@ import { Hr } from './Hr'
 import { LiveCourts, TYPE_CLS, Timeline } from './Live'
 import { Card, Guide, Kpi, Status, TipLayer } from './kit'
 import { upcoming } from '../../events'
+import { TodayIn } from './Payins'
 import { refCode } from '../player/Games'
 import '../../admin.css'
 import '../../admin-ops.css'
@@ -153,6 +154,8 @@ function Overview({ ctx }) {
         <Kpi icon="bag" label="سفارش‌های باز" tone={shopOpen.length + cafeOpen.length ? 'warn' : ''} value={fa(shopOpen.length + cafeOpen.length)} sub={`کافه ${fa(cafeOpen.length)}، فروشگاه ${fa(shopOpen.length)}`} tip="سفارش‌هایی که هنوز به مشتری تحویل نشده‌اند" onClick={() => ctx.go(cafeOpen.length ? 'cafe' : 'shop')} />
         <Kpi icon="chart" label="سود این ماه" tone={segMonth.net < 0 ? 'warn' : 'good'} value={mil(segMonth.net)} sub={`نقد و بانک ${short(cash)}`} tip="درآمد ماه شمسی جاری منهای همه‌ی هزینه‌ها" onClick={() => ctx.go('accounting')} />
       </div>
+
+      <TodayIn compact />
 
       <LiveCourts ctx={ctx} />
 

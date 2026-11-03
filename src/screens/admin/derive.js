@@ -1,4 +1,4 @@
-import { COACHES, COACH_PACKS, COURTS, MEMBERS, ratingOf, addDays, dayMonth, coachById, courtById, fromKey, memberById, productById, range, todayKey } from '../../data'
+import { COACHES, COACH_PACKS, COURTS, MEMBERS, ratingOf, shownReviews, addDays, dayMonth, coachById, courtById, fromKey, memberById, productById, range, todayKey } from '../../data'
 import { ME, payState } from '../../store'
 
 export const SERIES = [
@@ -36,6 +36,7 @@ export function payments(club, user) {
   })
   club.orders.forEach((o) => out.push({ id: o.id, at: o.at, kind: 'shop', title: `سفارش ${o.id}`, sub: o.items.map((x) => productById(x.pid)?.name).join('، '), who: who(o.by, user), amount: o.total, paid: o.total, due: 0, method: o.method, status: 'paid' }))
   ;(club.cafeOrders || []).forEach((o) => out.push({ id: o.id, at: o.at, kind: 'cafe', title: `کافه ${o.id}`, sub: o.items.map((x) => x.name).join('، '), who: who(o.by, user), amount: o.total, paid: o.total, due: 0, method: o.method, status: 'paid' }))
+  ;(club.payins || []).forEach((p) => out.push({ id: p.id, at: p.at, kind: 'manual', manual: true, title: p.title || 'دریافت دستی', sub: p.note || 'ثبت دستی در پذیرش', who: p.by ? who(p.by, user) : (p.name || 'مشتری حضوری'), amount: p.amount, paid: p.amount, due: 0, method: p.method, status: 'paid' }))
   club.sales.forEach((s) => out.push({ id: s.id, at: s.at, kind: s.kind === 'coach' ? 'coach' : 'pack', title: s.name, sub: s.kind === 'event' ? 'ثبت‌نام تورنمنت' : s.kind === 'coach' ? 'پکیج مربی' : 'پکیج / عضویت', who: who(s.by, user), amount: s.price, paid: s.price, due: 0, method: s.method, status: 'paid' }))
   return out.sort((a, b) => b.at - a.at)
 }
@@ -107,7 +108,7 @@ export function coachStats(club, span = 'all') {
     const rt = ratingOf(club, 'coach:' + c.id)
     const byPack = Object.fromEntries(COACH_PACKS.map((p) => [p.id, sales.filter((s) => s.pack === p.id).length]))
     return {
-      ...c, rating: rt.avg, reviews: rt.count, comments: rt.list.filter((r, i, a) => r.text && a.findIndex((x) => x.text === r.text) === i).slice(0, 3),
+      ...c, rating: rt.avg, reviews: rt.count, pending: rt.list.filter((r) => r.text && r.ok === false && !r.hidden).length, comments: shownReviews(rt.list).filter((r, i, a) => a.findIndex((x) => x.text === r.text) === i).slice(0, 3),
       sessions: held.length, upcoming: bk.filter((b) => !done(b)).length, students: students.size, packsSold: sales.length, byPack,
       revenue: held.filter(notPack).reduce((s, b) => s + b.paid, 0) + sales.reduce((s, x) => s + x.price, 0),
     }
@@ -139,11 +140,16 @@ export function coachFile(club, id, user, span = 'all') {
   bk.filter((b) => notPack(b) && done(b) && startOf(b) >= since).forEach((b) => { get(b.by).paid += b.paid })
   sales.forEach((x) => { const s = get(x.by); s.packs.push(x); s.paid += x.price })
   const students = [...m.values()].sort((a, b) => (b.next > 0) - (a.next > 0) || b.past - a.past || b.paid - a.paid)
-  const packs = sales.map((s) => {
-    const ss = bk.filter((b) => s.series && b.series === s.series).sort((a, b) => startOf(a) - startOf(b))
-    const p = COACH_PACKS.find((x) => x.id === s.pack)
-    return { ...s, student: who(s.by, user), packName: p?.name || s.name, total: ss.length || p?.sessions || 1, used: ss.filter(done).length, first: ss[0], slot: ss[0] && { day: fromKey(ss[0].date).getDay(), start: ss[0].start }, nextS: ss.find((b) => !done(b)) }
-  })
+  const row = (ss) => ({ first: ss[0], last: ss[ss.length - 1], days: [...new Set(ss.map((b) => fromKey(b.date).getDay()))], hours: [...new Set(ss.map((b) => b.start))], used: ss.filter(done).length, nextS: ss.find((b) => !done(b)) })
+  const packs = [
+    ...sales.map((s) => {
+      const ss = bk.filter((b) => s.series && b.series === s.series).sort((a, b) => startOf(a) - startOf(b))
+      const p = COACH_PACKS.find((x) => x.id === s.pack)
+      return { ...s, ...row(ss), student: who(s.by, user), packName: p?.name || s.name, total: ss.length || p?.sessions || 1 }
+    }),
+    // تک‌جلسه‌ها (رزرو کلاس بدون پکیج) در همان بازه
+    ...bk.filter((b) => !b.series && notPack(b) && startOf(b) >= since).map((b) => ({ id: b.id, at: b.at || startOf(b), by: b.by, pack: 'one', price: b.price, method: b.method, ...row([b]), student: who(b.by, user), packName: 'تک جلسه', total: 1 })),
+  ].sort((a, b) => b.at - a.at)
   const upcoming = bk.filter((b) => !done(b)).sort((a, b) => startOf(a) - startOf(b))
   const reviews = ratingOf(club, 'coach:' + id).list
   return { students, sales, packs, upcoming, reviews, active: students.filter((s) => s.next > 0).length }

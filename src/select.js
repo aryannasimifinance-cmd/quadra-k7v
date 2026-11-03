@@ -49,14 +49,18 @@ export function upcomingSlots(club, n = 10) {
 
 // برنامه‌ی جلسه‌های پکیج: هر هفته همان روز و ساعت؛ اگر زمین پر بود زمین دیگر،
 // بعد یک یا دو ساعت جلوتر/عقب‌تر همان روز، و اگر هیچ‌کدام نشد آن هفته رد می‌شود
-export function planSeries(club, { court, date, start, dur, count, coach }) {
+export function planSeries(club, { court, date, start, dur, count, coach, days }) {
   const coachFree = (d, h) => !coach || !club.bookings.some((b) => b.coach === coach && b.date === d && b.status !== 'cancelled' && h < b.start + b.dur && b.start < h + dur)
   const ok = (d, c, h) => h >= 7 && h + dur <= 24 && isFree(club, d, c, h, dur) && coachFree(d, h)
   const courts = [court, ...COURTS.map((c) => c.id).filter((x) => x !== court)]
   const out = []
   let skipped = 0
-  for (let k = 0; out.length < count && k < count + 8; k++) {
-    const d = addDays(date, 7 * k)
+  // days: روزهای هفته (getDay)؛ بدون آن هر هفته همان روز
+  const dates = []
+  if (days?.length > 1) { for (let k = 0; dates.length < count + 8 && k < (count + 8) * 7; k++) { const d = addDays(date, k); if (days.includes(fromKey(d).getDay())) dates.push(d) } }
+  else for (let k = 0; k < count + 8; k++) dates.push(addDays(date, 7 * k))
+  for (const d of dates) {
+    if (out.length >= count) break
     let pick = null
     for (const delta of [0, 1, -1, 2, -2]) {
       const c = courts.find((x) => ok(d, x, start + delta))

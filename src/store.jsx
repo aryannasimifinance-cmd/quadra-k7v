@@ -182,7 +182,8 @@ export function StoreProvider({ children }) {
       addReview(target, stars, text) {
         let out
         commit((s) => {
-          const review = { id: 'r' + Date.now(), target, stars, text: text.trim(), at: Date.now() }
+          // متن نظر منتظر تأیید مدیر می‌ماند؛ امتیاز ستاره‌ای همان لحظه حساب می‌شود
+          const review = { id: 'r' + Date.now(), target, stars, text: text.trim(), at: Date.now(), ok: !text.trim() }
           const r = reward({ ...s, rated: [...(s.rated || []), target] }, 10, [])
           out = r.result
           return { ...r.next, club: { ...s.club, reviews: [review, ...(s.club.reviews || [])] } }
@@ -216,15 +217,17 @@ export function StoreProvider({ children }) {
         let out
         commit((s) => {
           const cur = s.club.events.find((e) => e.id === ev.id)
-          const ids = [ME, partner?.id].filter(Boolean)
-          if (!cur || !partner || cur.status !== 'open' || cur.regs.length + 2 > cur.cap || cur.regs.some((r) => ids.includes(r.by))) { out = { error: 'closed' }; return s }
-          const total = cur.fee * 2, now = Date.now(), pair = 'p' + now
+          // partner.solo: بدون یار ثبت‌نام می‌کند و مدیر برایش یار هم‌سطح می‌گذارد
+          const solo = !!partner?.solo, n = solo ? 1 : 2
+          const ids = [ME, solo ? null : partner?.id].filter(Boolean)
+          if (!cur || !partner || cur.status !== 'open' || cur.regs.length + n > cur.cap || cur.regs.some((r) => ids.includes(r.by))) { out = { error: 'closed' }; return s }
+          const total = cur.fee * n, now = Date.now(), pair = solo ? null : 'p' + now
           const me = s.user?.name || 'کاربر اپ'
-          const sale = { id: 'S-' + now, kind: 'event', item: ev.id, name: `${cur.title}، تیم ${me.split(' ')[0]} و ${partner.name.split(' ')[0]}`, by: ME, price: total, method, at: now }
-          const base = { at: now, method, paid: cur.fee, source: 'app', sale: sale.id, pair, payer: ME }
+          const sale = { id: 'S-' + now, kind: 'event', item: ev.id, name: solo ? `${cur.title}، ${me.split(' ')[0]} (منتظر یار)` : `${cur.title}، تیم ${me.split(' ')[0]} و ${partner.name.split(' ')[0]}`, by: ME, price: total, method, at: now }
+          const base = { at: now, method, paid: cur.fee, source: 'app', sale: sale.id, ...(solo ? { waiting: true } : { pair, payer: ME }) }
           const regs = [
             { ...base, id: 'r' + now, by: ME, name: me, level: s.user?.level, phone: s.user?.phone },
-            { ...base, id: 'r' + now + 'b', by: partner.id, name: partner.name, level: partner.level || null },
+            ...(solo ? [] : [{ ...base, id: 'r' + now + 'b', by: partner.id, name: partner.name, level: partner.level || null }]),
           ]
           const r = reward(pay(s, total, method), 80, ['champ'])
           out = r.result
@@ -355,6 +358,10 @@ export function StoreProvider({ children }) {
       },
       adminAddBooking(b) { club((c) => ({ ...c, bookings: [...c.bookings, { id: 'd' + Date.now(), status: 'ok', source: 'desk', at: Date.now(), ...b }] })) },
       // تسویه: مبلغ و زمان پرداخت جدا ثبت می‌شود تا سند حسابداری در همان روز بخورد
+      // دریافت دستی در پذیرش (نقدی یا کارتخوان)؛ در دریافت‌ها، داشبورد و حسابداری دیده می‌شود
+      adminReview(id, patch) { club((c) => ({ ...c, reviews: (c.reviews || []).map((r) => (r.id === id ? { ...r, ...patch } : r)) })) },
+      adminPayin(p) { club((c) => ({ ...c, payins: [{ id: 'PI' + Date.now(), at: Date.now(), date: todayKey(), ...p }, ...(c.payins || [])] })) },
+      adminPayinDel(id) { club((c) => ({ ...c, payins: (c.payins || []).filter((p) => p.id !== id) })) },
       adminSettle(id, method) {
         club((c) => ({ ...c, bookings: c.bookings.map((b) => (b.id === id && b.paid < b.price
           ? { ...b, paid: b.price, method: b.method || method, settled: [...(b.settled || []), { amt: b.price - b.paid, at: Date.now(), method }] } : b)) }))

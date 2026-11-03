@@ -594,7 +594,7 @@ function StepEvent({ w, set, onNext }) {
 function StepPartner({ w, set, onNext }) {
   const { club } = useStore()
   const ev = appEvents(club).find((e) => e.id === w.eventId)
-  const p = w.partner
+  const p = w.partner?.solo ? null : w.partner
   if (!ev) return null
   const exclude = [ME, ...ev.regs.map((r) => r.by)]
   return (
@@ -607,13 +607,52 @@ function StepPartner({ w, set, onNext }) {
           <div className="grow"><small>یار شما</small><b>{p.name}</b>{p.level && <LevelPill id={p.level} />}</div>
           <Button small variant="ghost" onClick={() => set({ partner: null })}>تغییر</Button>
         </motion.div>
-      ) : <AddPlayer exclude={exclude} noPhone={false} onAdd={(x) => { haptic(8); set({ partner: x }) }} />}
+      ) : w.partner?.solo ? (
+        <motion.div className="pp-chosen solo" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <span className="pp-wait">⏳</span>
+          <div className="grow"><small>بدون یار</small><b>منتظر یار می‌مانم</b><small>باشگاه یک یار هم‌سطح برایتان می‌گذارد؛ فقط ورودی خودتان ({toman(ev.fee)})</small></div>
+          <Button small variant="ghost" onClick={() => set({ partner: null })}>تغییر</Button>
+        </motion.div>
+      ) : (<>
+        <AddPlayer exclude={exclude} noPhone={false} onAdd={(x) => { haptic(8); set({ partner: x }) }} />
+        <button className="pp-solo" onClick={() => { haptic(6); set({ partner: { solo: true } }) }}>یار ندارم؛ منتظر یار می‌مانم <small>باشگاه یار هم‌سطح می‌گذارد</small></button>
+      </>)}
       {p?.guest && (<>
         <p className="label">سطح تقریبی یارتان</p>
         <Chips id="pp-lv" small scroll value={p.level || ''} onChange={(level) => set({ partner: { ...p, level } })} options={LEVELS.map((l) => ({ id: l.id, name: l.id }))} />
       </>)}
-      <CtaBar><Button full variant="dark" disabled={!p || (p.guest && !p.level)} onClick={onNext}>ادامه و پرداخت</Button></CtaBar>
+      <CtaBar><Button full variant="dark" disabled={!w.partner || (p?.guest && !p.level)} onClick={onNext}>ادامه و پرداخت</Button></CtaBar>
     </div>
+  )
+}
+
+// کلاس مربی: روزهای هفته، و خلاصه‌ی شروع، پایان، ساعت و هزینه
+const WEEK = [[6, 'شنبه'], [0, 'یکشنبه'], [1, 'دوشنبه'], [2, 'سه‌شنبه'], [3, 'چهارشنبه'], [4, 'پنجشنبه'], [5, 'جمعه']]
+function CoachPlan({ w, set, count, plan, total }) {
+  const base = fromKey(w.date).getDay()
+  const days = w.days?.length ? w.days : [base]
+  const ss = plan?.sessions || [{ date: w.date, start: w.start }]
+  const first = ss[0], last = ss[ss.length - 1]
+  const used = [...new Set(ss.map((x) => fromKey(x.date).getDay()))]
+  const hours = [...new Set(ss.map((x) => x.start))]
+  return (
+    <section className="coach-plan">
+      {count > 1 && (<>
+        <p className="label">روزهای کلاس در هفته</p>
+        <div className="cp-days">{WEEK.map(([d, n]) => (
+          <button key={d} className={days.includes(d) ? 'on' : ''} disabled={d === base} onClick={() => { haptic(6); set({ days: days.includes(d) ? days.filter((x) => x !== d) : [...days, d] }) }}>{n}</button>
+        ))}</div>
+        <p className="hint">روز اول ({WEEK.find((x) => x[0] === base)[1]}) ثابت است؛ با انتخاب روزهای بیشتر، کلاس زودتر تمام می‌شود.</p>
+      </>)}
+      <div className="cp-sum">
+        <div><small>شروع</small><b>{weekday(fromKey(first.date))} {dayMonth(fromKey(first.date))}</b></div>
+        <div><small>پایان</small><b>{weekday(fromKey(last.date))} {dayMonth(fromKey(last.date))}</b></div>
+        <div><small>روزها</small><b>{WEEK.filter(([d]) => used.includes(d)).map(([, n]) => n).join('، ')}</b></div>
+        <div><small>ساعت</small><b>{hours.map((h) => range(h, 1)).join('، ')}</b></div>
+        <div><small>جلسه‌ها</small><b>{fa(count)} جلسه</b></div>
+        <div><small>هزینه</small><b>{toman(total)}</b>{count > 1 && <small>هر جلسه {toman(Math.round(total / count))}</small>}</div>
+      </div>
+    </section>
   )
 }
 
@@ -632,8 +671,8 @@ function StepPay({ w, set, onDone }) {
   const dur = w.intent === 'coach' ? 1 : w.dur
   const count = w.intent === 'coach' ? pack.sessions : w.intent === 'court' && !isOpen ? series.sessions : 1
   const plan = useMemo(() => (count > 1
-    ? planSeries(club, { court: w.court, date: w.date, start: w.start, dur, count, coach: w.intent === 'coach' ? coach.id : null })
-    : null), [count, club, w.court, w.date, w.start, dur, w.coachId])
+    ? planSeries(club, { court: w.court, date: w.date, start: w.start, dur, count, coach: w.intent === 'coach' ? coach.id : null, days: w.intent === 'coach' ? w.days : null })
+    : null), [count, club, w.court, w.date, w.start, dur, w.coachId, w.days])
   const sessPrices = plan ? plan.sessions.map((x) => priceFor(x.date, x.start, x.dur, club.pricing)) : []
 
   let title, sub, lines = [], total, kind
@@ -651,7 +690,7 @@ function StepPay({ w, set, onDone }) {
   } else if (EVENT_INTENTS.includes(w.intent)) {
     kind = 'event'
     title = ev.title; sub = `${dayLabel(ev.date)}، ${hourLabel(ev.start)}، ${ev.format}`
-    total = ev.fee * 2; lines = [['تیم شما', `${(s.user?.name || '').split(' ')[0]} و ${w.partner?.name.split(' ')[0] || ''}`], [`ورودی ۲ نفر × ${toman(ev.fee)}`, toman(total)], ['جایزه', ev.prize]]
+    total = ev.fee * (w.partner?.solo ? 1 : 2); lines = w.partner?.solo ? [['ثبت‌نام', 'تکی، منتظر یار'], ['ورودی شما', toman(total)], ['جایزه', ev.prize]] : [['تیم شما', `${(s.user?.name || '').split(' ')[0]} و ${w.partner?.name.split(' ')[0] || ''}`], [`ورودی ۲ نفر × ${toman(ev.fee)}`, toman(total)], ['جایزه', ev.prize]]
   } else if (count > 1) {
     kind = 'court-series'
     const base = sessPrices.reduce((a, x) => a + x, 0)
@@ -719,6 +758,7 @@ function StepPay({ w, set, onDone }) {
           {isOpen && <p className="hint">پکیج برای تیم کامل است؛ برای خرید پکیج، در مرحله‌ی قبل «تیم کامله» را انتخاب کنید.</p>}
         </section>
       )}
+      {w.intent === 'coach' && <CoachPlan w={w} set={set} count={count} plan={plan} total={total} />}
       <div className="pay-ticket">
         <span className="pill-ink">{title}</span>
         <h3>{sub}</h3>
