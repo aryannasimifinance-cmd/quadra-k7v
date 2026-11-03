@@ -1,10 +1,10 @@
 // فروشگاه و انبار: سفارش‌ها، کاتالوگ کددار با سایز و رنگ، ورود کالا، فروش حضوری و پرفروش‌ها
 import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
-import { CATEGORIES, MEMBERS, METHOD_NAME, fa, short, stockOf, toman, todayKey, addDays, dayLabel } from '../../data'
+import { CATEGORIES, METHOD_NAME, fa, productById, short, stockOf, toman, todayKey, addDays, dayLabel } from '../../data'
 import { COLORS, GENDER_NAME, SIZE_SETS, TAGS, accCode, catName, colorByName, makeVariants, nextCode } from '../../catalog'
 import { PAY_FROM } from '../../accounting'
-import { jDate, jDateFa } from '../../jalali'
+import { dk, jDate, jDateFa } from '../../jalali'
 import { downloadXlsx, table } from '../../xlsx'
 import { chime } from '../../fx'
 import { useStore } from '../../store'
@@ -13,12 +13,17 @@ import { MerchArt, ProductImage } from '../../components/Merch'
 import { HBars } from './Charts'
 import { who } from './derive'
 import { Badge, Card, Empty, Field, Guide, ImageUpload, Kpi, Money, More, Search, Seg, Side, Tabs, XlsxBtn, usePage } from './kit'
+import { CustomerField, Qty, Ticket, useCustomer } from './PosKit'
+import { OrderLog } from './OrderLog'
 
 const fmt = new Intl.DateTimeFormat('fa-IR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 const ART = ['tee', 'polo', 'hoodie', 'shorts', 'skirt', 'cap', 'bag', 'backpack', 'grip', 'band', 'bottle', 'towel']
 const LOW = 3
 const Sw = ({ c, title }) => <i className="sw" style={{ background: c }} title={title} />
 const stockTone = (n) => (n === 0 ? ['bad', 'ناموجود'] : n <= LOW ? ['warn', 'کم'] : ['ok', 'موجود'])
+
+const LOG_ST = { new: ['جدید', 'bad'], ready: ['آماده‌ی تحویل', 'ok'], delivered: ['تحویل شد', 'mute'] }
+const logLines = (o) => o.items.map((x) => [productById(x.pid)?.name || x.sku, x.qty, [x.size, x.color].filter(Boolean).join(' / '), x.price])
 
 export function ShopAdmin() {
   const { club } = useStore()
@@ -32,23 +37,26 @@ export function ShopAdmin() {
       <div className="sec-bar">
         <Tabs value={tab} onChange={setTab} tabs={[
           ['orders', 'سفارش‌ها', open, 'سفارش‌های اپ: آماده کنید و در پذیرش تحویل دهید'],
+          ['history', 'تاریخچه و جستجو', null, 'همه‌ی فروش‌ها؛ با نام مشتری ببینید چه کسی چه خریده'],
           ['products', 'کالاها', null, 'افزودن و ویرایش کالا، قیمت، سایز، رنگ و عکس'],
           ['stock', 'انبار و خرید', null, 'موجودی هر سایز و رنگ، ثبت خرید از تأمین‌کننده'],
           ['top', 'گزارش فروش', null, 'پرفروش‌ها و سود فروشگاه'],
         ]} />
         <div className="sec-actions">
-          <button className="adm-btn ghost sm" onClick={() => setPos(true)} data-tip="فروش به مشتری حاضر در باشگاه؛ موجودی همان لحظه کم می‌شود"><Icon name="cash" size={16} />فروش حضوری</button>
+          <button className={`adm-btn ${tab === 'orders' ? 'primary' : 'ghost'} sm`} onClick={() => setPos(true)} data-tip="فروش به مشتری حاضر در باشگاه؛ موجودی همان لحظه کم می‌شود"><Icon name="plus" size={16} />فروش حضوری</button>
           <button className="adm-btn ghost sm" onClick={() => setRecv(true)} data-tip="کالایی که از تأمین‌کننده خریدید را وارد انبار کنید"><Icon name="box" size={16} />ثبت خرید کالا</button>
-          <button className="adm-btn primary sm" onClick={() => setEdit('new')} data-tip="تعریف کالای تازه با عکس، قیمت، سایز و رنگ"><Icon name="plus" size={16} />کالای جدید</button>
+          <button className={`adm-btn ${tab === 'orders' ? 'ghost' : 'primary'} sm`} onClick={() => setEdit('new')} data-tip="تعریف کالای تازه با عکس، قیمت، سایز و رنگ"><Icon name="plus" size={16} />کالای جدید</button>
         </div>
       </div>
       <Guide>{{
+        history: 'نام یا شماره‌ی مشتری را بنویسید تا ببینید چه چیزهایی خریده؛ روی هر ردیف بزنید تا جزئیات باز شود.',
         orders: 'سفارش‌هایی که مشتری‌ها از اپ ثبت کرده‌اند. وقتی آماده شد «آماده شد» و موقع تحویل «تحویل داده شد» را بزنید.',
         products: 'روی هر کالا بزنید تا ویرایش شود. کالای غیرفعال در اپ دیده نمی‌شود.',
         stock: 'موجودی هر سایز و رنگ. با «ثبت خرید کالا» انبار پر می‌شود؛ با − و + کسری یا اضافه‌ی شمارش را ثبت کنید.',
         top: 'فروش، قیمت خرید و سود فروشگاه در بازه‌ی انتخابی.',
       }[tab]}</Guide>
-      {tab === 'orders' && <Orders />}
+      {tab === 'orders' && <Orders onAll={() => setTab('history')} />}
+      {tab === 'history' && <OrderLog orders={club.orders} lines={logLines} status={LOG_ST} title="فروش فروشگاه" file="quadra-shop-orders" />}
       {tab === 'products' && <Products onEdit={setEdit} onRecv={setRecv} />}
       {tab === 'stock' && <Stock onRecv={setRecv} />}
       {tab === 'top' && <Top />}
@@ -58,7 +66,7 @@ export function ShopAdmin() {
       <Side open={!!recv} onClose={() => setRecv(null)} title="ثبت خرید کالا" wide>
         {recv && <Receive preset={typeof recv === 'string' ? recv : null} onClose={() => setRecv(null)} />}
       </Side>
-      <Side open={pos} onClose={() => setPos(false)} title="فروش حضوری" wide>
+      <Side open={pos} onClose={() => setPos(false)} title="فروش حضوری" size="till">
         {pos && <Pos onClose={() => setPos(false)} />}
       </Side>
     </div>
@@ -66,15 +74,16 @@ export function ShopAdmin() {
 }
 
 // ---------- سفارش‌ها ----------
-function Orders() {
+function Orders({ onAll }) {
   const { club, user, adminOrder } = useStore()
-  const cols = [['new', 'جدید'], ['ready', 'آماده‌ی تحویل'], ['delivered', 'تحویل‌شده']]
+  const cols = [['new', 'جدید'], ['ready', 'آماده‌ی تحویل'], ['delivered', 'تحویل‌شده‌ی امروز']]
+  const of = (k) => club.orders.filter((o) => o.status === k && (k !== 'delivered' || dk(o.at) === todayKey()))
   return (
-    <div className="kanban">
+    <div className="kanban kb-scroll">
       {cols.map(([k, n]) => (
         <div key={k} className="kb-col">
-          <h4>{n} <span>{fa(club.orders.filter((o) => o.status === k).length)}</span></h4>
-          {club.orders.filter((o) => o.status === k).slice(0, k === 'delivered' ? 8 : 40).map((o) => (
+          <h4>{n} <span>{fa(of(k).length)}</span></h4>
+          {of(k).map((o) => (
             <motion.div key={o.id} layout className="kb-card">
               <div className="row-between"><b dir="ltr">{o.id}</b><small>{fmt.format(o.at)}</small></div>
               <small>{who(o.by, user)}، {o.source === 'desk' ? 'فروش حضوری' : 'اپ'}، {METHOD_NAME[o.method]}</small>
@@ -84,6 +93,8 @@ function Orders() {
               </div>
             </motion.div>
           ))}
+          {!of(k).length && <Empty>—</Empty>}
+          {k === 'delivered' && <button className="adm-btn ghost sm full kb-all" onClick={onAll}><Icon name="search" size={15} />همه‌ی سفارش‌ها و جستجو با نام</button>}
         </div>
       ))}
     </div>
@@ -319,57 +330,64 @@ function Receive({ preset, onClose }) {
 }
 
 // ---------- فروش حضوری ----------
+// چپ: کالاها با سایز و رنگ موجود؛ راست: فاکتور که همیشه دیده می‌شود. سقف هر ردیف موجودی همان سایز و رنگ است
 function Pos({ onClose }) {
   const { club, adminPos, toast } = useStore()
   const [q, setQ] = useState('')
+  const [cat, setCat] = useState('all')
   const [cart, setCart] = useState([])
   const [method, setMethod] = useState('card')
-  const [mq, setMq] = useState('')
-  const [member, setMember] = useState(null)
-  const found = club.products.filter((p) => p.active !== false && stockOf(p) > 0 && (!q || (p.name + p.code + p.brand).toLowerCase().includes(q.toLowerCase()))).slice(0, 8)
+  const cu = useCustomer()
+  const left = (v) => v.stock - (cart.find((x) => x.sku === v.sku)?.qty || 0)
+  const found = club.products.filter((p) => p.active !== false && (cat === 'all' || p.cat === cat) && (!q || (p.name + p.code + p.brand).toLowerCase().includes(q.toLowerCase())))
+    .sort((a, b) => (stockOf(b) > 0) - (stockOf(a) > 0))
   const add = (p, v) => setCart((c) => {
     const k = c.findIndex((x) => x.sku === v.sku)
     if (k >= 0) return c.map((x, i) => (i === k ? { ...x, qty: Math.min(v.stock, x.qty + 1) } : x))
     return [...c, { pid: p.id, sku: v.sku, size: v.size, color: v.color, colorHex: colorByName(v.color)?.c || null, qty: 1, price: p.price, name: p.name, max: v.stock }]
   })
+  const setQty = (i, d) => setCart((c) => c.map((y, j) => (j === i ? { ...y, qty: Math.min(y.max, y.qty + d) } : y)).filter((y) => y.qty > 0))
+  const count = cart.reduce((s, x) => s + x.qty, 0)
   const total = cart.reduce((s, x) => s + x.qty * x.price, 0)
-  const members = mq ? MEMBERS.filter((m) => m.name.includes(mq) || m.phone.includes(mq)).slice(0, 5) : []
   const save = () => {
-    const o = adminPos(cart.map(({ name, max, ...x }) => x), method, member?.id)
+    const o = adminPos(cart.map(({ name, max, ...x }) => x), method, cu.by)
+    if (!o) { chime('alarm'); toast({ icon: '⚠️', title: 'موجودی کافی نیست', body: 'موجودی همین حالا تغییر کرده؛ فاکتور را دوباره بررسی کنید.' }); return }
     chime('success'); toast({ icon: '🧾', title: `فاکتور ${o.id} ثبت شد`, body: `${toman(o.total)}، ${METHOD_NAME[method]}` }); onClose()
   }
   return (
-    <div className="form">
-      <Search value={q} onChange={setQ} ph="نام یا کد کالا" />
-      <div className="pos-list">
-        {found.map((p) => (
-          <div key={p.id} className="pos-item">
-            <ProductImage p={p} />
-            <div className="grow"><b>{p.name}</b><small>{p.code}، {toman(p.price)}</small>
-              <div className="pick-chips sm">{p.variants.filter((v) => v.stock > 0).map((v) => <button key={v.sku} type="button" onClick={() => add(p, v)}>{v.color && <Sw c={colorByName(v.color)?.c} />}{[v.size, v.color].filter(Boolean).join(' / ') || 'افزودن'} <em>{fa(v.stock)}</em></button>)}</div>
-            </div>
+    <div className="pos2">
+      <div className="pos-cat">
+        <Search value={q} onChange={setQ} ph="نام، برند یا کد کالا" />
+        <div className="pick-chips">{CATEGORIES.map((c) => <button key={c.id} type="button" className={cat === c.id ? 'on' : ''} onClick={() => setCat(c.id)}>{c.name}</button>)}</div>
+        <div className="shop-pos">
+          {found.map((p) => {
+            const vs = p.variants.filter((v) => v.stock > 0)
+            return (
+              <div key={p.id} className={`sp-item ${vs.length ? '' : 'out'}`}>
+                <ProductImage p={p} />
+                <div className="grow"><b>{p.name}</b><small><code>{p.code}</code> {toman(p.price)}</small>
+                  {vs.length ? <div className="pick-chips sm">{vs.map((v) => <button key={v.sku} type="button" disabled={left(v) <= 0} onClick={() => add(p, v)} data-tip={`${fa(left(v))} عدد باقی مانده`}>{v.color && <Sw c={colorByName(v.color)?.c} />}{[v.size, v.color].filter(Boolean).join(' / ') || 'افزودن'} <em>{fa(left(v))}</em></button>)}</div>
+                    : <small className="neg">ناموجود</small>}
+                </div>
+              </div>
+            )
+          })}
+          {!found.length && <Empty>کالایی پیدا نشد.</Empty>}
+        </div>
+      </div>
+      <Ticket count={count} total={total} onClear={() => setCart([])} empty="سایز یا رنگ کالا را بزنید تا به فاکتور اضافه شود."
+        onSubmit={save} action="ثبت فروش و تحویل"
+        options={<>
+          <CustomerField c={cu} />
+          <Field label="روش پرداخت"><Seg value={method} onChange={setMethod} options={{ card: 'کارتخوان', cash: 'نقدی' }} /></Field>
+        </>}>
+        {cart.map((x, i) => (
+          <div key={x.sku} className="pt-line">
+            <div className="grow"><b>{x.name}</b><small>{x.colorHex && <Sw c={x.colorHex} />}{[x.size, x.color].filter(Boolean).join(' / ')} <code>{x.sku}</code></small></div>
+            <div className="pt-r"><Qty qty={x.qty} onMinus={() => setQty(i, -1)} onPlus={() => setQty(i, 1)} canPlus={x.qty < x.max} /><b className="num">{toman(x.qty * x.price)}</b></div>
           </div>
         ))}
-        {!found.length && <Empty>کالای موجودی پیدا نشد.</Empty>}
-      </div>
-      {cart.length > 0 && (<>
-        <h4>فاکتور</h4>
-        <div className="lines">
-          {cart.map((x, i) => (
-            <div key={x.sku} className="pos-line"><div className="grow"><b>{x.name}</b><small dir="ltr">{x.sku}</small></div>
-              <div className="qty"><button onClick={() => setCart(cart.map((y, j) => (j === i ? { ...y, qty: y.qty - 1 } : y)).filter((y) => y.qty > 0))}>−</button><b>{fa(x.qty)}</b><button onClick={() => setCart(cart.map((y, j) => (j === i ? { ...y, qty: Math.min(y.max, y.qty + 1) } : y)))}>+</button></div>
-              <b className="num">{toman(x.qty * x.price)}</b></div>
-          ))}
-        </div>
-        <Field label="مشتری">
-          {member ? <div className="picked"><b>{member.name}</b><button className="link" onClick={() => setMember(null)}>تغییر</button></div>
-            : <><input placeholder="مشتری حضوری، یا جستجوی عضو" value={mq} onChange={(e) => setMq(e.target.value)} />
-              {members.length > 0 && <div className="pick-list">{members.map((m) => <button key={m.id} onClick={() => { setMember(m); setMq('') }}><b>{m.name}</b><small dir="ltr">{m.phone}</small></button>)}</div>}</>}
-        </Field>
-        <Field label="روش پرداخت"><Seg value={method} onChange={setMethod} options={{ card: 'کارتخوان', cash: 'نقدی' }} /></Field>
-        <div className="dr-total"><span>{fa(cart.reduce((s, x) => s + x.qty, 0))} قلم</span><b>{toman(total)}</b></div>
-        <button className="adm-btn primary full" onClick={save}>ثبت فروش و تحویل</button>
-      </>)}
+      </Ticket>
     </div>
   )
 }

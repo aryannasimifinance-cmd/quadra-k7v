@@ -15,12 +15,17 @@ import { Dish } from '../../components/Dish'
 import { HBars } from './Charts'
 import { who } from './derive'
 import { Badge, Card, Empty, Field, Guide, ImageUpload, Kpi, Money, More, PeriodBar, Search, Seg, Side, Tabs, XlsxBtn, usePage } from './kit'
+import { CustomerField, Qty, Ticket, useCustomer } from './PosKit'
+import { OrderLog } from './OrderLog'
 
 const fmt = new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' })
 const NEXT = { new: ['prep', 'شروع آماده‌سازی'], prep: ['ready', 'آماده شد'], ready: ['delivered', 'تحویل داده شد'] }
 const dest = (o) => (o.to ? `سر زمین ${fa(o.to)}` : 'تحویل در کافه')
 const ingTone = (g) => (g.stock <= 0 ? ['bad', 'تمام شده'] : g.stock <= g.min ? ['warn', 'زیر حداقل'] : ['ok', 'کافی'])
 const fileDate = () => jDate(todayKey()).replace(/\//g, '-')
+
+const LOG_ST = { new: ['ثبت شد', 'bad'], prep: ['در حال آماده‌سازی', 'warn'], ready: ['آماده‌ی تحویل', 'ok'], delivered: ['تحویل شد', 'mute'] }
+const logLines = (o) => o.items.map((x) => [x.name + (x.big ? '، بزرگ' : ''), x.qty, x.note, x.price])
 
 export function CafeAdmin() {
   const { club } = useStore()
@@ -37,6 +42,7 @@ export function CafeAdmin() {
       <div className="sec-bar">
         <Tabs value={tab} onChange={setTab} tabs={[
           ['orders', 'سفارش‌ها', open, 'صف سفارش‌های امروز: آماده‌سازی و تحویل'],
+          ['history', 'تاریخچه و جستجو', null, 'همه‌ی سفارش‌ها؛ با نام مشتری ببینید چه کسی چه سفارش داده'],
           ['menu', 'منو', null, 'آیتم‌های منو با عکس، قیمت و دستور تهیه'],
           ['stock', 'انبار و خرید', low, 'موجودی مواد اولیه، خریدها و ضایعات'],
           ['report', 'گزارش فروش', null, 'پرفروش‌ها، ساعت‌های شلوغ و سود کافه'],
@@ -50,12 +56,14 @@ export function CafeAdmin() {
         </div>
       </div>
       <Guide>{{
+        history: 'نام یا شماره‌ی مشتری را بنویسید تا ببینید چه چیزهایی سفارش داده؛ روی هر ردیف بزنید تا جزئیات باز شود.',
         orders: 'هر سفارش را به ستون بعد ببرید؛ وقتی «آماده شد» را بزنید، مشتری در اپ اعلان می‌گیرد. سفارش‌های بیش از ۲۰ دقیقه نارنجی می‌شوند.',
         menu: 'روی هر آیتم بزنید تا ویرایش شود. آیتمی که مواد اولیه‌اش تمام شده، در اپ «تمام شده» نشان داده می‌شود.',
         stock: 'با هر فروش، مواد اولیه طبق دستور تهیه خودکار کم می‌شود. خرید را ثبت کنید تا انبار پر شود؛ ضایعات را هم ثبت کنید تا حساب درست بماند.',
         report: 'فروش، هزینه‌ی مواد اولیه و سود کافه در بازه‌ی انتخابی.',
       }[tab]}</Guide>
-      {tab === 'orders' && <Orders />}
+      {tab === 'orders' && <Orders onAll={() => setTab('history')} />}
+      {tab === 'history' && <OrderLog orders={club.cafeOrders} lines={logLines} status={LOG_ST} title="سفارش‌های کافه" file="quadra-cafe-orders" />}
       {tab === 'menu' && <Menu onEdit={setEdit} />}
       {tab === 'stock' && <><Stock onEdit={setIng} onRecv={setRecv} onAdj={setAdj} /><Buys onRecv={setRecv} /></>}
       {tab === 'report' && <Report />}
@@ -71,7 +79,7 @@ export function CafeAdmin() {
       <Side open={!!adj} onClose={() => setAdj(null)} title="ضایعات و اصلاح موجودی">
         {adj && <Adjust g={adj} onClose={() => setAdj(null)} />}
       </Side>
-      <Side open={pos} onClose={() => setPos(false)} title="سفارش حضوری کافه" wide>
+      <Side open={pos} onClose={() => setPos(false)} title="سفارش حضوری کافه" size="till">
         {pos && <Pos onClose={() => setPos(false)} />}
       </Side>
     </div>
@@ -79,7 +87,7 @@ export function CafeAdmin() {
 }
 
 // ---------- سفارش‌ها ----------
-function Orders() {
+function Orders({ onAll }) {
   const { club, user, adminCafeOrder } = useStore()
   const [, tick] = useState(0)
   const today = club.cafeOrders.filter((o) => dk(o.at) === todayKey())
@@ -93,13 +101,13 @@ function Orders() {
         <Kpi icon="clock" label="در صف" tone={act.length > 4 ? 'warn' : ''} value={fa(act.length)} sub={act.length ? `قدیمی‌ترین ${fa(Math.round((Date.now() - Math.min(...act.map((o) => o.at))) / 6e4))} دقیقه پیش` : 'صف خالی است'} />
         <Kpi icon="chart" label="میانگین هر سفارش" value={today.length ? short(Math.round(today.reduce((s, o) => s + o.total, 0) / today.length)) + ' تومان' : '—'} />
       </div>
-      <div className="kanban four">
+      <div className="kanban four kb-scroll">
         {cols.map(([k, n]) => {
           const list = (k === 'delivered' ? today : club.cafeOrders).filter((o) => o.status === k)
           return (
             <div key={k} className="kb-col">
               <h4>{n} <span>{fa(list.length)}</span></h4>
-              {list.slice(0, k === 'delivered' ? 10 : 30).map((o) => {
+              {list.map((o) => {
                 const age = Math.round((Date.now() - o.at) / 6e4)
                 return (
                   <motion.div key={o.id} layout className={`kb-card cafe-card ${k !== 'delivered' && age > 20 ? 'late' : ''}`}>
@@ -114,6 +122,7 @@ function Orders() {
                 )
               })}
               {!list.length && <Empty>—</Empty>}
+              {k === 'delivered' && <button className="adm-btn ghost sm full kb-all" onClick={onAll}><Icon name="search" size={15} />همه‌ی سفارش‌ها و جستجو با نام</button>}
             </div>
           )
         })}
@@ -423,7 +432,7 @@ function Adjust({ g, onClose }) {
 }
 
 // ---------- سفارش حضوری ----------
-// موجودی هر آیتم با کسر مواد کل سبد حساب می‌شود، چون آیتم‌ها مواد مشترک دارند (قهوه، شیر، لیوان)
+// چپ: منو؛ راست: فاکتور که همیشه دیده می‌شود. موجودی هر آیتم با کسر مواد کل سبد حساب می‌شود (قهوه، شیر و لیوان مشترک‌اند)
 function Pos({ onClose }) {
   const { club, adminCafePos, toast } = useStore()
   const [cat, setCat] = useState('all')
@@ -432,75 +441,73 @@ function Pos({ onClose }) {
   const [method, setMethod] = useState('card')
   const [to, setTo] = useState(0)
   const [now, setNow] = useState(false)
-  const [mq, setMq] = useState('')
-  const [member, setMember] = useState(null)
+  const cu = useCustomer()
   const { cafeIngs: ings, cafeItems: all } = club
-  const items = all.filter((it) => it.active !== false && (cat === 'all' || it.cat === cat) && (!q || (it.name + it.code).includes(q)))
   const more = (it, big) => moreOf(it, big, ings, all, cart)
+  const items = all.filter((it) => it.active !== false && (cat === 'all' || it.cat === cat) && (!q || (it.name + it.code).includes(q)))
+    .map((it) => ({ it, n: more(it, false), nb: it.big > 0 ? more(it, true) : 0 }))
+    .sort((a, b) => (b.n > 0 || b.nb > 0) - (a.n > 0 || a.nb > 0))
   const add = (it, big) => setCart((c) => {
     const k = c.findIndex((x) => x.iid === it.id && x.big === big && !x.note)
     return k >= 0 ? c.map((x, i) => (i === k ? { ...x, qty: x.qty + 1 } : x)) : [...c, { iid: it.id, big, qty: 1, note: '' }]
   })
   const setQty = (i, d) => setCart((c) => c.map((y, j) => (j === i ? { ...y, qty: y.qty + d } : y)).filter((y) => y.qty > 0))
   const lines = cart.filter((x) => all.some((y) => y.id === x.iid))
+  const count = lines.reduce((s, x) => s + x.qty, 0)
   const total = lines.reduce((s, x) => s + x.qty * priceOf(all.find((y) => y.id === x.iid), x.big), 0)
   const lack = shortage(ings, all, lines)
-  const ok = fits(ings, all, lines)
-  const members = mq ? MEMBERS.filter((m) => m.name?.includes(mq) || m.phone?.includes(mq)).slice(0, 5) : []
-  const guest = mq.trim()
+  const inCart = (id) => lines.filter((x) => x.iid === id).reduce((s, x) => s + x.qty, 0)
+  const instant = now && !to
   const save = () => {
-    const o = adminCafePos(lines, method, member?.id || (guest ? 'f:' + guest : null), to || null, now && !to)
+    const o = adminCafePos(lines, method, cu.by, to || null, instant)
     if (!o) { chime('alarm'); toast({ icon: '⚠️', title: 'موجودی کافی نیست', body: 'انبار همین حالا تغییر کرده؛ سفارش را دوباره بررسی کنید.' }); return }
     chime('success')
     toast({ icon: '☕', title: o.status === 'delivered' ? `سفارش ${o.id} تحویل شد` : `سفارش ${o.id} به آشپزخانه رفت`, body: `${toman(o.total)}، ${dest(o)}` })
     onClose()
   }
   return (
-    <div className="form">
-      <Search value={q} onChange={setQ} ph="جستجوی نام یا کد آیتم" />
-      <div className="pick-chips">{[['all', 'همه', '✦'], ...CAFE_CATS.map((c) => [c.id, c.name, c.ic])].map(([k, n, ic]) => <button key={k} type="button" className={cat === k ? 'on' : ''} onClick={() => setCat(k)}>{ic} {n}</button>)}</div>
-      <div className="cafe-pos">
-        {items.map((it) => {
-          const n = more(it, false), nb = it.big > 0 ? more(it, true) : 0
-          return (
-            <div key={it.id} className={`cp-item ${n <= 0 && nb <= 0 ? 'out' : ''}`}>
-              <button type="button" disabled={n <= 0} onClick={() => add(it, false)} data-tip={n > 0 ? `${fa(n)} پرس دیگر قابل تهیه است` : 'مواد اولیه کافی نیست'}>
-                <Dish it={it} /><b>{it.name}</b><small>{n <= 0 ? 'ناموجود' : `${toman(it.price)}، ${fa(n)} پرس`}</small>
-              </button>
-              {nb > 0 && <button type="button" className="cp-big" onClick={() => add(it, true)}>بزرگ +{short(it.big)}</button>}
-            </div>
-          )
-        })}
-        {!items.length && <Empty>آیتمی پیدا نشد</Empty>}
-      </div>
-      {cart.length > 0 && (<>
-        <div className="row-between"><h4>سفارش</h4><button type="button" className="link" onClick={() => setCart([])}>خالی کردن</button></div>
-        <div className="lines">
-          {cart.map((x, i) => {
-            const it = all.find((y) => y.id === x.iid)
-            if (!it) return null
+    <div className="pos2">
+      <div className="pos-cat">
+        <Search value={q} onChange={setQ} ph="جستجوی نام یا کد آیتم" />
+        <div className="pick-chips">{[['all', 'همه', '✦'], ...CAFE_CATS.map((c) => [c.id, c.name, c.ic])].map(([k, n, ic]) => <button key={k} type="button" className={cat === k ? 'on' : ''} onClick={() => setCat(k)}>{ic} {n}</button>)}</div>
+        <div className="cafe-pos">
+          {items.map(({ it, n, nb }) => {
+            const c = inCart(it.id)
             return (
-              <div key={i} className="pos-line">
-                <div className="grow"><b>{it.emoji} {it.name}{x.big ? '، بزرگ' : ''}</b>
-                  <select className="note-sel" value={x.note} onChange={(e) => setCart(cart.map((y, j) => (j === i ? { ...y, note: e.target.value } : y)))}><option value="">بدون توضیح</option>{NOTES.map((n) => <option key={n}>{n}</option>)}</select></div>
-                <div className="qty"><button type="button" onClick={() => setQty(i, -1)}>−</button><b>{fa(x.qty)}</b><button type="button" onClick={() => setQty(i, 1)} disabled={more(it, x.big) < 1}>+</button></div>
-                <b className="num">{toman(x.qty * priceOf(it, x.big))}</b>
+              <div key={it.id} className={`cp-item ${n <= 0 && nb <= 0 ? 'out' : ''} ${c ? 'in' : ''}`}>
+                <button type="button" className="cp-main" disabled={n <= 0} onClick={() => add(it, false)} data-tip={n > 0 ? `${fa(n)} پرس دیگر قابل تهیه است` : 'مواد اولیه کافی نیست'}>
+                  {c > 0 && <i className="cp-n">{fa(c)}</i>}
+                  <Dish it={it} /><b>{it.name}</b><small>{toman(it.price)}</small><em>{n > 0 ? `${fa(n)} پرس` : 'ناموجود'}</em>
+                </button>
+                {it.big > 0 && <button type="button" className="cp-big" disabled={nb <= 0} onClick={() => add(it, true)}>بزرگ +{short(it.big)}</button>}
               </div>
             )
           })}
         </div>
-        {lack.length > 0 && <Empty>کمبود در انبار: {lack.map(([g, d]) => `${g.name} ${fmtQty(g, d)}`).join('، ')}</Empty>}
-        <Field label="تحویل"><div className="pick-chips">{[0, 1, 2, 3, 4].map((c) => <button key={c} type="button" className={to === c ? 'on' : ''} onClick={() => setTo(c)}>{c ? `سر زمین ${fa(c)}` : 'در کافه'}</button>)}</div></Field>
-        {!to && <Field label="آماده‌سازی"><Seg value={now ? 'now' : 'queue'} onChange={(v) => setNow(v === 'now')} options={{ queue: 'ارسال به صف آماده‌سازی', now: 'تحویل همان لحظه' }} tips={{ queue: 'سفارش در ستون «در حال آماده‌سازی» می‌نشیند', now: 'برای آیتم آماده مثل آب و نوشابه؛ مستقیم تحویل‌شده ثبت می‌شود' }} /></Field>}
-        <Field label="مشتری">
-          {member ? <div className="picked"><b>{member.name}</b><button type="button" className="link" onClick={() => setMember(null)}>تغییر</button></div>
-            : <><input placeholder="نام مشتری حضوری (اختیاری)، یا جستجوی عضو" value={mq} onChange={(e) => setMq(e.target.value)} />
-              {members.length > 0 && <div className="pick-list">{members.map((m) => <button type="button" key={m.id} onClick={() => { setMember(m); setMq('') }}><b>{m.name}</b><small dir="ltr">{m.phone}</small></button>)}</div>}</>}
-        </Field>
-        <Field label="روش پرداخت"><Seg value={method} onChange={setMethod} options={{ card: 'کارتخوان', cash: 'نقدی' }} /></Field>
-        <div className="dr-total"><span>{fa(lines.reduce((s, x) => s + x.qty, 0))} قلم</span><b>{toman(total)}</b></div>
-        <button className="adm-btn primary full" disabled={!ok} onClick={save}>{now && !to ? 'ثبت و تحویل' : 'ثبت و ارسال به آشپزخانه'}</button>
-      </>)}
+        {!items.length && <Empty>آیتمی پیدا نشد</Empty>}
+      </div>
+      <Ticket count={count} total={total} onClear={() => setCart([])} empty="روی آیتم‌های منو بزنید تا به فاکتور اضافه شوند."
+        disabled={!fits(ings, all, lines)} onSubmit={save} action={instant ? 'ثبت و تحویل' : 'ثبت و ارسال به آشپزخانه'}
+        warn={lack.length > 0 && <p className="pt-warn">کمبود در انبار: {lack.map(([g, d]) => `${g.name} ${fmtQty(g, d)}`).join('، ')}</p>}
+        options={<>
+          <Field label="تحویل"><div className="pick-chips sm">{[0, 1, 2, 3, 4].map((c) => <button key={c} type="button" className={to === c ? 'on' : ''} onClick={() => setTo(c)}>{c ? `زمین ${fa(c)}` : 'در کافه'}</button>)}</div></Field>
+          {!to && <Field label="آماده‌سازی"><Seg value={now ? 'now' : 'queue'} onChange={(v) => setNow(v === 'now')} options={{ queue: 'به صف آشپزخانه', now: 'تحویل همان لحظه' }} tips={{ queue: 'سفارش در ستون «در حال آماده‌سازی» می‌نشیند', now: 'برای آیتم آماده مثل آب و نوشابه؛ مستقیم تحویل‌شده ثبت می‌شود' }} /></Field>}
+          <CustomerField c={cu} />
+          <Field label="روش پرداخت"><Seg value={method} onChange={setMethod} options={{ card: 'کارتخوان', cash: 'نقدی' }} /></Field>
+        </>}>
+        {cart.map((x, i) => {
+          const it = all.find((y) => y.id === x.iid)
+          if (!it) return null
+          return (
+            <div key={i} className="pt-line">
+              <Dish it={it} />
+              <div className="grow"><b>{it.name}{x.big ? '، بزرگ' : ''}</b>
+                <select className="note-sel" value={x.note} onChange={(e) => setCart(cart.map((y, j) => (j === i ? { ...y, note: e.target.value } : y)))}><option value="">بدون توضیح</option>{NOTES.map((n) => <option key={n}>{n}</option>)}</select></div>
+              <div className="pt-r"><Qty qty={x.qty} onMinus={() => setQty(i, -1)} onPlus={() => setQty(i, 1)} canPlus={more(it, x.big) >= 1} /><b className="num">{toman(x.qty * priceOf(it, x.big))}</b></div>
+            </div>
+          )
+        })}
+      </Ticket>
     </div>
   )
 }

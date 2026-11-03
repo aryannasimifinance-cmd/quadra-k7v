@@ -372,8 +372,10 @@ export function StoreProvider({ children }) {
       },
       // فروش حضوری در پذیرش — تحویل همان لحظه
       adminPos(items, method, by) {
-        let order
+        let order = null
         club((c) => {
+          const enough = items.length > 0 && items.every((x) => x.qty > 0 && x.qty <= (c.products.find((p) => p.id === x.pid)?.variants.find((v) => v.sku === x.sku)?.stock || 0))
+          if (!enough) return c
           const lines = items.map((x) => { const p = c.products.find((y) => y.id === x.pid); return { ...x, price: p.price, cost: p.cost } })
           order = { id: 'Q-' + String(Date.now()).slice(-5), by: by || 'walkin', items: lines, total: lines.reduce((s, x) => s + x.qty * x.price, 0), method, status: 'delivered', source: 'desk', at: Date.now() }
           return { ...c, orders: [order, ...c.orders], products: takeStock(c.products, lines) }

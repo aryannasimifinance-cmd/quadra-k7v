@@ -38,6 +38,26 @@ export function usePage(list, size = 25) {
   return [list.slice(0, n), list.length > n ? () => setN(n + size) : null]
 }
 export const More = ({ more }) => more && <button className="adm-btn ghost full" onClick={more}>نمایش بیشتر</button>
+// صفحه‌بندی شماره‌دار برای فهرست‌های بلند؛ با عوض شدن فیلتر به صفحه‌ی اول برمی‌گردد
+export function useSlice(list, size = 20, reset = '') {
+  const [s, setS] = useState({ page: 0, reset })
+  const page = s.reset === reset ? s.page : 0
+  const pages = Math.max(1, Math.ceil(list.length / size))
+  const p = Math.min(page, pages - 1)
+  return { rows: list.slice(p * size, p * size + size), page: p, pages, from: p * size, setPage: (n) => setS({ page: n, reset }) }
+}
+export function Pager({ page, pages, setPage }) {
+  if (pages < 2) return null
+  // صفحه‌ی اول و آخر، و دو صفحه‌ی دور و بر صفحه‌ی فعلی
+  const nums = [...new Set([0, pages - 1, page - 2, page - 1, page, page + 1, page + 2])].filter((n) => n >= 0 && n < pages).sort((a, b) => a - b)
+  return (
+    <div className="pager">
+      <button className="adm-btn ghost sm" disabled={!page} onClick={() => setPage(page - 1)} aria-label="صفحه‌ی قبل"><Icon name="back" size={16} /></button>
+      {nums.map((n, i) => <span key={n}>{i > 0 && n - nums[i - 1] > 1 && <i>…</i>}<button className={n === page ? 'on' : ''} onClick={() => setPage(n)}>{fa(n + 1)}</button></span>)}
+      <button className="adm-btn ghost sm" disabled={page >= pages - 1} onClick={() => setPage(page + 1)} aria-label="صفحه‌ی بعد"><Icon name="fwd" size={16} /></button>
+    </div>
+  )
+}
 export const Empty = ({ children }) => <div className="adm-empty">{children}</div>
 
 // زبانه‌های داخلی هر بخش
@@ -70,13 +90,14 @@ export function PeriodBar({ p, setP, right }) {
 }
 
 // کشوی کناری عمومی
-export function Side({ open, onClose, title, children, wide }) {
+// size: wide برای فرم‌های پهن، till برای صندوق فروش حضوری (دو ستونه)
+export function Side({ open, onClose, title, children, wide, size }) {
   return (
     <AnimatePresence>
       {open && (
         <>
           <motion.div className="dr-dim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
-          <motion.aside className={`drawer ${wide ? 'wide' : ''}`} initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'spring', stiffness: 320, damping: 36 }}>
+          <motion.aside className={`drawer ${size || (wide ? 'wide' : '')}`} initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'spring', stiffness: 320, damping: 36 }}>
             <button className="dr-x" onClick={onClose} aria-label="بستن"><Icon name="close" /></button>
             <div className="dr">{title && <h2 className="dr-h">{title}</h2>}{children}</div>
           </motion.aside>
