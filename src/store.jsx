@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { COURTS, PACKAGES, levelById, productById, seedClub, setCatalog, setCoaches, setMembers, todayKey, variantOf, withCoaches } from './data'
+import { hoursOf, COURTS, PACKAGES, levelById, productById, seedClub, setCatalog, setCoaches, setMembers, todayKey, variantOf, withCoaches } from './data'
 import { makeVariants, nextCode } from './catalog'
 import { fits, nextIngCode, nextItemCode, placeCafe, receiveInto } from './cafe'
 import { jMonthLabel } from './jalali'
@@ -508,6 +508,7 @@ export function StoreProvider({ children }) {
           return { ...c, events: c.events.map((e) => (e.id === id ? next : e)), sales: c.sales.filter((s) => s.id !== reg?.sale) }
         })
       },
+      adminHours(h) { club((c) => ({ ...c, hours: h })) },
       adminPricing(p) { club((c) => ({ ...c, pricing: { ...c.pricing, ...p } })) },
       adminCourt(id, off) { club((c) => ({ ...c, off: { ...c.off, [id]: off } })) },
       // ---------- حسابداری ----------
@@ -568,12 +569,15 @@ export function busyOn(club, date, court) {
 }
 export function isFree(club, date, court, start, dur) {
   if (club.off[court]) return false
+  const { open, close } = hoursOf(club)
+  if (start < open || start + dur > close) return false
   return !busyOn(club, date, court).some((b) => start < b.start + b.dur && b.start < start + dur)
 }
-export function freeStarts(club, date, court, dur, from = 7, to = 24) {
+export function freeStarts(club, date, court, dur, from = 0, to = 24) {
+  const { open, close } = hoursOf(club)
   const now = new Date(), today = date === todayKey()
   const out = []
-  for (let h = Math.max(7, from); h + dur <= 24 && h < to; h += 1) {
+  for (let h = Math.max(open, from); h + dur <= close && h < to; h += 1) {
     if (today && h <= now.getHours() + now.getMinutes() / 60) continue
     if (isFree(club, date, court, h, dur)) out.push(h)
   }

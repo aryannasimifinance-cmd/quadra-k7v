@@ -1,7 +1,7 @@
 // وضعیت زنده‌ی ۴ زمین: الان چه کسی روی کدام زمین است؛ قابل جابه‌جایی روز به روز و ساعت به ساعت
 import { motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
-import { COURTS, TYPE_NAME, addDays, coachById, dayLabel, fa, fromKey, hourLabel, range, todayKey } from '../../data'
+import { COURTS, TYPE_NAME, addDays, hoursOf, coachById, dayLabel, fa, fromKey, hourLabel, range, todayKey } from '../../data'
 import { isFree, payState, useStore } from '../../store'
 import { jDateFa } from '../../jalali'
 import { SHIFTS, shiftOn } from '../../hr'
@@ -9,7 +9,6 @@ import { Icon } from '../../components/ui'
 import { STATUS, occupancy, who } from './derive'
 import { Seg } from './kit'
 
-const H0 = 7, H1 = 24
 export const TYPE_CLS = { private: 't-private', open: 't-open', coach: 't-coach', block: 't-block', event: 't-event' }
 const nowHour = () => { const n = new Date(); return n.getHours() + n.getMinutes() / 60 }
 const covering = (list, t) => list.find((b) => b.start <= t && t < b.start + b.dur)
@@ -18,6 +17,7 @@ const mins = (h) => { const m = Math.round(h * 60); return m >= 60 ? `${fa(Math.
 
 export function LiveCourts({ ctx }) {
   const { club, user } = useStore()
+  const { open: H0, close: H1 } = hoursOf(club)
   const [date, setDate] = useState(todayKey())
   const [hour, setHour] = useState(null) // null = زنده
   const [view, setView] = useState('cards')
@@ -144,6 +144,7 @@ function CourtArt({ state, type, players, user }) {
 // ---------- تایم‌لاین ۴ زمین ----------
 export function Timeline({ date, compact, onPick }) {
   const { club, user } = useStore()
+  const { open: H0, close: H1 } = hoursOf(club)
   const isToday = date === todayKey()
   const nowX = ((nowHour() - H0) / (H1 - H0)) * 100
   const past = (h) => fromKey(date) < fromKey(todayKey()) || (isToday && h + 1 <= nowHour())

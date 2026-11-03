@@ -1150,3 +1150,54 @@ button.trn-pl:hover { background: var(--paper2); }
 .cc-p.first { padding: 18px 6px; background: var(--q); color: var(--ink); }
 .cc-p.first i { font-size: 30px; }
 .cc-p.first small { color: rgba(20,20,19,.6); }
+
+/* ---------- اپ: نتیجه‌ی مسابقه‌ها (گروه‌ها و حذفی) ---------- */
+.ml { position: relative; display: grid; gap: 2px; padding: 8px 12px; border-radius: 14px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
+.ml-t { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; font-size: 13.5px; color: var(--ink2); }
+.ml-t span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ml-t.win { color: var(--ink); font-weight: 800; }
+.ml-t.win span::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--q); margin-inline-end: 7px; vertical-align: middle; }
+.ml-t.tbd { color: var(--muted); font-style: italic; }
+.ml-t + .ml-t { border-top: 1px dashed var(--line); }
+.ml-s { display: flex; gap: 4px; flex-shrink: 0; }
+.ml-s b { min-width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; font-weight: 600; background: var(--paper); color: var(--muted); font-variant-numeric: tabular-nums; }
+.ml-s b.w { background: var(--ink); color: var(--q); font-weight: 800; }
+.ml-s b.none { background: transparent; }
+.ml-c { position: absolute; top: -8px; inset-inline-end: 12px; font-size: 10px; padding: 1px 8px; border-radius: 99px; background: var(--paper2); color: var(--ink2); }
+.ml.final { box-shadow: inset 0 0 0 1.5px #E7C55A; background: #FFFBEF; }
+.ml.bye { opacity: .7; } .ml.bye small { font-size: 11px; color: var(--muted); }
+
+.ag { display: grid; gap: 12px; }
+.ag-g { padding: 12px; border-radius: 18px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
+.ag-g header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ag-g header span { width: 28px; height: 28px; border-radius: 9px; background: var(--ink); color: var(--q); display: grid; place-items: center; font-weight: 800; }
+.ag-g header b { font-size: 15px; }
+.ag-g header small { margin-inline-start: auto; font-size: 11px; color: var(--muted); }
+.ag-h, .ag-r { display: grid; grid-template-columns: 22px minmax(0, 1fr) 44px 38px 46px; align-items: center; gap: 6px; padding: 7px 6px; font-size: 13px; }
+.ag-h { font-size: 10.5px; color: var(--muted); }
+.ag-h em, .ag-r em { font-style: normal; text-align: center; color: var(--muted); }
+.ag-h span, .ag-r span, .ag-h strong, .ag-r strong { text-align: center; font-variant-numeric: tabular-nums; }
+.ag-h b { font-weight: 500; }
+.ag-r { border-radius: 10px; }
+.ag-r b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ag-r strong { font-weight: 800; }
+.ag-r.up { background: var(--q-soft); }
+.ag-r.up em { color: var(--q-ink); font-weight: 800; }
+.ag-more { width: 100%; margin-top: 8px; height: 36px; border-radius: 12px; background: var(--paper); font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+.ag-ms { display: grid; gap: 10px; margin-top: 10px; }
+
+.kb { position: relative; display: grid; gap: 16px; padding-inline-start: 18px; }
+.kb::before { content: ''; position: absolute; top: 10px; bottom: 30px; inset-inline-start: 5px; width: 2px; background: var(--line); border-radius: 2px; }
+.kb-r h4 { position: relative; display: flex; align-items: baseline; gap: 8px; font-size: 14px; margin-bottom: 8px; }
+.kb-r h4 i { position: absolute; inset-inline-start: -18px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--card); box-shadow: inset 0 0 0 2.5px var(--q-ink); }
+.kb-r h4 small { font-size: 11px; color: var(--muted); font-weight: 500; }
+.kb-r.final h4 i { box-shadow: inset 0 0 0 2.5px #D9A920; }
+.kb-r.champ h4 i { background: var(--q); box-shadow: none; }
+.kb-ms { display: grid; gap: 10px; }
+.kb-champ { display: grid; justify-items: center; gap: 4px; padding: 18px; border-radius: 18px; background: var(--paper2); color: var(--muted); text-align: center; }
+.kb-champ span { font-size: 30px; filter: grayscale(1); opacity: .5; }
+.kb-champ.on { background: var(--night); color: #fff; background-image: radial-gradient(circle at 50% 0%, rgba(5,224,218,.25), transparent 65%); }
+.kb-champ.on span { filter: none; opacity: 1; }
+.kb-champ b { font-size: 16px; }
+.kb-champ small { font-size: 11.5px; color: rgba(255,255,255,.6); }
+.ag-more { text-align: center; }

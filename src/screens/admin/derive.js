@@ -1,4 +1,4 @@
-import { COACHES, COACH_PACKS, COURTS, MEMBERS, ratingOf, shownReviews, addDays, dayMonth, coachById, courtById, fromKey, memberById, productById, range, todayKey } from '../../data'
+import { COACHES, COACH_PACKS, COURTS, hoursOf, MEMBERS, ratingOf, shownReviews, addDays, dayMonth, coachById, courtById, fromKey, memberById, productById, range, todayKey } from '../../data'
 import { ME, payState } from '../../store'
 
 export const SERIES = [
@@ -55,7 +55,8 @@ export function revenueByDay(pays, days = 30) {
 
 export function occupancy(club, date, court) {
   const hrs = club.bookings.filter((b) => b.date === date && b.status !== 'cancelled' && (!court || b.court === court)).reduce((s, b) => s + b.dur, 0)
-  return hrs / (OPEN_H * (court ? 1 : COURTS.length))
+  const { open, close } = hoursOf(club)
+  return hrs / ((close - open || OPEN_H) * (court ? 1 : COURTS.length))
 }
 
 // میانگین اشغال ۴ هفته‌ی اخیر — روز هفته × ساعت

@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Component, useEffect, useMemo, useState } from 'react'
 import {
   COACHES, COURTS, DURATIONS, MEMBERS, METHOD_NAME, TYPE_NAME, addDays, coachById, courtById, dayLabel, dayMonth, fa, fromKey,
-  hourLabel, mil, priceFor, EV_IMG, plainMoney, range, short, stockOf, toman, todayKey, weekdayShort, dayNum,
+  hourLabel, mil, priceFor, EV_IMG, plainMoney, hoursOf, range, short, stockOf, toman, todayKey, weekdayShort, dayNum,
 } from '../../data'
 import { chime } from '../../fx'
 import { isFree, payState, useStore } from '../../store'
@@ -340,9 +340,10 @@ function NewBooking({ d, onClose }) {
   const price = f.type === 'event' && f.total != null ? f.total : base
   const coachClash = f.type === 'coach' && club.bookings.some((b) => b.coach === f.coach && b.date === f.date && b.status !== 'cancelled' && f.start < b.start + b.dur && b.start < f.start + f.dur)
   const taken = fresh.filter((c) => !isFree(club, f.date, c, S, D))
-  const free = fresh.length > 0 && !taken.length && S + D <= 24 && !coachClash
+  const { open, close } = hoursOf(club)
+  const free = fresh.length > 0 && !taken.length && S >= open && S + D <= close && !coachClash
   const matches = MEMBERS.filter((m) => !m.inactive && (!f.q || m.name.includes(f.q) || m.phone.includes(f.q))).slice(0, 6)
-  const times = []; for (let h = 7; h < 24; h += 1) times.push(h)
+  const times = []; for (let h = open; h < close; h += 1) times.push(h)
   const pickType = (type) => set({ type, total: null, ...(type === 'friday' ? { courts: [1, 2, 3, 4], ...(sameDay.length ? {} : { start: 9, dur: 3 }) } : type === 'event' ? { courts: [f.court] } : {}) })
   const togCourt = (c) => set({ courts: f.courts.includes(c) ? f.courts.filter((x) => x !== c) : [...f.courts, c].sort() })
   const where = courts.length === 4 ? 'همه‌ی زمین‌ها' : courts.map((c) => courtById(c).name).join('، ')
@@ -375,7 +376,7 @@ function NewBooking({ d, onClose }) {
           <label>تاریخ<select value={f.date} onChange={(e) => set({ date: e.target.value, evId: null })}>{Array.from({ length: 28 }, (_, i) => addDays(todayKey(), i - 3)).map((k) => <option key={k} value={k}>{dayLabel(k)} {dayMonth(fromKey(k))}</option>)}</select></label>
           <label>ساعت شروع<select disabled={!!target} value={S} onChange={(e) => set({ start: +e.target.value })}>{times.map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select></label>
         </div>
-        {multi ? <label>تا ساعت<select disabled={!!target} value={S + D} onChange={(e) => set({ dur: +e.target.value - S })}>{Array.from({ length: 24 - S }, (_, i) => S + i + 1).map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select></label>
+        {multi ? <label>تا ساعت<select disabled={!!target} value={S + D} onChange={(e) => set({ dur: +e.target.value - S })}>{Array.from({ length: Math.max(1, close - S) }, (_, i) => S + i + 1).map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select></label>
           : <label>مدت<div className="seg-adm">{DURATIONS.map((x) => <button key={x.h} className={f.dur === x.h ? 'on' : ''} onClick={() => set({ dur: x.h })}>{x.name}</button>)}</div></label>}
         {target && <small className="muted">ساعت همان آدینه است ({range(S, D)})؛ زمین‌های ✓ از قبل مال آدینه‌اند.</small>}
         {f.type === 'coach' && <label>مربی<select value={f.coach} onChange={(e) => set({ coach: e.target.value })}>{COACHES.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
@@ -388,7 +389,7 @@ function NewBooking({ d, onClose }) {
         </>) : <label>توضیح<input placeholder="مثلاً تعویض چمن" value={f.note} onChange={(e) => set({ note: e.target.value })} /></label>}
       </div>
       <div className="dr-total"><span>{where || 'زمینی انتخاب نشده'}، {range(S, D)}</span><b>{f.type === 'friday' ? 'ورودی با ثبت‌نام' : toman(price)}</b></div>
-      {!free && <p className="cancelled">{coachClash ? `${coachById(f.coach).name} در این ساعت کلاس دیگری دارد.` : !courts.length ? 'حداقل یک زمین انتخاب کنید.' : !fresh.length ? 'این زمین‌ها از قبل مال همین آدینه‌اند.' : `این بازه روی ${taken.map((c) => courtById(c).name).join('، ')} آزاد نیست.`}</p>}
+      {!free && <p className="cancelled">{coachClash ? `${coachById(f.coach).name} در این ساعت کلاس دیگری دارد.` : !courts.length ? 'حداقل یک زمین انتخاب کنید.' : !fresh.length ? 'این زمین‌ها از قبل مال همین آدینه‌اند.' : S < open || S + D > close ? `خارج از ساعت کاری مجموعه است (${hourLabel(open)} تا ${hourLabel(close)}).` : `این بازه روی ${taken.map((c) => courtById(c).name).join('، ')} آزاد نیست.`}</p>}
       <button className="adm-btn primary full" disabled={!free} onClick={save}>{f.type === 'friday' ? (target ? 'افزودن زمین به آدینه' : 'ساخت آدینه') : f.type === 'event' ? 'ثبت ایونت' : 'ثبت رزرو'}</button>
     </div>
   )

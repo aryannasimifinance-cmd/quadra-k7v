@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   COACHES, COACH_PACKS, COURTS, LEVELS, MEMBERS, METHOD_NAME, PACKAGES, TYPE_NAME, coachById, coachPackPrice, courtById, dayLabel, dayMonth, fa, fromKey,
-  hourLabel, levelById, memberById, priceFor, productById, range, short, toman, todayKey,
+  hourLabel, hoursOf, levelById, memberById, priceFor, productById, range, short, toman, todayKey,
 } from '../../data'
 import { chime } from '../../fx'
 import { ME, payState, useStore } from '../../store'
@@ -424,6 +424,30 @@ function CoachForm({ co, from, onClose }) {
   )
 }
 
+// ساعت کاری: همه‌ی بازه‌های رزرو، تقویم، اپ و داشبورد از همین دو ساعت ساخته می‌شوند
+function HoursCard() {
+  const { club, adminHours, toast } = useStore()
+  const [h, setH] = useState(hoursOf(club))
+  const today = todayKey()
+  const outside = club.bookings.filter((b) => b.status !== 'cancelled' && !b.event && fromKey(b.date) >= fromKey(today) && (b.start < h.open || b.start + b.dur > h.close))
+  const changed = h.open !== hoursOf(club).open || h.close !== hoursOf(club).close
+  const save = () => { adminHours(h); chime('success'); toast({ icon: '🕘', title: 'ساعت کاری ذخیره شد', body: `${hourLabel(h.open)} تا ${hourLabel(h.close)}؛ رزرو در اپ و پذیرش فقط در همین ساعت‌ها` }) }
+  return (
+    <Card title="ساعت کاری مجموعه" sub="رزرو در اپ و پذیرش، تقویم زمین‌ها و درصد پر بودن بر اساس همین ساعت‌ها">
+      <div className="form">
+        <div className="form-2">
+          <label>شروع فعالیت<select value={h.open} onChange={(e) => setH({ ...h, open: +e.target.value })}>{Array.from({ length: 9 }, (_, i) => i + 5).filter((x) => x < h.close - 1).map((x) => <option key={x} value={x}>{hourLabel(x)}</option>)}</select></label>
+          <label>پایان فعالیت<select value={h.close} onChange={(e) => setH({ ...h, close: +e.target.value })}>{Array.from({ length: 9 }, (_, i) => i + 16).filter((x) => x > h.open + 1).map((x) => <option key={x} value={x}>{x === 24 ? '۲۴:۰۰ (نیمه‌شب)' : hourLabel(x)}</option>)}</select></label>
+        </div>
+        <div className="hours-bar" aria-hidden="true">{Array.from({ length: 19 }, (_, i) => i + 5).map((x) => <i key={x} className={x >= h.open && x < h.close ? 'on' : ''} title={hourLabel(x)} />)}</div>
+        <p className="muted small">هر روز {fa(h.close - h.open)} ساعت؛ {hourLabel(h.open)} تا {h.close === 24 ? 'نیمه‌شب' : hourLabel(h.close)}.</p>
+        {outside.length > 0 && <p className="pt-warn">{fa(outside.length)} رزرو پیش‌رو بیرون از این ساعت‌هاست؛ سر جایشان می‌مانند، ولی رزرو تازه در آن ساعت‌ها گرفته نمی‌شود.</p>}
+        <button className="adm-btn primary" disabled={!changed} onClick={save}>ذخیره‌ی ساعت کاری</button>
+      </div>
+    </Card>
+  )
+}
+
 export function Settings() {
   const { club, adminPricing, adminCourt, resetDemo, toast } = useStore()
   const [p, setP] = useState(club.pricing)
@@ -445,6 +469,7 @@ export function Settings() {
         </div>
       </Card>
       <div className="stack">
+        <HoursCard />
         <Card title="وضعیت زمین‌ها" sub="زمین غیرفعال در اپ قابل رزرو نیست">
           <div className="courts-set">
             {COURTS.map((c) => (

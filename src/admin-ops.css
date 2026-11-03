@@ -1322,3 +1322,55 @@ input.pb-cell.at:focus { background: var(--card); box-shadow: 0 0 0 1.5px var(--
 .ti-ch .secret { justify-content: space-between; width: 100%; }
 .adm-card-h small .secret .eye { width: 22px; height: 22px; border-radius: 7px; }
 .adm-card-h small .secret .eye svg { width: 13px; height: 13px; }
+
+/* تنظیمات: نوار ساعت کاری */
+.hours-bar { display: grid; grid-template-columns: repeat(19, 1fr); gap: 3px; direction: rtl; }
+.hours-bar i { height: 14px; border-radius: 4px; background: var(--paper2); }
+.hours-bar i.on { background: var(--q-ink); }
+
+/* ---------- فرم آدینه: بخش‌های شماره‌دار، ذخیره‌ی ثابت پایین ---------- */
+.ef { display: grid; gap: 12px; }
+.efs { border-radius: 18px; background: var(--card); box-shadow: 0 0 0 1px var(--line); overflow: hidden; }
+.efs > header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); background: var(--paper); }
+.efs > header i { width: 26px; height: 26px; border-radius: 8px; background: var(--ink); color: var(--q); display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 13px; flex-shrink: 0; }
+.efs > header div { display: grid; }
+.efs > header b { font-size: 14px; }
+.efs > header small { font-size: 11.5px; color: var(--muted); }
+.efs-b { display: grid; gap: 12px; padding: 14px; }
+.ef-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ef-kinds button { display: grid; grid-template-columns: 34px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; padding: 12px; border-radius: 14px; text-align: right; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); }
+.ef-kinds button i { grid-row: span 2; font-style: normal; font-size: 22px; }
+.ef-kinds button b { font-size: 13.5px; }
+.ef-kinds button small { font-size: 11px; color: var(--muted); }
+.ef-kinds button.on { background: var(--card); box-shadow: inset 0 0 0 2px var(--ink); }
+.ef-days { display: flex; gap: 6px; flex-wrap: wrap; }
+.ef-days > button { display: grid; justify-items: center; width: 62px; padding: 6px 0; border-radius: 14px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); line-height: 1.3; }
+.ef-days > button b { font-size: 19px; }
+.ef-days > button small { font-size: 10.5px; color: var(--muted); }
+.ef-days > button.on { background: var(--ink); color: #fff; box-shadow: none; }
+.ef-days > button.on b { color: var(--q); }
+.ef-days > button.on small { color: rgba(255,255,255,.6); }
+.ef-other { display: grid; gap: 2px; align-content: center; flex: 1; min-width: 150px; padding: 6px 10px; border-radius: 14px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); }
+.ef-other.on { box-shadow: inset 0 0 0 2px var(--ink); background: var(--card); }
+.ef-other small { font-size: 10.5px; color: var(--muted); }
+.ef-other input { border: 0; background: transparent; padding: 0; height: 26px; font: inherit; font-size: 13px; box-shadow: none; }
+.ef-courts { display: grid; grid-template-columns: repeat(4, 1fr) auto; gap: 6px; }
+.ef-courts button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 40px; border-radius: 12px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+.ef-courts button i { width: 14px; height: 10px; border-radius: 3px; box-shadow: inset 0 0 0 1.5px currentColor; }
+.ef-courts button.on { background: var(--q-soft); color: var(--q-ink); box-shadow: inset 0 0 0 1.5px var(--q-ink); }
+.ef-courts button.on i { background: currentColor; }
+.ef-courts .ef-all { padding: 0 12px; background: transparent; box-shadow: none; color: var(--muted); font-weight: 500; }
+.ef-sum { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 12px; background: var(--paper); font-size: 12.5px; color: var(--ink2); }
+.num-step.wide { display: flex; justify-content: space-between; height: 42px; }
+.num-step.wide b { font-size: 14px; }
+.ef-imgs { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; }
+.ef-imgs button { aspect-ratio: 1.5; border-radius: 10px; background-size: cover; background-position: center; opacity: .6; transition: opacity .12s; }
+.ef-imgs button:hover { opacity: .9; }
+.ef-imgs button.on { opacity: 1; box-shadow: 0 0 0 3px var(--ink); }
+.ef-foot { position: sticky; bottom: -1px; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin: 4px -4px 0; border-radius: 16px; background: var(--ink); color: #fff; box-shadow: 0 -8px 24px rgba(20,20,19,.12); }
+.ef-foot span { flex: 1; display: grid; min-width: 0; }
+.ef-foot b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ef-foot small { font-size: 11.5px; color: rgba(255,255,255,.6); }
+.ef-foot .adm-btn.primary { background: var(--q); color: var(--ink); height: 42px; padding: 0 20px; }
+.ef-foot .adm-btn.primary:disabled { opacity: .4; }
+@media (max-width: 560px) { .ef-kinds, .ef-courts { grid-template-columns: 1fr 1fr; } }

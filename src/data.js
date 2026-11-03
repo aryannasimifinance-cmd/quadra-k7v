@@ -6,6 +6,9 @@ export const CLUB = {
   address: 'تهران — آدرس نمونه', phone: '۰۲۱ ۰۰۰۰ ۰۰۰۰', open: 7, close: 24,
 }
 
+// ساعت کاری مجموعه؛ مدیر در تنظیمات عوض می‌کند (۲۴ یعنی تا نیمه‌شب)
+export const hoursOf = (club) => club?.hours || { open: CLUB.open, close: CLUB.close }
+
 export const COURTS = [
   { id: 1, name: 'زمین ۱', kind: 'پانورامیک', indoor: true, img: img('court-pano') },
   { id: 2, name: 'زمین ۲', kind: 'پانورامیک', indoor: true, img: img('court-indoor') },

@@ -76,54 +76,65 @@ export function Match({ ev, m, onScore }) {
   )
 }
 
-export function Groups({ ev, onScore }) {
+// نتیجه‌ی یک بازی برای اپ: دو ردیف، کنار هر تیم گیم‌های هر ست؛ برنده پررنگ
+function MatchLine({ ev, m, final }) {
+  const sets = setsOf(m), w = winnerOf(m)
+  if (m.b == null) return <div className="ml bye"><b>{teamName(ev, m.a)}</b><small>استراحت؛ مستقیم به دور بعد</small></div>
+  const side = (id, t) => (
+    <div className={`ml-t ${w && w === id ? 'win' : ''} ${!id ? 'tbd' : ''}`}>
+      <span>{id ? teamName(ev, id) : 'منتظر نتیجه'}</span>
+      <div className="ml-s">{sets.length ? sets.map((s, i) => <b key={i} className={s[t] > s[1 - t] ? 'w' : ''}>{fa(s[t])}</b>) : <b className="none">–</b>}</div>
+    </div>
+  )
+  return <div className={`ml ${scored(m) ? 'done' : ''} ${final ? 'final' : ''}`}>{side(m.a, 0)}{side(m.b, 1)}{m.court && <small className="ml-c">زمین {fa(m.court)}</small>}</div>
+}
+
+// گروه‌ها در اپ: جدول ساده و بازی‌های هر گروه
+export function Groups({ ev }) {
+  const [open, setOpen] = useState(null)
   if (!ev.groups.length) return null
+  const adv = ev.setup?.advance || (ev.groups.length === 1 ? 4 : 2)
   return (
-    <div className="trn-groups">
-      {ev.groups.map((g) => (
-        <div key={g.id} className="trn-group" style={{ '--h': (ev.groups.indexOf(g) * 57) % 360 }}>
-          <h4><span className="trn-gl">{g.id}</span>گروه {g.id}</h4>
-          <table className="trn-table">
-            <thead><tr><th>#</th><th>تیم</th><th>بازی</th><th>برد</th><th>ست</th><th>گیم</th><th>امتیاز</th></tr></thead>
-            <tbody>{standings(ev, g.id).map((r, i) => (
-              <tr key={r.id} className={i < (ev.setup?.advance || (ev.groups.length === 1 ? 4 : 2)) ? 'up' : ''}><td>{fa(i + 1)}</td><td>{r.name}{i < (ev.setup?.advance || (ev.groups.length === 1 ? 4 : 2)) && <em className="trn-up">صعود</em>}</td><td>{fa(r.p)}</td><td>{fa(r.w)}</td><td dir="ltr">{r.sf - r.sa > 0 ? '+' : ''}{fa(r.sf - r.sa)}</td><td dir="ltr">{r.gf - r.ga > 0 ? '+' : ''}{fa(r.gf - r.ga)}</td><td><b>{fa(r.w)}</b></td></tr>
-            ))}</tbody>
-          </table>
-          <div className="trn-ms">{ev.matches.filter((m) => m.stage === 'group' && m.group === g.id).map((m) => <Match key={`${m.id}-${m.a}-${m.b}`} ev={ev} m={m} onScore={onScore} />)}</div>
-        </div>
-      ))}
+    <div className="ag">
+      {ev.groups.map((g) => {
+        const ms = ev.matches.filter((m) => m.stage === 'group' && m.group === g.id)
+        return (
+          <section key={g.id} className="ag-g">
+            <header><span>{g.id}</span><b>گروه {g.id}</b><small>{fa(adv)} تیم اول صعود می‌کند</small></header>
+            <div className="ag-h"><em>#</em><b>تیم</b><span>برد</span><span>ست</span><strong>امتیاز</strong></div>
+            {standings(ev, g.id).map((r, i) => (
+              <div key={r.id} className={`ag-r ${i < adv ? 'up' : ''}`}>
+                <em>{fa(i + 1)}</em><b>{r.name}</b><span>{fa(r.w)}–{fa(r.l)}</span><span dir="ltr">{r.sf - r.sa > 0 ? '+' : ''}{fa(r.sf - r.sa)}</span><strong>{fa(r.w)}</strong>
+              </div>
+            ))}
+            {ms.length > 0 && <button type="button" className="ag-more" onClick={() => setOpen(open === g.id ? null : g.id)}>{open === g.id ? 'بستن بازی‌ها' : `${fa(ms.length)} بازی این گروه`}</button>}
+            {open === g.id && <div className="ag-ms">{ms.map((m) => <MatchLine key={m.id} ev={ev} m={m} />)}</div>}
+          </section>
+        )
+      })}
     </div>
   )
 }
 
-// جدول حذفی: هر دو بازی با یک براکت به بازی دور بعد وصل می‌شوند و مسیر به کارت قهرمان می‌رسد
-export function Bracket({ ev, onScore }) {
+// جدول حذفی در اپ: دورها زیر هم، از اولین دور تا فینال و قهرمان
+export function Bracket({ ev }) {
   const rounds = koRounds(ev)
   if (!rounds.length) return null
   const p = podium(ev)
   return (
-    <div className="br">
+    <div className="kb">
       {rounds.map((r) => {
         const ms = ev.matches.filter((m) => m.stage === 'ko' && m.round === r).sort((x, y) => x.idx - y.idx)
-        const pairs = []
-        for (let i = 0; i < ms.length; i += 2) pairs.push(ms.slice(i, i + 2))
         return (
-          <div key={r} className={`br-round ${r === 2 ? 'final' : ''}`}>
-            <h4>{ROUND[r] || `دور ${fa(r)} تیمی`}<small>{fa(ms.filter((m) => winnerOf(m)).length)} از {fa(ms.length)}</small></h4>
-            <div className="br-col">
-              {pairs.map((pr, i) => (
-                <div key={i} className={`br-pair ${pr.length === 2 ? 'two' : ''}`}>
-                  {pr.map((m) => <Match key={`${m.id}-${m.a}-${m.b}`} ev={ev} m={m} onScore={onScore} />)}
-                </div>
-              ))}
-            </div>
-          </div>
+          <section key={r} className={`kb-r ${r === 2 ? 'final' : ''}`}>
+            <h4><i />{ROUND[r] || `دور ${fa(r)} تیمی`}<small>{fa(ms.filter((m) => winnerOf(m)).length)} از {fa(ms.length)} بازی</small></h4>
+            <div className="kb-ms">{ms.map((m) => <MatchLine key={m.id} ev={ev} m={m} final={r === 2} />)}</div>
+          </section>
         )
       })}
-      <div className="br-round champ">
-        <h4>قهرمان</h4>
-        <div className="br-col"><div className={`br-champ ${p ? 'on' : ''}`}><i>🏆</i><b>{p ? teamName(ev, p.first) : '؟'}</b><small>{p ? 'قهرمان مسابقه' : 'بعد از فینال مشخص می‌شود'}</small></div></div>
-      </div>
+      <section className="kb-r champ"><h4><i />قهرمان</h4>
+        <div className={`kb-champ ${p ? 'on' : ''}`}><span>🏆</span><b>{p ? teamName(ev, p.first) : 'بعد از فینال مشخص می‌شود'}</b>{p && <small>نایب‌قهرمان: {teamName(ev, p.second)}</small>}</div>
+      </section>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 // آدینه‌ها و تورنمنت‌ها: تعریف مسابقه، ثبت‌نام‌های دونفره، تیم‌بندی، طراحی گروه‌ها، مرحله‌ی حذفی، برنده‌ها، ورودی‌ها و فروش کافه‌ی روز مسابقه
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { EVENT_KIND, EV_IMG, LEVELS, MEMBERS, METHOD_NAME, levelById, dayLabel, fa, fromKey, hourLabel, short, toman, todayKey } from '../../data'
+import { EVENT_KIND, EV_IMG, LEVELS, MEMBERS, METHOD_NAME, addDays, hoursOf, levelById, dayLabel, fa, fromKey, hourLabel, short, toman, todayKey } from '../../data'
 import {
   EV_FORMAT, EV_STATUS, GROUP_IDS, ROUND, SCORING, addGroup, dropGroup, emptyGroups, fillGroups, scored, scoringOf, setsOf, cafeOf, clashes, entryTotal, eventAt, fillTeams, finished, groupsDone, isLive, loosePairs, withPairs, koRounds, makeGroups, makeKnockout, makeTeams, moveTeam, pairUp, plan, podium, regPower, setScore, showsResults, singles, standings, teamName, unpair, upcoming,
 } from '../../events'
@@ -605,14 +605,26 @@ const toInput = (k) => { const [y, m, d] = k.split('-'); return `${y}-${m.padSta
 const fromInput = (v) => { const [y, m, d] = v.split('-').map(Number); return `${y}-${m}-${d}` }
 function nextFriday() { const d = new Date(); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7 || 7)); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}` }
 
+// فرم مسابقه در پنج بخش مرتب؛ دکمه‌ی ذخیره همیشه پایین فرم دیده می‌شود
+const KINDS = { friday: ['☀️', 'مسابقه‌ی آدینه', 'هر جمعه، دوستانه'], official: ['🏆', 'تورنمنت رسمی', 'امتیاز رنکینگ، جایزه'] }
+const KIND_DEF = {
+  friday: { title: 'آدینه‌ی کوادرا', desc: 'تیم‌های دونفره، گروهی + حذفی', start: 9, dur: 3, cap: 16, fee: 750000, prize: 'راکت + توپ', levels: ['B', 'C+', 'C'], scoring: 'set6' },
+  official: { title: 'تورنمنت کوادرا', desc: 'گروهی + حذفی، امتیاز رنکینگ', start: 10, dur: 8, cap: 32, fee: 1500000, prize: 'جایزه‌ی نقدی + جام', levels: ['A', 'B+', 'B', 'C+'], scoring: 'bo3' },
+}
+const Sec = ({ n, title, sub, children }) => (
+  <section className="efs"><header><i>{fa(n)}</i><div><b>{title}</b>{sub && <small>{sub}</small>}</div></header><div className="efs-b">{children}</div></section>
+)
+
 function EventForm({ ev, onClose }) {
   const { club, adminEventSave, toast } = useStore()
-  const [f, setF] = useState(() => ev || { kind: 'friday', title: 'آدینه‌ی کوادرا', desc: 'تیم‌های دونفره، گروهی + حذفی', format: 'groups', date: nextFriday(), start: 9, dur: 3, courts: [1, 2, 3, 4], levels: ['B', 'C+', 'C'], cap: 16, fee: 750000, prize: 'راکت + توپ', img: EV_IMG[0], status: 'open', note: '' })
+  const { open, close } = hoursOf(club)
+  const [f, setF] = useState(() => ev || { kind: 'friday', ...KIND_DEF.friday, format: 'groups', date: nextFriday(), courts: [1, 2, 3, 4], img: EV_IMG[0], status: 'open', note: '' })
   const set = (p) => setF((x) => ({ ...x, ...p }))
   const tog = (k, v) => set({ [k]: f[k].includes(v) ? f[k].filter((x) => x !== v) : [...f[k], v].sort() })
   const same = eventAt(club.events.filter((e) => e.id !== ev?.id), fromKey(f.date).getTime() + f.start * 36e5)
   const busy = clashes(club.bookings, { ...f, id: ev?.id }).filter((b) => !b.event)
   const custom = f.img && !EV_IMG.includes(f.img)
+  const fridays = Array.from({ length: 35 }, (_, i) => addDays(todayKey(), i + 1)).filter((k) => fromKey(k).getDay() === 5).slice(0, 4)
   const ok = f.title.trim() && f.date && f.cap > 1 && f.courts.length && f.levels.length
   const save = () => {
     const s = adminEventSave({ ...f, title: f.title.trim(), id: ev?.id })
@@ -620,41 +632,61 @@ function EventForm({ ev, onClose }) {
     onClose(s.id)
   }
   return (
-    <div className="form">
-      <Field label="نوع"><Seg value={f.kind} onChange={(kind) => set({ kind, ...(ev ? {} : kind === 'official' ? { title: 'تورنمنت کوادرا', desc: 'گروهی + حذفی، امتیاز رنکینگ', start: 10, dur: 8, cap: 32, fee: 1500000, prize: 'جایزه‌ی نقدی + جام', levels: ['A', 'B+', 'B', 'C+'], scoring: 'bo3' } : { title: 'آدینه‌ی کوادرا', desc: 'تیم‌های دونفره، گروهی + حذفی', start: 9, dur: 3, cap: 16, fee: 750000, scoring: 'set6' }) })} options={{ friday: 'مسابقه‌ی آدینه', official: 'تورنمنت رسمی' }} /></Field>
-      <Field label="اسم مسابقه"><input value={f.title} onChange={(e) => set({ title: e.target.value })} placeholder="مثلاً آدینه‌ی بانوان" /></Field>
-      <Field label="توضیح کوتاه" hint="زیر اسم در اپ نشان داده می‌شود"><input value={f.desc} onChange={(e) => set({ desc: e.target.value })} /></Field>
+    <div className="ef">
+      <Sec n={1} title="چه مسابقه‌ای؟">
+        <div className="ef-kinds">{Object.entries(KINDS).map(([k, [ic, n, d]]) => (
+          <button key={k} type="button" className={f.kind === k ? 'on' : ''} onClick={() => set({ kind: k, ...(ev ? {} : KIND_DEF[k]) })}><i>{ic}</i><b>{n}</b><small>{d}</small></button>
+        ))}</div>
+        <Field label="اسم مسابقه"><input value={f.title} onChange={(e) => set({ title: e.target.value })} placeholder="مثلاً آدینه‌ی بانوان" /></Field>
+        <Field label="توضیح کوتاه" hint="زیر اسم در اپ"><input value={f.desc} onChange={(e) => set({ desc: e.target.value })} /></Field>
+      </Sec>
 
-      <h4 className="form-sec">روز، ساعت و زمین‌ها <small>همین ساعت‌ها در تقویم برای مسابقه رزرو می‌شود</small></h4>
-      <div className="form-3">
-        <Field label="روز" hint={`${dayLabel(f.date)} ${jDateFa(f.date)}`}><input type="date" value={toInput(f.date)} onChange={(e) => e.target.value && set({ date: fromInput(e.target.value) })} /></Field>
-        <Field label="از ساعت"><select value={f.start} onChange={(e) => set({ start: +e.target.value })}>{Array.from({ length: 16 }, (_, i) => i + 7).map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select></Field>
-        <Field label="تا ساعت"><select value={f.start + f.dur} onChange={(e) => set({ dur: +e.target.value - f.start })}>{Array.from({ length: 24 - f.start }, (_, i) => f.start + i + 1).map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select></Field>
+      <Sec n={2} title="کی و کجا؟" sub="همین ساعت‌ها روی زمین‌های انتخابی برای مسابقه بسته می‌شود">
+        <div className="ef-days">
+          {fridays.map((k) => <button key={k} type="button" className={f.date === k ? 'on' : ''} onClick={() => set({ date: k })}><small>{dayLabel(k)}</small><b>{fa(+jDate(k).split('/')[2])}</b><small>{jMonthLabel(jMonthKey(k)).split(' ')[0]}</small></button>)}
+          <label className={`ef-other ${fridays.includes(f.date) ? '' : 'on'}`}><small>روز دیگر</small><input type="date" value={toInput(f.date)} onChange={(e) => e.target.value && set({ date: fromInput(e.target.value) })} /></label>
+        </div>
+        <div className="form-2">
+          <Field label="از ساعت"><select value={f.start} onChange={(e) => { const start = +e.target.value; set({ start, dur: Math.min(f.dur, close - start) || 1 }) }}>{Array.from({ length: close - open }, (_, i) => open + i).map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select></Field>
+          <Field label="تا ساعت"><select value={f.start + f.dur} onChange={(e) => set({ dur: +e.target.value - f.start })}>{Array.from({ length: Math.max(1, close - f.start) }, (_, i) => f.start + i + 1).map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select></Field>
+        </div>
+        <div className="ef-courts">
+          {[1, 2, 3, 4].map((c) => <button key={c} type="button" className={f.courts.includes(c) ? 'on' : ''} onClick={() => tog('courts', c)}><i />زمین {fa(c)}</button>)}
+          <button type="button" className="ef-all" onClick={() => set({ courts: f.courts.length === 4 ? [] : [1, 2, 3, 4] })}>{f.courts.length === 4 ? 'هیچ‌کدام' : 'همه'}</button>
+        </div>
+        <p className="ef-sum"><Icon name="cal" size={15} />{f.courts.length ? `${dayLabel(f.date)} ${jDateFa(f.date)}، ${hourLabel(f.start)} تا ${hourLabel(f.start + f.dur)}، ${courtsText(f.courts)}` : 'حداقل یک زمین انتخاب کنید.'}</p>
+        {busy.length > 0 && <p className="pt-warn">{fa(busy.length)} رزرو در همین ساعت هست ({busy.slice(0, 3).map((b) => `زمین ${fa(b.court)} ${hourLabel(b.start)}`).join('، ')}{busy.length > 3 ? '، …' : ''})؛ بعد از ذخیره در تقویم جابه‌جا یا لغوشان کنید.</p>}
+        {same && <p className="pt-warn">در همین روز «{same.title}» هم هست.</p>}
+      </Sec>
+
+      <Sec n={3} title="چه کسانی؟">
+        <Field label="سطح‌های مجاز"><div className="pick-chips sm">{LEVELS.map((l) => <button key={l.id} type="button" className={f.levels.includes(l.id) ? 'on' : ''} onClick={() => tog('levels', l.id)}>{l.id}</button>)}</div></Field>
+        <div className="form-3">
+          <Field label="ظرفیت" hint={`${fa(Math.floor(f.cap / 2))} تیم دونفره`}><div className="num-step wide"><button type="button" onClick={() => set({ cap: Math.max(4, f.cap - 2) })}><Icon name="minus" size={14} /></button><b>{fa(f.cap)} نفر</b><button type="button" onClick={() => set({ cap: Math.min(64, f.cap + 2) })}><Icon name="plus" size={14} /></button></div></Field>
+          <Field label="ورودی هر نفر" hint={`هر تیم ${toman(f.fee * 2)}`}><Money value={f.fee} onChange={(fee) => set({ fee })} /></Field>
+          <Field label="جایزه"><input value={f.prize} onChange={(e) => set({ prize: e.target.value })} /></Field>
+        </div>
+      </Sec>
+
+      <Sec n={4} title="قالب بازی">
+        <Field label="روش برگزاری"><Seg value={f.format} onChange={(format) => set({ format })} options={EV_FORMAT} tips={{ groups: 'اول دوره‌ای در گروه‌ها، بعد حذفی', knockout: 'از اول حذفی' }} /></Field>
+        <Field label="امتیاز هر بازی" hint={SCORING[f.scoring || 'set6'].sub}><Seg value={f.scoring || 'set6'} onChange={(scoring) => set({ scoring })} options={Object.fromEntries(Object.entries(SCORING).map(([k, v]) => [k, v.name]))} /></Field>
+      </Sec>
+
+      <Sec n={5} title="عکس و انتشار">
+        <div className="ef-imgs">
+          {EV_IMG.map((s) => <button key={s} type="button" className={f.img === s ? 'on' : ''} style={{ backgroundImage: `url(${s})` }} onClick={() => set({ img: s })} aria-label="عکس آماده" />)}
+          {custom && <button type="button" className="on" style={{ backgroundImage: `url(${f.img})` }} aria-label="عکس شما" />}
+        </div>
+        <ImageUpload value={custom ? f.img : null} onChange={(img) => set({ img: img || EV_IMG[0] })} hint="یا عکس خودتان؛ افقی" />
+        <Field label="یادداشت برای بازیکن‌ها" hint="اختیاری؛ مثلاً «۱۵ دقیقه زودتر بیایید»"><input value={f.note} onChange={(e) => set({ note: e.target.value })} /></Field>
+        <Field label="انتشار" hint={STATUS_HELP[f.status][1]}><Seg value={f.status} onChange={(status) => set({ status })} options={{ draft: 'پیش‌نویس', open: 'ثبت‌نام باز', closed: 'ثبت‌نام بسته' }} /></Field>
+      </Sec>
+
+      <div className="ef-foot">
+        <span><b>{f.title || 'بی‌نام'}</b><small>{dayLabel(f.date)} {jDateFa(f.date)}، {fa(f.cap)} نفر، {toman(f.fee)} هر نفر</small></span>
+        <button className="adm-btn primary" disabled={!ok} onClick={save}>{ev ? 'ذخیره‌ی تغییرات' : 'ساخت مسابقه'}</button>
       </div>
-      <Field label="زمین‌های مسابقه"><div className="pick-chips">
-        <button type="button" className={f.courts.length === 4 ? 'on' : ''} onClick={() => set({ courts: f.courts.length === 4 ? [] : [1, 2, 3, 4] })}>همه‌ی زمین‌ها</button>
-        {[1, 2, 3, 4].map((c) => <button key={c} type="button" className={f.courts.includes(c) && f.courts.length < 4 ? 'on' : ''} onClick={() => set({ courts: f.courts.length === 4 ? [c] : f.courts.includes(c) ? f.courts.filter((x) => x !== c) : [...f.courts, c].sort() })}>زمین {fa(c)}</button>)}
-      </div></Field>
-      <div className="ev-hold"><Icon name="cal" size={15} />{f.courts.length ? <>{courtsText(f.courts)}، {dayLabel(f.date)} {hourLabel(f.start)} تا {hourLabel(f.start + f.dur)} در تقویم «🏆 {f.title || 'مسابقه'}» می‌شود و کسی در اپ نمی‌تواند رزرو کند.</> : 'حداقل یک زمین انتخاب کنید.'}</div>
-      {busy.length > 0 && <div className="pt-warn"><b>{fa(busy.length)} رزرو در همین ساعت هست:</b> {busy.slice(0, 4).map((b) => `زمین ${fa(b.court)} ${hourLabel(b.start)} (${who(b.by) || b.note || ''})`).join('، ')}{busy.length > 4 ? '، …' : ''}. بعد از ذخیره در تقویم جابه‌جا یا لغوشان کنید.</div>}
-      {same && <p className="pt-warn">در همین روز «{same.title}» هم هست؛ فروش کافه‌ی آن روز به اولی نسبت داده می‌شود.</p>}
-
-      <h4 className="form-sec">شرکت‌کننده‌ها و جایزه</h4>
-      <Field label="سطح‌های مجاز"><div className="pick-chips sm">{LEVELS.map((l) => <button key={l.id} type="button" className={f.levels.includes(l.id) ? 'on' : ''} onClick={() => tog('levels', l.id)}>{l.id}</button>)}</div></Field>
-      <Field label="روش برگزاری"><Seg value={f.format} onChange={(format) => set({ format })} options={EV_FORMAT} tips={{ groups: 'اول دوره‌ای در گروه‌ها، بعد حذفی', knockout: 'از اول حذفی' }} /></Field>
-      <Field label="روش امتیاز" hint={SCORING[f.scoring || 'set6'].sub}><Seg value={f.scoring || 'set6'} onChange={(scoring) => set({ scoring })} options={Object.fromEntries(Object.entries(SCORING).map(([k, v]) => [k, v.name]))} /></Field>
-      <div className="form-3">
-        <Field label="ظرفیت (نفر)" hint={`${fa(Math.floor(f.cap / 2))} تیم دونفره`}><input type="number" min="2" step="2" value={f.cap} onChange={(e) => set({ cap: +e.target.value })} /></Field>
-        <Field label="ورودی هر نفر" hint={`هر تیم ${toman(f.fee * 2)}`}><Money value={f.fee} onChange={(fee) => set({ fee })} /></Field>
-        <Field label="جایزه"><input value={f.prize} onChange={(e) => set({ prize: e.target.value })} /></Field>
-      </div>
-
-      <h4 className="form-sec">عکس و انتشار</h4>
-      <ImageUpload value={custom ? f.img : null} onChange={(img) => set({ img: img || EV_IMG[0] })} hint="عکس افقی زمین یا پوستر مسابقه" />
-      <Field label="یا یکی از عکس‌های آماده"><div className="ev-imgs">{EV_IMG.map((s) => <button key={s} type="button" className={f.img === s ? 'on' : ''} style={{ backgroundImage: `url(${s})` }} onClick={() => set({ img: s })} aria-label="عکس" />)}</div></Field>
-      <Field label="یادداشت برای بازیکن‌ها" hint="اختیاری؛ مثلاً «۱۵ دقیقه زودتر بیایید»"><input value={f.note} onChange={(e) => set({ note: e.target.value })} /></Field>
-      <Field label="انتشار"><div className="ev-st-opts form">{['draft', 'open', 'closed'].map((k) => <button key={k} type="button" className={f.status === k ? 'on' : ''} onClick={() => set({ status: k })}>{STATUS_HELP[k][0]}</button>)}</div><small className="ev-st-help">{STATUS_HELP[f.status][1]}</small></Field>
-      <button className="adm-btn primary full" disabled={!ok} onClick={save}>{ev ? 'ذخیره' : 'ساخت مسابقه'}</button>
     </div>
   )
 }

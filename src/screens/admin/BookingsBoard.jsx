@@ -1,7 +1,7 @@
 // رزروها: «برنامه» (هر رزرو یک ردیف) و «زمین‌ها» (هر زمین یک ستون، با ساعت‌های آزاد بین رزروها)
 import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
-import { COURTS, MEMBERS, TYPE_NAME, addDays, coachById, courtById, dayLabel, dayMonth, fa, fromKey, hourLabel, range, short, toman, todayKey } from '../../data'
+import { COURTS, MEMBERS, TYPE_NAME, hoursOf, addDays, coachById, courtById, dayLabel, dayMonth, fa, fromKey, hourLabel, range, short, toman, todayKey } from '../../data'
 import { payState, useStore } from '../../store'
 import { Icon } from '../../components/ui'
 import { jDate } from '../../jalali'
@@ -106,7 +106,7 @@ export function Bookings({ ctx }) {
             <div className={`bk-lanes ${courts.length === 1 ? 'one' : ''}`} style={{ '--n': courts.length }}>
               {courts.map((c) => {
                 const lane = dayList.filter((b) => b.court === c.id).sort((a, b) => a.start - b.start)
-                const items = [...lane.map((b) => ({ at: b.start, b })), ...(club.off[c.id] ? [] : gaps(lane, k, t).map(([from, to]) => ({ at: from, gap: [from, to] })))].sort((x, y) => x.at - y.at)
+                const items = [...lane.map((b) => ({ at: b.start, b })), ...(club.off[c.id] ? [] : gaps(lane, k, t, hoursOf(club)).map(([from, to]) => ({ at: from, gap: [from, to] })))].sort((x, y) => x.at - y.at)
                 return (
                   <div key={c.id} className="bk-lane">
                     <div className="bk-lane-h"><b>{c.name}</b><small>{club.off[c.id] ? 'غیرفعال' : c.kind}</small><em>{fa(lane.filter((b) => b.status !== 'cancelled').length)} رزرو</em></div>
@@ -128,12 +128,12 @@ export function Bookings({ ctx }) {
 }
 
 // ساعت‌های آزاد یک زمین در روز (از ۷ صبح تا ۱۲ شب)؛ برای امروز از ساعت بعدی، برای روزهای گذشته هیچ
-function gaps(lane, k, today) {
+function gaps(lane, k, today, { open, close }) {
   if (fromKey(k) < fromKey(today)) return []
   const out = []
-  let h = k === today ? Math.max(7, Math.ceil(nowH())) : 7
+  let h = k === today ? Math.max(open, Math.ceil(nowH())) : open
   lane.filter((b) => b.status !== 'cancelled').forEach((b) => { if (b.start - h >= 1) out.push([h, b.start]); h = Math.max(h, b.start + b.dur) })
-  if (24 - h >= 1) out.push([h, 24])
+  if (close - h >= 1) out.push([h, close])
   return out
 }
 

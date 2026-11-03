@@ -51,7 +51,7 @@ export function upcomingSlots(club, n = 10) {
 // بعد یک یا دو ساعت جلوتر/عقب‌تر همان روز، و اگر هیچ‌کدام نشد آن هفته رد می‌شود
 export function planSeries(club, { court, date, start, dur, count, coach, days }) {
   const coachFree = (d, h) => !coach || !club.bookings.some((b) => b.coach === coach && b.date === d && b.status !== 'cancelled' && h < b.start + b.dur && b.start < h + dur)
-  const ok = (d, c, h) => h >= 7 && h + dur <= 24 && isFree(club, d, c, h, dur) && coachFree(d, h)
+  const ok = (d, c, h) => isFree(club, d, c, h, dur) && coachFree(d, h)
   const courts = [court, ...COURTS.map((c) => c.id).filter((x) => x !== court)]
   const out = []
   let skipped = 0
