@@ -64,7 +64,7 @@ export function CafeAdmin() {
         menu: 'روی هر آیتم بزنید تا ویرایش شود. آیتمی که مواد اولیه‌اش تمام شده، در اپ «تمام شده» نشان داده می‌شود.',
         stock: 'با هر فروش، مواد اولیه طبق دستور تهیه خودکار کم می‌شود. خرید را ثبت کنید تا انبار پر شود؛ ضایعات را هم ثبت کنید تا حساب درست بماند.',
         report: 'فروش، هزینه‌ی مواد اولیه و سود کافه در بازه‌ی انتخابی؛ با «روزهای عادی» یا «مسابقه‌ها» فقط همان بخش را ببینید.',
-        events: 'هر سفارشی که از یک ساعت قبل تا یک ساعت بعد از آدینه یا مسابقه ثبت شود، فروش همان مسابقه است. روی هر مسابقه بزنید تا سفارش‌هایش را با جستجو ببینید.',
+        events: 'هر خرید کافه در روز آدینه یا مسابقه، درآمد همان روز مسابقه است و جدا از روزهای عادی حساب می‌شود. روی هر روز بزنید تا خریدها، ساعت‌های شلوغ و پرفروش‌هایش را ببینید.',
       }[tab]}</Guide>
       {tab === 'orders' && <Orders onAll={() => setTab('history')} />}
       {tab === 'history' && <OrderLog orders={club.cafeOrders} lines={logLines} status={LOG_ST} title="سفارش‌های کافه" file="quadra-cafe-orders" />}
@@ -474,7 +474,7 @@ function Pos({ onClose }) {
   return (
     <div className="pos2">
       <div className="pos-cat">
-        {live && <p className="ev-live">🏆 الان «{live.title}» در جریان است؛ این سفارش جزو فروش همین مسابقه حساب می‌شود.</p>}
+        {live && <p className="ev-live">🏆 امروز روز «{live.title}» است؛ این سفارش جزو فروش کافه‌ی روز مسابقه حساب می‌شود.</p>}
         <Search value={q} onChange={setQ} ph="جستجوی نام یا کد آیتم" />
         <div className="pick-chips">{[['all', 'همه', '✦'], ...CAFE_CATS.map((c) => [c.id, c.name, c.ic])].map(([k, n, ic]) => <button key={k} type="button" className={cat === k ? 'on' : ''} onClick={() => setCat(k)}>{ic} {n}</button>)}</div>
         <div className="cafe-pos">
@@ -519,68 +519,92 @@ function Pos({ onClose }) {
   )
 }
 
-// کافه در آدینه‌ها: فهرست مسابقه‌ها با فروش هر کدام؛ با انتخاب یکی، سفارش‌هایش با جستجو و صفحه‌بندی
+// کافه در روزهای آدینه و مسابقه: هر خرید کافه در روز مسابقه، درآمد همان روز است
 function CafeEvents() {
   const { club } = useStore()
   const [sel, setSel] = useState(null)
-  const rows = useMemo(() => (club.events || []).filter((e) => e.status !== 'draft' && e.status !== 'cancelled').map((e) => {
+  const days = useMemo(() => (club.events || []).filter((e) => e.status !== 'draft' && e.status !== 'cancelled').map((e) => {
     const os = cafeOf(club, e)
-    const top = {}
-    os.forEach((o) => o.items.forEach((x) => { top[x.name] = (top[x.name] || 0) + x.qty }))
-    return { e, os, rev: os.reduce((s, o) => s + o.total, 0), top: Object.entries(top).sort((a, b) => b[1] - a[1]).slice(0, 3) }
-  }).filter((r) => r.os.length || fromKey(r.e.date) >= fromKey(todayKey()))
-    // اول مسابقه‌هایی که فروش داشته‌اند (تازه‌ترین بالا)، بعد پیش‌روها به ترتیب تاریخ
-    .sort((a, b) => (b.os.length > 0) - (a.os.length > 0) || (a.os.length ? fromKey(b.e.date) - fromKey(a.e.date) : fromKey(a.e.date) - fromKey(b.e.date))), [club])
-  const month = club.cafeOrders.filter((o) => o.at >= Date.now() - 30 * 864e5)
-  const r = sel && rows.find((x) => x.e.id === sel)
-  if (r) return (
+    const top = {}, hours = {}
+    os.forEach((o) => { hours[new Date(o.at).getHours()] = (hours[new Date(o.at).getHours()] || 0) + o.total; o.items.forEach((x) => { top[x.name] = (top[x.name] || 0) + x.qty }) })
+    return { e, os, rev: os.reduce((s, o) => s + o.total, 0), top: Object.entries(top).sort((a, b) => b[1] - a[1]), hours }
+  }).sort((a, b) => fromKey(b.e.date) - fromKey(a.e.date)), [club])
+  // میانگین یک روز عادی (۳۰ روز اخیر، روزهایی که فروش داشته‌اند) برای مقایسه
+  const normal = useMemo(() => {
+    const by = {}
+    club.cafeOrders.filter((o) => o.at >= Date.now() - 30 * 864e5 && !eventAt(club.events, o.at)).forEach((o) => { by[dk(o.at)] = (by[dk(o.at)] || 0) + o.total })
+    const v = Object.values(by)
+    return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0
+  }, [club])
+  const held = days.filter((d) => d.os.length)
+  const coming = days.filter((d) => !d.os.length && fromKey(d.e.date) >= fromKey(todayKey())).reverse()
+  const avgEv = held.length ? Math.round(held.reduce((s, d) => s + d.rev, 0) / held.length) : 0
+  const diff = (v) => (normal ? Math.round(((v - normal) / normal) * 100) : 0)
+  const Up = ({ v }) => { const d = diff(v); return <em className={`cd-diff ${d >= 0 ? 'up' : 'down'}`}>{d >= 0 ? '▲' : '▼'} {fa(Math.abs(d))}٪ نسبت به روز عادی</em> }
+  const allTop = {}
+  held.forEach((d) => d.top.forEach(([n, q]) => { allTop[n] = (allTop[n] || 0) + q }))
+  const best = Object.entries(allTop).sort((a, b) => b[1] - a[1])[0]
+  const d = sel && days.find((x) => x.e.id === sel)
+  if (d) return (
     <div className="stack">
-      <div className="ev-head">
-        <button className="adm-btn ghost sm" onClick={() => setSel(null)}><Icon name="fwd" size={16} />همه‌ی مسابقه‌ها</button>
-        <div className="grow"><h2>☕ {r.e.title}</h2><small>{dayLabel(r.e.date)} {jDateFa(r.e.date)}، سفارش‌های {hourLabel(r.e.start - 1)} تا {hourLabel(r.e.start + r.e.dur + 1)}</small></div>
+      <button className="adm-btn ghost sm ev-back" onClick={() => setSel(null)}><Icon name="fwd" size={16} />همه‌ی روزهای مسابقه</button>
+      <div className="cd-hero">
+        <div className="cd-date"><b>{fa(+jDate(d.e.date).split('/')[2])}</b><small>{dayLabel(d.e.date)}</small></div>
+        <div className="grow"><small>کافه در روز</small><h2>🏆 {d.e.title}</h2><span>{jDateFa(d.e.date)}، مسابقه {hourLabel(d.e.start)} تا {hourLabel(d.e.start + d.e.dur)}، {fa(d.e.regs.length)} شرکت‌کننده</span></div>
+        <div className="cd-big"><small>درآمد کافه در این روز</small><b>{toman(d.rev)}</b><Up v={d.rev} /></div>
       </div>
-      <OrderLog orders={r.os} lines={logLines} status={LOG_ST} title={`کافه — ${r.e.title}`} file={`quadra-cafe-${r.e.id}`} initialRange="all" />
+      <div className="kpis four">
+        <Kpi icon="bag" label="خریدها" value={fa(d.os.length)} sub={`${fa(d.os.filter((o) => o.to).length)} سفارش سر زمین`} />
+        <Kpi icon="chart" label="میانگین هر خرید" value={d.os.length ? toman(Math.round(d.rev / d.os.length)) : '—'} />
+        <Kpi icon="users" label="هر شرکت‌کننده" value={d.e.regs.length ? toman(Math.round(d.rev / d.e.regs.length)) : '—'} sub="درآمد کافه تقسیم بر نفرات" />
+        <Kpi icon="sparkle" label="پرفروش" value={d.top[0]?.[0] || '—'} sub={d.top.slice(1, 4).map(([n, q]) => `${n} ${fa(q)}`).join('، ')} />
+      </div>
+      <div className="two">
+        <Card title="فروش ساعت‌به‌ساعت" sub="ساعت‌های مسابقه پررنگ‌اند">
+          <HBars rows={Object.keys(d.hours).map(Number).sort((a, b) => a - b).map((h) => ({ name: `${fa(h)}:۰۰`, value: d.hours[h], color: h >= d.e.start && h < d.e.start + d.e.dur ? '#C9A227' : '#D9CFB4' }))} />
+        </Card>
+        <Card title="چه چیزهایی فروخته شد">{d.top.slice(0, 10).map(([n, q]) => <div key={n} className="row-between ev-top"><span>{n}</span><b>{fa(q)}</b></div>)}</Card>
+      </div>
+      <OrderLog orders={d.os} lines={logLines} status={LOG_ST} title={`کافه — ${d.e.title}`} file={`quadra-cafe-${d.e.id}`} initialRange="all" />
     </div>
   )
   return (
     <div className="stack">
-      <EventSplit orders={month} title="۳۰ روز اخیر: روزهای عادی و روزهای مسابقه" />
-      <div className="ev-rows">
-        {rows.map(({ e, os, rev, top }) => (
-          <button key={e.id} className="ev-row" onClick={() => setSel(e.id)} disabled={!os.length}>
-            <div className="ev-date"><b>{fa(+jDate(e.date).split('/')[2])}</b><small>{dayLabel(e.date)}</small><small>{hourLabel(e.start)}</small></div>
-            <div className="grow"><b>{e.title}</b><small>{jDateFa(e.date)}، {fa(e.regs.length)} شرکت‌کننده</small>{top.length > 0 && <small>پرفروش: {top.map(([n, q]) => `${n} ${fa(q)}`).join('، ')}</small>}</div>
-            <div className="ev-money"><div><small>{fa(os.length)} سفارش</small><b>{toman(rev)}</b></div>{os.length > 0 && <div><small>میانگین</small><b>{toman(Math.round(rev / os.length))}</b></div>}{!os.length && <small>هنوز برگزار نشده</small>}</div>
+      <div className="cd-top">
+        <div className="cd-tile gold"><small>درآمد کافه در روزهای مسابقه</small><b>{toman(held.reduce((s, x) => s + x.rev, 0))}</b><em>{fa(held.length)} روز مسابقه، {fa(held.reduce((s, x) => s + x.os.length, 0))} خرید</em></div>
+        <div className="cd-tile"><small>میانگین یک روز مسابقه</small><b>{toman(avgEv)}</b><Up v={avgEv} /></div>
+        <div className="cd-tile"><small>میانگین یک روز عادی</small><b>{toman(normal)}</b><em>۳۰ روز اخیر</em></div>
+        <div className="cd-tile"><small>پرفروش روزهای مسابقه</small><b>{best ? best[0] : '—'}</b><em>{best ? `${fa(best[1])} عدد` : ''}</em></div>
+      </div>
+      {held.length > 0 && <Card title="درآمد کافه در هر روز مسابقه" sub="خط نقطه‌چین = میانگین روز عادی">
+        <div className="cd-bars" style={{ '--avg': `${Math.min(100, (normal / Math.max(...held.map((x) => x.rev), normal, 1)) * 100)}%` }}>
+          {held.slice(0, 10).map((x) => (
+            <button key={x.e.id} onClick={() => setSel(x.e.id)} data-tip={`${x.e.title}: ${toman(x.rev)}`}>
+              <i style={{ height: `${(x.rev / Math.max(...held.map((y) => y.rev), normal, 1)) * 100}%` }}><b>{short(x.rev)}</b></i>
+              <small>{jDateFa(x.e.date).slice(5)}</small>
+            </button>
+          ))}
+        </div>
+      </Card>}
+      <div className="cd-grid">
+        {held.map((x) => (
+          <button key={x.e.id} className="cd-card" onClick={() => setSel(x.e.id)}>
+            <div className="cd-c-head"><span className="cd-date sm"><b>{fa(+jDate(x.e.date).split('/')[2])}</b><small>{dayLabel(x.e.date)}</small></span><div className="grow"><b>{x.e.title}</b><small>{jDateFa(x.e.date)}</small></div></div>
+            <b className="cd-rev">{toman(x.rev)}</b>
+            <Up v={x.rev} />
+            <small>{fa(x.os.length)} خرید، میانگین {short(Math.round(x.rev / x.os.length))}</small>
+            {x.top.length > 0 && <small className="cd-top3">☕ {x.top.slice(0, 3).map(([n]) => n).join('، ')}</small>}
           </button>
         ))}
-        {!rows.length && <Empty>مسابقه‌ای با فروش کافه نیست.</Empty>}
+        {coming.map((x) => (
+          <div key={x.e.id} className="cd-card soon">
+            <div className="cd-c-head"><span className="cd-date sm"><b>{fa(+jDate(x.e.date).split('/')[2])}</b><small>{dayLabel(x.e.date)}</small></span><div className="grow"><b>{x.e.title}</b><small>{jDateFa(x.e.date)}</small></div></div>
+            <small>پیش‌رو؛ از همان روز خریدهای کافه این‌جا جمع می‌شود</small>
+          </div>
+        ))}
       </div>
+      {!days.length && <Empty>هنوز آدینه یا مسابقه‌ای تعریف نشده.</Empty>}
     </div>
-  )
-}
-
-// فروش کافه در زمان آدینه‌ها و مسابقه‌ها، جدا از روزهای عادی
-function EventSplit({ orders, title = 'روزهای عادی و روزهای مسابقه' }) {
-  const { club } = useStore()
-  const by = new Map()
-  let normal = 0, normalN = 0
-  orders.forEach((o) => {
-    const e = eventAt(club.events, o.at)
-    if (!e) { normal += o.total; normalN++; return }
-    const r = by.get(e.id) || { e, n: 0, rev: 0 }
-    r.n++; r.rev += o.total; by.set(e.id, r)
-  })
-  const evs = [...by.values()].sort((a, b) => fromKey(b.e.date) - fromKey(a.e.date))
-  const evRev = evs.reduce((s, r) => s + r.rev, 0), all = normal + evRev
-  return (
-    <Card title={title} sub="سفارش‌های یک ساعت قبل تا یک ساعت بعد از هر آدینه یا تورنمنت، فروش همان مسابقه حساب می‌شوند">
-      <div className="ev-split">
-        <div><small>روزهای عادی</small><b>{toman(normal)}</b><em>{fa(normalN)} سفارش، {fa(all ? Math.round((normal / all) * 100) : 0)}٪</em></div>
-        <div className="ev"><small>🏆 آدینه‌ها و مسابقه‌ها</small><b>{toman(evRev)}</b><em>{fa(evs.reduce((s, r) => s + r.n, 0))} سفارش، {fa(all ? Math.round((evRev / all) * 100) : 0)}٪</em></div>
-      </div>
-      {evs.length > 0 && <div className="tbl-wrap"><table className="tbl"><thead><tr><th>مسابقه</th><th>تاریخ</th><th>سفارش</th><th>فروش</th><th>میانگین</th></tr></thead>
-        <tbody>{evs.map((r) => <tr key={r.e.id}><td>{r.e.title}</td><td>{dayLabel(r.e.date)} {jDateFa(r.e.date)}</td><td className="num">{fa(r.n)}</td><td className="num">{toman(r.rev)}</td><td className="num">{toman(Math.round(r.rev / r.n))}</td></tr>)}</tbody></table></div>}
-    </Card>
   )
 }
 
@@ -659,7 +683,7 @@ function Report() {
   ])
   return (
     <div className="stack">
-      <PeriodBar p={p} setP={setP} right={<><Seg value={mode} onChange={setMode} options={{ all: 'همه', normal: 'روزهای عادی', event: '🏆 مسابقه‌ها' }} tips={{ normal: 'بدون فروش زمان آدینه‌ها', event: 'فقط فروش زمان آدینه‌ها و مسابقه‌ها' }} /><XlsxBtn label="گزارش اکسل کافه" onClick={exp} /></>} />
+      <PeriodBar p={p} setP={setP} right={<><Seg value={mode} onChange={setMode} options={{ all: 'همه', normal: 'روزهای عادی', event: '🏆 مسابقه‌ها' }} tips={{ normal: 'بدون فروش روزهای آدینه و مسابقه', event: 'فقط فروش روزهای آدینه و مسابقه' }} /><XlsxBtn label="گزارش اکسل کافه" onClick={exp} /></>} />
       <div className="kpis four">
         <Kpi icon="bag" label="سفارش‌ها" value={fa(T.n)} sub={`${fa(T.n ? Math.round((T.app / T.n) * 100) : 0)}٪ از اپ، ${fa(T.court)} سر زمین`} />
         <Kpi icon="cash" label="فروش کافه" value={short(T.rev) + ' تومان'} sub={T.n ? `میانگین ${short(Math.round(T.rev / T.n))}` : null} />

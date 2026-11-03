@@ -229,13 +229,13 @@ function EventInfo({ ev, onJoin }) {
   const mine = ev.regs.some((r) => r.by === ME)
   const tabs = [['people', `شرکت‌کننده‌ها ${fa(ev.regs.length)}`], ev.teams.length && ['teams', 'تیم‌ها'], ev.groups.length && ['groups', 'گروه‌ها'], ev.matches.some((m) => m.stage === 'ko') && ['ko', 'حذفی']].filter(Boolean)
   const [tab, setTab] = useState(() => (ev.matches.some((m) => m.stage === 'ko') ? 'ko' : ev.groups.length ? 'groups' : ev.teams.length ? 'teams' : 'people'))
-  const can = ev.status === 'open' && !mine && ev.regs.length < ev.cap
+  const can = ev.status === 'open' && !mine && ev.regs.length + 2 <= ev.cap
   return (
     <div className="ev-info">
       <div className="ev-meta">
         <span>{dayLabel(ev.date)} {dayMonth(fromKey(ev.date))}، {hourLabel(ev.start)} تا {hourLabel(ev.start + ev.dur)}</span>
         <span>{ev.desc || EV_FORMAT[ev.format]}، سطح {ev.levels.join(' / ')}</span>
-        <span>ورودی {toman(ev.fee)}، جایزه: {ev.prize}</span>
+        <span>ورودی {toman(ev.fee)} هر نفر، تیم دونفره؛ جایزه: {ev.prize}</span>
         {ev.note && <span>{ev.note}</span>}
       </div>
       <Podium ev={ev} />
@@ -250,7 +250,7 @@ function EventInfo({ ev, onJoin }) {
       {tab === 'teams' && <Teams ev={ev} />}
       {tab === 'groups' && <Groups ev={ev} />}
       {tab === 'ko' && <Bracket ev={ev} />}
-      {isLive(ev) && <div className="ev-cta"><Button full variant="q" disabled={!can} onClick={onJoin}>{mine ? '✓ ثبت‌نام کرده‌اید' : ev.status !== 'open' ? 'ثبت‌نام بسته شد' : ev.regs.length >= ev.cap ? 'ظرفیت تکمیل است' : `ثبت‌نام، ${toman(ev.fee)}`}</Button></div>}
+      {isLive(ev) && <div className="ev-cta"><Button full variant="q" disabled={!can} onClick={onJoin}>{mine ? '✓ ثبت‌نام کرده‌اید' : ev.status !== 'open' ? 'ثبت‌نام بسته شد' : ev.regs.length + 2 > ev.cap ? 'ظرفیت تکمیل است' : `ثبت‌نام تیم دونفره، ${toman(ev.fee * 2)}`}</Button></div>}
     </div>
   )
 }

@@ -1082,3 +1082,22 @@ button.trn-pl:hover { background: var(--paper2); }
 .ev-info .trn-round { min-width: 190px; }
 .past-ev { cursor: pointer; }
 .past-champ { display: block; color: #8A6A10 !important; font-weight: 700; }
+
+/* گروه‌ها: رنگ هر گروه و نشان صعود */
+.trn-group h4 { display: flex; align-items: center; gap: 8px; }
+.trn-gl { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: hsl(var(--h, 175) 50% 40%); color: #fff; font-size: 13px; }
+.trn-group { background: hsl(var(--h, 175) 40% 97%); }
+.trn-up { font-style: normal; font-size: 9.5px; font-weight: 700; margin-inline-start: 6px; padding: 1px 6px; border-radius: 99px; background: var(--q-soft); color: var(--q-ink); }
+.trn-table tr.up td { background: #F3FBFA; }
+/* جدول حذفی: خط اتصال هر بازی به دور بعد */
+.trn-round:not(:last-child) .trn-match::after { content: ''; position: absolute; top: 50%; inset-inline-end: -14px; width: 14px; border-top: 2px solid var(--line); }
+.trn-round:last-child .trn-match { box-shadow: inset 0 0 0 1.5px #E7C55A; background: #FFFBEF; }
+
+/* اپ: انتخاب یار برای مسابقه */
+.partner-pick { display: grid; gap: 12px; padding-bottom: 90px; }
+.pp-ev { display: grid; gap: 2px; padding: 12px 14px; border-radius: 16px; background: var(--night); color: #fff; }
+.pp-ev small { color: rgba(255,255,255,.65); }
+.pp-chosen { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 18px; background: var(--card); box-shadow: inset 0 0 0 2px var(--q); }
+.pp-chosen .grow { display: grid; gap: 2px; justify-items: start; }
+.pp-chosen small { font-size: 12px; color: var(--muted); }
+.pp-chosen b { font-size: 16px; }

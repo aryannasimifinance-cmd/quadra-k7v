@@ -67,12 +67,12 @@ export function Groups({ ev, onScore }) {
   return (
     <div className="trn-groups">
       {ev.groups.map((g) => (
-        <div key={g.id} className="trn-group">
-          <h4>گروه {g.id}</h4>
+        <div key={g.id} className="trn-group" style={{ '--h': (ev.groups.indexOf(g) * 57) % 360 }}>
+          <h4><span className="trn-gl">{g.id}</span>گروه {g.id}</h4>
           <table className="trn-table">
             <thead><tr><th>#</th><th>تیم</th><th>بازی</th><th>برد</th><th>باخت</th><th>تفاضل</th></tr></thead>
             <tbody>{standings(ev, g.id).map((r, i) => (
-              <tr key={r.id} className={i < (ev.groups.length === 1 ? 4 : 2) ? 'up' : ''}><td>{fa(i + 1)}</td><td>{r.name}</td><td>{fa(r.p)}</td><td>{fa(r.w)}</td><td>{fa(r.l)}</td><td dir="ltr">{r.gf - r.ga > 0 ? '+' : ''}{fa(r.gf - r.ga)}</td></tr>
+              <tr key={r.id} className={i < (ev.setup?.advance || (ev.groups.length === 1 ? 4 : 2)) ? 'up' : ''}><td>{fa(i + 1)}</td><td>{r.name}{i < (ev.setup?.advance || (ev.groups.length === 1 ? 4 : 2)) && <em className="trn-up">صعود</em>}</td><td>{fa(r.p)}</td><td>{fa(r.w)}</td><td>{fa(r.l)}</td><td dir="ltr">{r.gf - r.ga > 0 ? '+' : ''}{fa(r.gf - r.ga)}</td></tr>
             ))}</tbody>
           </table>
           <div className="trn-ms">{ev.matches.filter((m) => m.stage === 'group' && m.group === g.id).map((m) => <Match key={`${m.id}-${m.a}-${m.b}`} ev={ev} m={m} onScore={onScore} />)}</div>

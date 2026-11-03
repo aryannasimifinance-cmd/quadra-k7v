@@ -123,8 +123,8 @@ function useMatchmaking(setTab) {
       const b = mine[0]
       asked.current.add(b.id + b.players.length)
       const pool = b.visibility === 'private'
-        ? MEMBERS.filter((m) => (b.invited || []).includes(m.id) && !b.players.includes(m.id))
-        : MEMBERS.filter((m) => b.levels.includes(m.level) && !b.players.includes(m.id))
+        ? MEMBERS.filter((m) => !m.inactive && (b.invited || []).includes(m.id) && !b.players.includes(m.id))
+        : MEMBERS.filter((m) => !m.inactive && b.levels.includes(m.level) && !b.players.includes(m.id))
       if (!pool.length) return
       const m = pool[Math.floor(Math.random() * pool.length)]
       const body = `${m.name} (سطح ${m.level}، ${fa(m.games)} بازی) ${b.visibility === 'private' ? 'دعوت شما را قبول کرد و می‌خواد به' : 'می‌خواد به'} بازی ${dayLabel(b.date)} ساعت ${hourLabel(b.start)} در ${courtById(b.court).name} بپیونده.`

@@ -79,7 +79,7 @@ export function memberStats(club, user) {
     const spent = bk.filter((b) => b.by === m.id && notPack(b)).reduce((s, b) => s + b.paid, 0) + club.orders.filter((o) => o.by === m.id).reduce((s, o) => s + o.total, 0) + (club.cafeOrders || []).filter((o) => o.by === m.id).reduce((s, o) => s + o.total, 0) + club.sales.filter((x) => x.by === m.id).reduce((s, x) => s + x.price, 0)
     const lastB = bk.map((b) => fromKey(b.date).getTime()).filter((t) => t <= Date.now()).sort((a, b) => b - a)[0]
     const lastDays = lastB ? Math.floor((Date.now() - lastB) / 864e5) : 99
-    const seg = m.member ? 'vip' : m.source || m.joined < 30 ? 'new' : lastDays > 10 ? 'risk' : 'active'
+    const seg = m.inactive ? 'off' : m.member ? 'vip' : m.source || m.joined < 30 ? 'new' : lastDays > 10 ? 'risk' : 'active'
     return { ...m, visits: bk.length, spent, lastDays, seg, source: m.source || 'seed' }
   })
   if (user) {
@@ -88,7 +88,7 @@ export function memberStats(club, user) {
   }
   return rows
 }
-export const SEGMENTS = { all: 'همه', vip: 'VIP / عضو', active: 'فعال', new: 'جدید', risk: 'در خطر ریزش' }
+export const SEGMENTS = { all: 'همه', vip: 'VIP / عضو', active: 'فعال', new: 'جدید', risk: 'در خطر ریزش', off: 'غیرفعال' }
 
 // بازه‌های گزارش مربی: از کی تا الان
 export const SPANS = { today: 'امروز', week: '۷ روز', month: '۳۰ روز', q: '۳ ماه', h: '۶ ماه', all: 'همه' }

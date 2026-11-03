@@ -39,7 +39,7 @@ export function useCustomer() {
   return { mq, setMq, member, setMember, by: member?.id || (guest ? 'f:' + guest : null) }
 }
 export function CustomerField({ c }) {
-  const found = c.mq ? MEMBERS.filter((m) => m.name?.includes(c.mq) || m.phone?.includes(c.mq)).slice(0, 5) : []
+  const found = c.mq ? MEMBERS.filter((m) => !m.inactive && (m.name?.includes(c.mq) || m.phone?.includes(c.mq))).slice(0, 5) : []
   return (
     <Field label="مشتری">
       {c.member ? <div className="picked"><b>{c.member.name}</b><button type="button" className="link" onClick={() => c.setMember(null)}>تغییر</button></div>

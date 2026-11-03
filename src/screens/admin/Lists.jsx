@@ -103,7 +103,6 @@ export function Members() {
   const [sort, setSort] = useState('spent')
   const [sel, setSel] = useState(null)
   const [form, setForm] = useState(null) // 'new' یا عضو
-  const [coachOf, setCoachOf] = useState(null)
   const list = all.filter((m) => (seg === 'all' || m.seg === seg) && (src === 'all' || (src === 'desk' ? m.source !== 'app' : m.source === 'app')) && (!q || m.name.includes(q) || m.phone?.includes(q)))
     .sort((a, b) => sort === 'last' ? a.lastDays - b.lastDays : sort === 'new' ? (b.at || 0) - (a.at || 0) : b[sort] - a[sort])
   const pg = useSlice(list, 30, seg + src + q + sort)
@@ -121,7 +120,7 @@ export function Members() {
         </div>
         <div className="sec-actions"><button className="adm-btn primary sm" onClick={() => setForm('new')} data-tip="ثبت عضوی که حضوری یا تلفنی آمده"><Icon name="plus" size={16} />عضو جدید</button></div>
       </div>
-      <Guide>روی هر عضو بزنید تا پرونده‌اش باز شود: رزروها، کلاس‌ها و مربی‌ها، آدینه‌ها و نتیجه‌ها، خریدها؛ از همان‌جا اطلاعاتش را ویرایش کنید یا او را مربی کنید.</Guide>
+      <Guide>روی هر عضو بزنید تا پرونده‌اش باز شود: رزروها، کلاس‌ها و مربی‌ها، آدینه‌ها و نتیجه‌ها، خریدها؛ از همان‌جا اطلاعاتش را ویرایش یا غیرفعال کنید.</Guide>
       <Card>
         <div className="bk-row">
           <Search value={q} onChange={setQ} ph="نام یا موبایل" />
@@ -144,24 +143,25 @@ export function Members() {
         <div className="log-foot">{list.length > 0 && <small>{fa(pg.from + 1)} تا {fa(pg.from + pg.rows.length)} از {fa(list.length)}</small>}<Pager {...pg} /></div>
       </Card>
       <Side open={!!m} onClose={() => setSel(null)} title={m?.name} wide>
-        {m && <MemberFile key={m.id} m={m} onEdit={() => setForm(m)} onCoach={() => setCoachOf(m)} />}
+        {m && <MemberFile key={m.id} m={m} onEdit={() => setForm(m)} />}
       </Side>
       <Side open={!!form} onClose={() => setForm(null)} title={form === 'new' ? 'عضو جدید' : `ویرایش ${form?.name || ''}`}>
         {form && <MemberForm key={form.id || 'new'} m={form === 'new' ? null : form} onClose={() => setForm(null)} />}
       </Side>
-      <Side open={!!coachOf} onClose={() => setCoachOf(null)} title="ثبت به‌عنوان مربی" wide>
-        {coachOf && <CoachForm from={coachOf} onClose={() => setCoachOf(null)} />}
-      </Side>
     </div>
   )
 }
-const SEG_TIP = { all: 'همه‌ی اعضا', vip: 'عضویت طلایی یا مشکی دارند', active: 'در ۱۰ روز اخیر آمده‌اند', new: 'تازه عضو شده‌اند', risk: 'بیش از ۱۰ روز است نیامده‌اند' }
+const SEG_TIP = { all: 'همه‌ی اعضا', vip: 'عضویت طلایی یا مشکی دارند', active: 'در ۱۰ روز اخیر آمده‌اند', new: 'تازه عضو شده‌اند', risk: 'بیش از ۱۰ روز است نیامده‌اند', off: 'غیرفعال‌شده توسط مدیر؛ در فهرست‌های انتخاب دیده نمی‌شوند' }
 const coachOfMember = (id) => COACHES.find((c) => c.member === id)
 const toPhone = (v) => v.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '')
 
 // پرونده‌ی عضو: هر چیزی که به او وصل است، در یک جا
-function MemberFile({ m, onEdit, onCoach }) {
-  const { club, user } = useStore()
+function MemberFile({ m, onEdit }) {
+  const { club, user, adminMemberEdit, toast } = useStore()
+  const flip = () => {
+    if (!m.inactive && !window.confirm(`${m.name} غیرفعال شود؟ در فهرست‌های انتخاب (رزرو، کافه، آدینه، یارها) دیده نمی‌شود ولی سابقه‌اش می‌ماند.`)) return
+    adminMemberEdit(m.id, { inactive: !m.inactive }); chime('tap'); toast({ icon: '👤', title: m.inactive ? 'عضو دوباره فعال شد' : 'عضو غیرفعال شد', body: m.name })
+  }
   const [tab, setTab] = useState('book')
   const bookings = club.bookings.filter((b) => b.type !== 'coach' && (b.by === m.id || b.players?.includes(m.id))).sort((a, b) => fromKey(b.date) - fromKey(a.date))
   const classes = club.bookings.filter((b) => b.type === 'coach' && b.status !== 'cancelled' && (b.by === m.id || b.players?.includes(m.id))).sort((a, b) => fromKey(b.date) - fromKey(a.date))
@@ -181,11 +181,11 @@ function MemberFile({ m, onEdit, onCoach }) {
     <div className="mf">
       <div className="mf-head">
         <span className="adm-av">{m.name[0]}</span>
-        <div className="grow"><b>{m.name}</b><small dir="ltr">{m.phone}</small><div className="row-gap"><LevelPill id={m.level} /><span className={`seg-pill s-${m.seg}`}>{SEGMENTS[m.seg]}</span>{m.member && <span className="vip">{m.member === 'black' ? 'BLACK' : 'GOLD'}</span>}{coach && <Badge tone="ok">مربی: {coach.title}</Badge>}</div></div>
+        <div className="grow"><b>{m.name}</b><small dir="ltr">{m.phone}</small><div className="row-gap"><LevelPill id={m.level} /><span className={`seg-pill s-${m.seg}`}>{SEGMENTS[m.seg]}</span>{m.member && <span className="vip">{m.member === 'black' ? 'BLACK' : 'GOLD'}</span>}{coach && <Badge tone="ok">مربی: {coach.title}</Badge>}{m.inactive && <Badge tone="bad">غیرفعال</Badge>}</div></div>
       </div>
       <div className="row-btns">
         {m.id !== ME && <button className="adm-btn ghost sm" onClick={onEdit}><Icon name="cog" size={15} />ویرایش اطلاعات</button>}
-        {!coach && m.id !== ME && <button className="adm-btn ghost sm" onClick={onCoach} data-tip="با همین اطلاعات در صفحه‌ی مربی‌ها و اپ اضافه می‌شود"><Icon name="coach" size={15} />ثبت به‌عنوان مربی</button>}
+        {m.id !== ME && <button className={`adm-btn ${m.inactive ? 'primary' : 'ghost'} sm`} onClick={flip} data-tip={m.inactive ? 'دوباره در فهرست‌ها دیده می‌شود' : 'از فهرست‌های انتخاب پنهان می‌شود؛ سابقه می‌ماند'}>{m.inactive ? 'فعال کردن دوباره' : 'غیرفعال کردن'}</button>}
       </div>
       {m.id === ME && <p className="guide">این کاربر اطلاعاتش را خودش در اپ ویرایش می‌کند.</p>}
       {m.note && <p className="mf-note">{m.note}</p>}
@@ -211,13 +211,13 @@ const MiniTable = ({ head, rows, empty }) => (rows.length
 
 function MemberForm({ m, onClose }) {
   const { adminMember, adminMemberEdit, toast } = useStore()
-  const [f, setF] = useState(() => (m ? { name: m.name, phone: m.phone || '09', level: m.level, side: m.side || 'both', member: m.member || '', note: m.note || '' } : { name: '', phone: '09', level: 'C', side: 'both', member: '', note: '' }))
+  const [f, setF] = useState(() => (m ? { name: m.name, phone: m.phone || '09', level: m.level, side: m.side || 'both', member: m.member || '', note: m.note || '', inactive: !!m.inactive } : { name: '', phone: '09', level: 'C', side: 'both', member: '', note: '' }))
   const set = (x) => setF((o) => ({ ...o, ...x }))
   const phone = toPhone(f.phone)
   const dup = MEMBERS.some((x) => x.phone === phone && x.id !== m?.id)
   const ok = f.name.trim().length > 2 && /^09\d{9}$/.test(phone) && !dup
   const save = () => {
-    const p = { name: f.name.trim(), phone, level: f.level, side: f.side, member: f.member || null, note: f.note.trim() }
+    const p = { name: f.name.trim(), phone, level: f.level, side: f.side, member: f.member || null, note: f.note.trim(), ...(m ? { inactive: !!f.inactive } : {}) }
     if (m) adminMemberEdit(m.id, p); else adminMember(p)
     chime('success'); toast({ icon: '👤', title: m ? 'اطلاعات عضو ذخیره شد' : 'عضو اضافه شد', body: p.name }); onClose()
   }
@@ -229,6 +229,7 @@ function MemberForm({ m, onClose }) {
       <Field label="سمت بازی"><Seg value={f.side} onChange={(side) => set({ side })} options={{ right: 'راست', left: 'چپ', both: 'هر دو' }} /></Field>
       <Field label="عضویت ویژه"><Seg value={f.member} onChange={(member) => set({ member })} options={{ '': 'ندارد', gold: 'طلایی', black: 'مشکی' }} /></Field>
       <Field label="یادداشت مدیر" hint="فقط در پنل دیده می‌شود"><textarea rows={2} value={f.note} onChange={(e) => set({ note: e.target.value })} /></Field>
+      {m && <Field label="وضعیت عضو" hint={f.inactive ? 'در فهرست‌های انتخاب دیده نمی‌شود؛ سابقه‌اش می‌ماند' : 'در همه‌ی فهرست‌ها قابل انتخاب است'}><Seg value={f.inactive ? 'off' : 'on'} onChange={(v) => set({ inactive: v === 'off' })} options={{ on: 'فعال', off: 'غیرفعال' }} /></Field>}
       <button className="adm-btn primary full" disabled={!ok} onClick={save}>{m ? 'ذخیره' : 'ثبت عضو'}</button>
     </div>
   )

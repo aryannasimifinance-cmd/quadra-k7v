@@ -15,12 +15,12 @@ const FLOWS = {
   court: ['intent', 'when', 'slot', 'people', 'pay'],
   match: ['intent', 'when', 'games', 'pay'],
   coach: ['intent', 'coach', 'when', 'slot', 'pay'],
-  event: ['intent', 'event', 'pay'],
-  friday: ['intent', 'event', 'pay'],
-  official: ['intent', 'event', 'pay'],
+  event: ['intent', 'event', 'partner', 'pay'],
+  friday: ['intent', 'event', 'partner', 'pay'],
+  official: ['intent', 'event', 'partner', 'pay'],
 }
 const EVENT_INTENTS = ['event', 'friday', 'official']
-const TITLES = { intent: 'درخواست شما', when: 'کِی؟', slot: 'زمین و ساعت', people: 'بازیکن‌ها', games: 'بازی‌های باز', coach: 'مربی و پکیج', event: 'مسابقه‌ها', pay: 'پرداخت' }
+const TITLES = { intent: 'درخواست شما', when: 'کِی؟', slot: 'زمین و ساعت', people: 'بازیکن‌ها', games: 'بازی‌های باز', coach: 'مربی و پکیج', event: 'مسابقه‌ها', partner: 'یار شما', pay: 'پرداخت' }
 // عکس‌ها فقط زمین و وسایل، بدون آدم
 const INTENTS = [
   { id: 'court', name: 'رزرو زمین', desc: 'تک جلسه یا پکیج ۵ و ۱۰ جلسه؛ جای خالی رو با هم‌سطح پر می‌کنیم', img: './img/court-pano.jpg', xp: 50, icon: '🎾' },
@@ -68,6 +68,7 @@ export default function Wizard({ preset = {}, onClose, onDone, onStep }) {
           {step === 'games' && <StepGames w={w} set={set} onNext={next} onCreate={() => { set({ intent: 'court', open: true, missing: 1 }); goStep('slot', 'court') }} />}
           {step === 'coach' && <StepCoach w={w} set={set} onNext={next} />}
           {step === 'event' && <StepEvent w={w} set={set} onNext={next} />}
+          {step === 'partner' && <StepPartner w={w} set={set} onNext={next} />}
           {step === 'pay' && <StepPay w={w} set={set} onDone={setDone} />}
         </motion.div>
       </AnimatePresence>
@@ -415,7 +416,7 @@ function AddPlayer({ onAdd, exclude, noPhone }) {
   const [gName, setGName] = useState('')
   const [invite, setInvite] = useState(false)
   const [phone, setPhone] = useState('')
-  const list = MEMBERS.filter((m) => !exclude.includes(m.id) && (!q || m.name.includes(q.trim())) && (side === 'all' || m.side === side || m.side === 'both')).slice(0, 40)
+  const list = MEMBERS.filter((m) => !m.inactive && !exclude.includes(m.id) && (!q || m.name.includes(q.trim())) && (side === 'all' || m.side === side || m.side === 'both')).slice(0, 40)
   const digits = phone.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '')
   const okPhone = /^09\d{9}$/.test(digits)
   const faD = (x) => x.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d])
@@ -567,7 +568,7 @@ function StepEvent({ w, set, onNext }) {
           <h2 className="wz-h">{k.name}</h2>
           <p className="muted ev-kind-sub">{k.sub}</p>
           {all.filter((e) => e.kind === kind).map((e) => {
-            const has = e.regs.some((r) => r.by === ME), full = e.taken >= e.cap
+            const has = e.regs.some((r) => r.by === ME), full = e.taken + 2 > e.cap
             return (
               <motion.button key={e.id} className={`ev-card ${w.eventId === e.id ? 'on' : ''}`} disabled={has || full || e.status !== 'open'} whileTap={{ scale: 0.98 }} onClick={() => { haptic(8); set({ eventId: e.id }) }}>
                 <Photo src={e.img} />
@@ -584,7 +585,34 @@ function StepEvent({ w, set, onNext }) {
           })}
         </div>
       ))}
-      <CtaBar><Button full variant="dark" disabled={!w.eventId} onClick={onNext}>ثبت‌نام</Button></CtaBar>
+      <CtaBar><Button full variant="dark" disabled={!w.eventId} onClick={onNext}>انتخاب یار</Button></CtaBar>
+    </div>
+  )
+}
+
+// مسابقه دونفره است: بازیکن یارش را از اعضا یا مهمان انتخاب می‌کند و ورودی تیم را یک‌جا می‌دهد
+function StepPartner({ w, set, onNext }) {
+  const { club } = useStore()
+  const ev = appEvents(club).find((e) => e.id === w.eventId)
+  const p = w.partner
+  if (!ev) return null
+  const exclude = [ME, ...ev.regs.map((r) => r.by)]
+  return (
+    <div className="partner-pick">
+      <div className="pp-ev"><b>{ev.title}</b><small>{dayLabel(ev.date)}، {hourLabel(ev.start)}، سطح {ev.levels.join(' / ')}</small></div>
+      <p className="hint">🎾 مسابقه دونفره است. یارتان را انتخاب کنید؛ ورودی هر دو نفر ({toman(ev.fee)} × ۲) را شما یک‌جا پرداخت می‌کنید و از اول هم‌تیمی هستید.</p>
+      {p ? (
+        <motion.div className="pp-chosen" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <Avatar name={p.name} size={44} />
+          <div className="grow"><small>یار شما</small><b>{p.name}</b>{p.level && <LevelPill id={p.level} />}</div>
+          <Button small variant="ghost" onClick={() => set({ partner: null })}>تغییر</Button>
+        </motion.div>
+      ) : <AddPlayer exclude={exclude} noPhone={false} onAdd={(x) => { haptic(8); set({ partner: x }) }} />}
+      {p?.guest && (<>
+        <p className="label">سطح تقریبی یارتان</p>
+        <Chips id="pp-lv" small scroll value={p.level || ''} onChange={(level) => set({ partner: { ...p, level } })} options={LEVELS.map((l) => ({ id: l.id, name: l.id }))} />
+      </>)}
+      <CtaBar><Button full variant="dark" disabled={!p || (p.guest && !p.level)} onClick={onNext}>ادامه و پرداخت</Button></CtaBar>
     </div>
   )
 }
@@ -623,7 +651,7 @@ function StepPay({ w, set, onDone }) {
   } else if (EVENT_INTENTS.includes(w.intent)) {
     kind = 'event'
     title = ev.title; sub = `${dayLabel(ev.date)}، ${hourLabel(ev.start)}، ${ev.format}`
-    total = ev.fee; lines = [['ورودی', toman(ev.fee)], ['جایزه', ev.prize]]
+    total = ev.fee * 2; lines = [['تیم شما', `${(s.user?.name || '').split(' ')[0]} و ${w.partner?.name.split(' ')[0] || ''}`], [`ورودی ۲ نفر × ${toman(ev.fee)}`, toman(total)], ['جایزه', ev.prize]]
   } else if (count > 1) {
     kind = 'court-series'
     const base = sessPrices.reduce((a, x) => a + x, 0)
@@ -653,7 +681,7 @@ function StepPay({ w, set, onDone }) {
     setTimeout(() => {
       let r
       if (kind === 'join') r = s.joinGame(game.id, useMethod, total)
-      else if (kind === 'event') r = s.registerEvent(ev, useMethod)
+      else if (kind === 'event') r = s.registerEvent(ev, useMethod, w.partner)
       else if (kind === 'coach') r = s.book({ court: w.court, date: w.date, start: w.start, dur: 1, type: 'coach', coach: coach.id, players: [ME], price: total, levels: null }, useMethod, total)
       else if (kind === 'coach-series') {
         r = s.bookSeries(plan.sessions.map((x) => ({ court: x.court, date: x.date, start: x.start, dur: 1, type: 'coach', coach: coach.id, players: [ME], price: Math.round(total / count) })),

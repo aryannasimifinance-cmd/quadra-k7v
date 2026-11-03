@@ -20,7 +20,8 @@ import { Events } from './Events'
 import { Accounting } from './Accounting'
 import { Hr } from './Hr'
 import { LiveCourts, TYPE_CLS, Timeline } from './Live'
-import { Card, Kpi, Status, TipLayer } from './kit'
+import { Card, Guide, Kpi, Status, TipLayer } from './kit'
+import { upcoming } from '../../events'
 import { refCode } from '../player/Games'
 import '../../admin.css'
 import '../../admin-ops.css'
@@ -46,6 +47,14 @@ const NAV = [
   { group: 'باشگاه', items: [{ id: 'settings', name: 'تنظیمات', icon: 'cog', tip: 'قیمت ساعت‌ها و فعال یا غیرفعال کردن زمین' }] },
 ]
 const ITEMS = NAV.flatMap((g) => g.items)
+const GUIDES = {
+  overview: 'خلاصه‌ی امروز: زمین‌های زنده، کارهای مانده و درآمد. روی هر کار بزنید تا به همان بخش بروید.',
+  calendar: 'برنامه‌ی ساعتی ۴ زمین. روی جای خالی بزنید تا رزرو دستی ثبت شود؛ خانه‌های «🏆» زمین‌هایی است که برای آدینه یا مسابقه رزرو شده.',
+  bookings: 'همه‌ی رزروها با جستجو و فیلتر؛ روی هر رزرو بزنید تا پرداخت، جابه‌جایی یا لغو را انجام دهید.',
+  payments: 'پول‌هایی که رسیده و رزروهایی که هنوز تسویه نشده‌اند؛ مانده‌ها را از همین‌جا دریافت کنید.',
+  hr: 'پرسنل، شیفت، حضور و غیاب، مرخصی و حقوق. مربی‌ها هم اگر کارمند باشند این‌جا تعریف می‌شوند.',
+  settings: 'قیمت ساعت‌های عادی و پیک، و باز یا بسته کردن هر زمین.',
+}
 const BOOKING_SECS = ['overview', 'calendar', 'bookings']
 
 export default function Admin() {
@@ -88,6 +97,7 @@ export default function Admin() {
         </header>
         <AnimatePresence mode="wait">
           <motion.div key={sec} className="adm-body" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+            {GUIDES[sec] && <Guide>{GUIDES[sec]}</Guide>}
             <S ctx={ctx} />
           </motion.div>
         </AnimatePresence>
@@ -128,6 +138,10 @@ function Overview({ ctx }) {
     (lowShop.length || lowCafe.length) && { ic: 'box', tone: 'b', title: 'موجودی رو به اتمام', sub: [lowShop.length && `${fa(lowShop.length)} کالای فروشگاه`, lowCafe.length && `${fa(lowCafe.length)} ماده‌ی کافه`].filter(Boolean).join('، '), go: lowCafe.length > lowShop.length ? 'cafe' : 'shop', tip: 'وقت سفارش خرید است' },
     leaves.length && { ic: 'sun', tone: 'b', title: `${fa(leaves.length)} درخواست مرخصی`, sub: leaves.map((l) => club.staff.find((s) => s.id === l.staff)?.name).join('، '), go: 'hr', tip: 'تأیید یا رد در منابع انسانی ← مرخصی' },
     contracts.length && { ic: 'shield', tone: 'b', title: `${fa(contracts.length)} قرارداد نزدیک پایان`, sub: contracts.map((s) => s.name).join('، '), go: 'hr', tip: 'تمدید یا تسویه‌ی قرارداد' },
+    ...upcoming(club).filter((e) => fromKey(e.date) <= fromKey(addDays(today, 7))).map((e) => ({
+      ic: 'trophy', tone: 'q', title: `🏆 ${e.title}، ${dayLabel(e.date)}`, go: 'events', tip: 'این ساعت‌ها در تقویم برای مسابقه بسته است',
+      sub: `${e.courts.length === 4 ? 'همه‌ی زمین‌ها' : 'زمین ' + e.courts.map((c) => fa(c)).join('، ')} از ${fa(e.start)} تا ${fa(e.start + e.dur)} رزرو مسابقه، ${fa(e.regs.length)} از ${fa(e.cap)} نفر`,
+    })),
     ...off.map(([id]) => ({ ic: 'wrench', tone: 'b', title: `${courtById(+id).name} غیرفعال است`, sub: 'از تنظیمات فعال کنید', go: 'settings' })),
   ].filter(Boolean)
 
@@ -292,7 +306,7 @@ function NewBooking({ d, onClose }) {
   const price = f.type === 'coach' ? coachById(f.coach).price * f.dur : f.type === 'block' ? 0 : priceFor(f.date, f.start, f.dur, club.pricing)
   const coachClash = f.type === 'coach' && club.bookings.some((b) => b.coach === f.coach && b.date === f.date && b.status !== 'cancelled' && f.start < b.start + b.dur && b.start < f.start + f.dur)
   const free = isFree(club, f.date, f.court, f.start, f.dur) && f.start + f.dur <= 24 && !coachClash
-  const matches = MEMBERS.filter((m) => !f.q || m.name.includes(f.q) || m.phone.includes(f.q)).slice(0, 6)
+  const matches = MEMBERS.filter((m) => !m.inactive && (!f.q || m.name.includes(f.q) || m.phone.includes(f.q))).slice(0, 6)
   const times = []; for (let h = 7; h < 24; h += 1) times.push(h)
   const save = () => {
     const paid = f.pay === 'full' ? price : 0

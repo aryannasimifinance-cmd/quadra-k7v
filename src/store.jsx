@@ -5,7 +5,7 @@ import { fits, nextIngCode, nextItemCode, placeCafe, receiveInto } from './cafe'
 import { jMonthLabel } from './jalali'
 import { payroll } from './hr'
 import { withOps } from './ops'
-import { withEvents } from './events'
+import { syncBlocks, withEvents } from './events'
 
 // داده‌ی باشگاه، حساب بازیکن و نشست هر تب جدا ذخیره می‌شوند تا مدیر و بازیکن در دو تب همزمان کار کنند
 const KEY = 'quadra-v1'
@@ -211,17 +211,24 @@ export function StoreProvider({ children }) {
           return { ...r.next, club: { ...s.club, bookings } }
         })
       },
-      // ثبت‌نام بازیکن در آدینه یا تورنمنت؛ اسم و سطح همان لحظه ذخیره می‌شود تا در تیم‌بندی دیده شود
-      registerEvent(ev, method) {
+      // ثبت‌نام دونفره در آدینه یا تورنمنت: بازیکن یارش را انتخاب می‌کند و ورودی هر دو نفر را یک‌جا می‌دهد
+      registerEvent(ev, method, partner) {
         let out
         commit((s) => {
           const cur = s.club.events.find((e) => e.id === ev.id)
-          if (!cur || cur.status !== 'open' || cur.regs.length >= cur.cap || cur.regs.some((r) => r.by === ME)) { out = { error: 'closed' }; return s }
-          const sale = { id: 'S-' + Date.now(), kind: 'event', item: ev.id, name: ev.title, by: ME, price: cur.fee, method, at: Date.now() }
-          const reg = { id: 'r' + Date.now(), by: ME, name: s.user?.name || 'کاربر اپ', level: s.user?.level, phone: s.user?.phone, at: Date.now(), method, paid: cur.fee, source: 'app', sale: sale.id }
-          const r = reward(pay(s, cur.fee, method), 80, ['champ'])
+          const ids = [ME, partner?.id].filter(Boolean)
+          if (!cur || !partner || cur.status !== 'open' || cur.regs.length + 2 > cur.cap || cur.regs.some((r) => ids.includes(r.by))) { out = { error: 'closed' }; return s }
+          const total = cur.fee * 2, now = Date.now(), pair = 'p' + now
+          const me = s.user?.name || 'کاربر اپ'
+          const sale = { id: 'S-' + now, kind: 'event', item: ev.id, name: `${cur.title}، تیم ${me.split(' ')[0]} و ${partner.name.split(' ')[0]}`, by: ME, price: total, method, at: now }
+          const base = { at: now, method, paid: cur.fee, source: 'app', sale: sale.id, pair, payer: ME }
+          const regs = [
+            { ...base, id: 'r' + now, by: ME, name: me, level: s.user?.level, phone: s.user?.phone },
+            { ...base, id: 'r' + now + 'b', by: partner.id, name: partner.name, level: partner.level || null },
+          ]
+          const r = reward(pay(s, total, method), 80, ['champ'])
           out = r.result
-          const events = s.club.events.map((e) => (e.id === ev.id ? { ...e, regs: [...e.regs, reg] } : e))
+          const events = s.club.events.map((e) => (e.id === ev.id ? { ...e, regs: [...e.regs, ...regs] } : e))
           return { ...r.next, events: [...s.events, ev.id], club: { ...s.club, events, sales: [sale, ...s.club.sales] } }
         })
         return out
@@ -465,28 +472,31 @@ export function StoreProvider({ children }) {
         club((c) => {
           const old = c.events.find((e) => e.id === ev.id)
           saved = old ? { ...old, ...ev } : { regs: [], teams: [], groups: [], matches: [], courts: [1, 2, 3, 4], note: '', ...ev, id: 'ev' + Date.now() }
-          return { ...c, events: old ? c.events.map((e) => (e.id === old.id ? saved : e)) : [saved, ...c.events] }
+          // زمین‌های انتخابی در همان روز و ساعت برای مسابقه بسته می‌شوند
+          return { ...c, events: old ? c.events.map((e) => (e.id === old.id ? saved : e)) : [saved, ...c.events], bookings: syncBlocks(c.bookings, saved) }
         })
         return saved
       },
       // فقط رویدادی که ورودی پرداخت‌شده ندارد پاک می‌شود؛ بقیه «لغو» می‌شوند
-      adminEventDel(id) { club((c) => ({ ...c, events: c.events.filter((e) => e.id !== id) })) },
+      adminEventDel(id) { club((c) => ({ ...c, events: c.events.filter((e) => e.id !== id), bookings: c.bookings.filter((b) => b.event !== id) })) },
       // تغییر تیم‌ها، گروه‌ها و نتیجه‌ها با توابع events.js
       adminEventSet(id, fn) { club((c) => ({ ...c, events: c.events.map((e) => (e.id === id ? fn(e) : e)) })) },
-      // ثبت‌نام حضوری؛ ورودی پرداخت‌شده یک فروش «رویداد» است
-      adminEventReg(id, p, method, paid) {
+      // ثبت‌نام حضوری؛ با یار، دو نفر یک تیم می‌شوند و نفر اول ورودی هر دو را می‌دهد (each = ورودی هر نفر)
+      adminEventReg(id, p, method, each, partner) {
         club((c) => {
-          const ev = c.events.find((e) => e.id === id)
-          const sale = paid > 0 ? { id: 'S-' + Date.now(), kind: 'event', item: id, name: ev.title, by: p.by, price: paid, method, at: Date.now() } : null
-          const reg = { id: 'r' + Date.now(), at: Date.now(), method: paid > 0 ? method : 'free', paid, source: 'desk', sale: sale?.id || null, ...p }
-          return { ...c, events: c.events.map((e) => (e.id === id ? { ...e, regs: [...e.regs, reg] } : e)), sales: sale ? [sale, ...c.sales] : c.sales }
+          const ev = c.events.find((e) => e.id === id), now = Date.now()
+          const ps = [p, partner].filter(Boolean), total = each * ps.length
+          const sale = total > 0 ? { id: 'S-' + now, kind: 'event', item: id, name: partner ? `${ev.title}، تیم ${p.name.split(' ')[0]} و ${partner.name.split(' ')[0]}` : ev.title, by: p.by, price: total, method, at: now } : null
+          const regs = ps.map((x, i) => ({ id: 'r' + now + (i ? 'b' : ''), at: now, method: total > 0 ? method : 'free', paid: each, source: 'desk', sale: sale?.id || null, ...(partner ? { pair: 'p' + now, payer: p.by } : {}), ...x }))
+          return { ...c, events: c.events.map((e) => (e.id === id ? { ...e, regs: [...e.regs, ...regs] } : e)), sales: sale ? [sale, ...c.sales] : c.sales }
         })
       },
-      // حذف شرکت‌کننده = برگرداندن ورودی؛ فروشش هم پاک می‌شود و از تیم‌ها بیرون می‌رود
+      // حذف شرکت‌کننده = برگرداندن ورودی؛ اگر با یار ثبت‌نام کرده، هر دو با هم حذف می‌شوند
       adminEventUnreg(id, rid) {
         club((c) => {
           const ev = c.events.find((e) => e.id === id), reg = ev.regs.find((r) => r.id === rid)
-          const next = { ...ev, regs: ev.regs.filter((r) => r.id !== rid), teams: [], groups: [], matches: [] }
+          const gone = (r) => r.id === rid || (reg?.pair && r.pair === reg.pair)
+          const next = { ...ev, regs: ev.regs.filter((r) => !gone(r)), teams: [], groups: [], matches: [] }
           return { ...c, events: c.events.map((e) => (e.id === id ? next : e)), sales: c.sales.filter((s) => s.id !== reg?.sale) }
         })
       },
