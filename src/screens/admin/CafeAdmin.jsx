@@ -444,7 +444,7 @@ function Pos({ onClose }) {
   const setQty = (i, d) => setCart((c) => c.map((y, j) => (j === i ? { ...y, qty: y.qty + d } : y)).filter((y) => y.qty > 0))
   const lines = cart.filter((x) => all.some((y) => y.id === x.iid))
   const total = lines.reduce((s, x) => s + x.qty * priceOf(all.find((y) => y.id === x.iid), x.big), 0)
-  const short = shortage(ings, all, lines)
+  const lack = shortage(ings, all, lines)
   const ok = fits(ings, all, lines)
   const members = mq ? MEMBERS.filter((m) => m.name?.includes(mq) || m.phone?.includes(mq)).slice(0, 5) : []
   const guest = mq.trim()
@@ -489,7 +489,7 @@ function Pos({ onClose }) {
             )
           })}
         </div>
-        {short.length > 0 && <Empty>کمبود در انبار: {short.map(([g, d]) => `${g.name} ${fmtQty(g, d)}`).join('، ')}</Empty>}
+        {lack.length > 0 && <Empty>کمبود در انبار: {lack.map(([g, d]) => `${g.name} ${fmtQty(g, d)}`).join('، ')}</Empty>}
         <Field label="تحویل"><div className="pick-chips">{[0, 1, 2, 3, 4].map((c) => <button key={c} type="button" className={to === c ? 'on' : ''} onClick={() => setTo(c)}>{c ? `سر زمین ${fa(c)}` : 'در کافه'}</button>)}</div></Field>
         {!to && <Field label="آماده‌سازی"><Seg value={now ? 'now' : 'queue'} onChange={(v) => setNow(v === 'now')} options={{ queue: 'ارسال به صف آماده‌سازی', now: 'تحویل همان لحظه' }} tips={{ queue: 'سفارش در ستون «در حال آماده‌سازی» می‌نشیند', now: 'برای آیتم آماده مثل آب و نوشابه؛ مستقیم تحویل‌شده ثبت می‌شود' }} /></Field>}
         <Field label="مشتری">
