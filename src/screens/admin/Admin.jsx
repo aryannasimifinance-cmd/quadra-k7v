@@ -1,8 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useMemo, useState } from 'react'
+import { Component, useEffect, useMemo, useState } from 'react'
 import {
   COACHES, COURTS, DURATIONS, MEMBERS, METHOD_NAME, TYPE_NAME, addDays, coachById, courtById, dayLabel, dayMonth, fa, fromKey,
-  hourLabel, mil, priceFor, range, short, stockOf, toman, todayKey, weekdayShort, dayNum,
+  hourLabel, mil, priceFor, EV_IMG, plainMoney, range, short, stockOf, toman, todayKey, weekdayShort, dayNum,
 } from '../../data'
 import { chime } from '../../fx'
 import { isFree, payState, useStore } from '../../store'
@@ -20,7 +20,7 @@ import { Events } from './Events'
 import { Accounting } from './Accounting'
 import { Hr } from './Hr'
 import { LiveCourts, TYPE_CLS, Timeline } from './Live'
-import { Card, Guide, Kpi, Status, TipLayer } from './kit'
+import { Card, Eye, EyeMid, Guide, Kpi, MASK, Money, Status, TipLayer } from './kit'
 import { upcoming } from '../../events'
 import { TodayIn } from './Payins'
 import { refCode } from '../player/Games'
@@ -58,12 +58,30 @@ const GUIDES = {
 }
 const BOOKING_SECS = ['overview', 'calendar', 'bookings']
 
+// اگر بخشی به خطا بخورد، فقط همان بخش پیام می‌دهد و بقیه‌ی پنل سر جایش می‌ماند (نه صفحه‌ی سیاه)
+class Guard extends Component {
+  state = { err: null }
+  static getDerivedStateFromError(err) { return { err } }
+  componentDidCatch(err, info) { console.error('admin section crashed', err, info?.componentStack) }
+  render() {
+    if (!this.state.err) return this.props.children
+    return (
+      <div className="adm-crash"><Icon name="bolt" size={22} /><b>این صفحه به مشکل خورد</b><small>{String(this.state.err?.message || this.state.err)}</small>
+        <button className="adm-btn primary" onClick={() => { this.setState({ err: null }); this.props.onReset?.() }}>برگشت</button></div>
+    )
+  }
+}
+
 export default function Admin() {
   const { logout, club } = useStore()
+  plainMoney(true)
+  useEffect(() => () => plainMoney(false), [])
   const [sec, setSec] = useState('overview')
   const [menu, setMenu] = useState(false)
   const [drawer, setDrawer] = useState(null) // {kind:'booking', id} | {kind:'new', court, date, start}
-  const ctx = { go: (s) => { setSec(s); window.scrollTo(0, 0) }, open: setDrawer }
+  // هر بار زدن یک بخش، آن بخش از صفحه‌ی اولش باز می‌شود (مثلاً از جزئیات یک آدینه به فهرست)
+  const [visit, setVisit] = useState(0)
+  const ctx = { go: (s) => { setSec(s); setVisit((v) => v + 1); window.scrollTo(0, 0) }, open: setDrawer }
   const S = { overview: Overview, calendar: Calendar, bookings: Bookings, payments: Payments, shop: ShopAdmin, cafe: CafeAdmin, accounting: Accounting, coaches: Coaches, events: Events, members: Members, hr: Hr, settings: Settings }[sec]
   const badges = { shop: club.orders.filter((o) => o.status === 'new').length, cafe: club.cafeOrders.filter((o) => o.status !== 'delivered').length, hr: club.leaves.filter((l) => l.status === 'pending').length }
   return (
@@ -99,11 +117,11 @@ export default function Admin() {
         <AnimatePresence mode="wait">
           <motion.div key={sec} className="adm-body" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
             {GUIDES[sec] && <Guide>{GUIDES[sec]}</Guide>}
-            <S ctx={ctx} />
+            <Guard key={visit} onReset={() => setVisit((v) => v + 1)}><S ctx={ctx} /></Guard>
           </motion.div>
         </AnimatePresence>
       </main>
-      <Drawer d={drawer} onClose={() => setDrawer(null)} />
+      <Guard key={drawer ? JSON.stringify(drawer) : 'none'} onReset={() => setDrawer(null)}><Drawer d={drawer} onClose={() => setDrawer(null)} /></Guard>
       <TipLayer />
     </div>
   )
@@ -111,6 +129,7 @@ export default function Admin() {
 
 // داشبورد: فقط مهم‌ترین‌ها — عددهای امروز، زمین‌های زنده، کارهای مانده و نتیجه‌ی ماه
 function Overview({ ctx }) {
+  const [plShow, setPlShow] = useState(false)
   const { club } = useStore()
   const V = useMemo(() => ledger(club), [club])
   const today = todayKey()
@@ -149,10 +168,10 @@ function Overview({ ctx }) {
   return (
     <div className="ov">
       <div className="kpis four">
-        <Kpi icon="cash" label="درآمد امروز" value={mil(segDay.R)} delta={avg7 ? ((segDay.R - avg7) / avg7) * 100 : null} sub="زمین، کلاس، فروشگاه، کافه و…" tip="مقایسه با میانگین ۷ روز گذشته؛ کلیک برای حسابداری" onClick={() => ctx.go('accounting')} />
+        <Kpi secret="value" icon="cash" label="درآمد امروز" value={mil(segDay.R)} delta={avg7 ? ((segDay.R - avg7) / avg7) * 100 : null} sub="زمین، کلاس، فروشگاه، کافه و…" tip="مقایسه با میانگین ۷ روز گذشته؛ کلیک برای حسابداری" onClick={() => ctx.go('accounting')} />
         <Kpi icon="court" label="پر بودن زمین‌ها امروز" value={`${fa(Math.round(occ * 100))}٪`} sub={`${fa(todays.length)} رزرو`} tip="درصد ساعت‌های رزروشده‌ی ۴ زمین از ۷ صبح تا ۱۲ شب" onClick={() => ctx.go('calendar')} />
         <Kpi icon="bag" label="سفارش‌های باز" tone={shopOpen.length + cafeOpen.length ? 'warn' : ''} value={fa(shopOpen.length + cafeOpen.length)} sub={`کافه ${fa(cafeOpen.length)}، فروشگاه ${fa(shopOpen.length)}`} tip="سفارش‌هایی که هنوز به مشتری تحویل نشده‌اند" onClick={() => ctx.go(cafeOpen.length ? 'cafe' : 'shop')} />
-        <Kpi icon="chart" label="سود این ماه" tone={segMonth.net < 0 ? 'warn' : 'good'} value={mil(segMonth.net)} sub={`نقد و بانک ${short(cash)}`} tip="درآمد ماه شمسی جاری منهای همه‌ی هزینه‌ها" onClick={() => ctx.go('accounting')} />
+        <Kpi secret icon="chart" label="سود این ماه" tone={segMonth.net < 0 ? 'warn' : 'good'} value={mil(segMonth.net)} sub={`نقد و بانک ${short(cash)}`} tip="درآمد ماه شمسی جاری منهای همه‌ی هزینه‌ها" onClick={() => ctx.go('accounting')} />
       </div>
 
       <TodayIn compact />
@@ -173,19 +192,19 @@ function Overview({ ctx }) {
             </div>
           ) : <div className="all-good"><Icon name="check" size={20} /><b>همه‌چیز مرتب است</b><small>کاری منتظر شما نیست.</small></div>}
         </Card>
-        <Card title="این ماه، بخش به بخش" sub={`درآمد ${short(segMonth.R)}، هزینه ${short(segMonth.D + segMonth.O)}`} tip="سود هر بخش باشگاه پس از کم کردن هزینه‌ی مستقیم همان بخش"
-          right={<button className="adm-btn ghost sm" onClick={() => ctx.go('accounting')} data-tip="جزئیات در حسابداری">جزئیات</button>}>
-          <div className="mini-pl">
+        <Card title="این ماه، بخش به بخش" sub={plShow ? `درآمد ${short(segMonth.R)}، هزینه ${short(segMonth.D + segMonth.O)}` : 'مبلغ‌ها پنهان است'} tip="سود هر بخش باشگاه پس از کم کردن هزینه‌ی مستقیم همان بخش"
+          right={<div className="row-btns">{plShow && <Eye on={plShow} set={setPlShow} />}<button className="adm-btn ghost sm" onClick={() => ctx.go('accounting')} data-tip="جزئیات در حسابداری">جزئیات</button></div>}>
+          {!plShow ? <EyeMid set={setPlShow} /> : <div className="mini-pl">
             {segMonth.units.filter((u) => u.revenue).map((u) => (
               <div key={u.id} data-tip={u.tip}>
                 <span><Icon name={u.icon} size={15} />{u.name}</span>
                 <i><em style={{ width: `${(u.revenue / Math.max(1, ...segMonth.units.map((x) => x.revenue))) * 100}%` }} /></i>
-                <b>{short(u.revenue)}<small>سود {short(u.profit)}</small></b>
+                <b>{plShow ? short(u.revenue) : MASK}<small>سود {plShow ? short(u.profit) : MASK}</small></b>
               </div>
             ))}
-            <div className="mp-over" data-tip="حقوق پرسنل، اجاره، قبض‌ها، تعمیرات، تبلیغات و…"><span>هزینه‌های عمومی</span><b className="neg">−{short(segMonth.O)}</b></div>
-            <div className={`mp-net ${segMonth.net < 0 ? 'neg' : ''}`}><span>{segMonth.net < 0 ? 'زیان خالص' : 'سود خالص'}</span><b>{toman(segMonth.net)}</b></div>
-          </div>
+            <div className="mp-over" data-tip="حقوق پرسنل، اجاره، قبض‌ها، تعمیرات، تبلیغات و…"><span>هزینه‌های عمومی</span><b className="neg">{plShow ? `−${short(segMonth.O)}` : MASK}</b></div>
+            <div className={`mp-net ${segMonth.net < 0 ? 'neg' : ''}`}><span>{segMonth.net < 0 ? 'زیان خالص' : 'سود خالص'}</span><b>{plShow ? toman(segMonth.net) : MASK}</b></div>
+          </div>}
         </Card>
       </div>
     </div>
@@ -302,43 +321,75 @@ function BookingDetail({ id, onClose }) {
   )
 }
 
+// ایونت: برنامه‌ی خصوصی روی یک یا چند زمین با مبلغ توافقی؛ آدینه: زمین‌ها به آدینه‌ی همان روز اضافه یا آدینه‌ی تازه ساخته می‌شود
+const BOOK_TYPES = { private: 'رزرو زمین', open: 'بازی باز', coach: 'کلاس', event: 'ایونت', friday: 'آدینه', block: 'تعمیرات' }
+const evDefaults = { kind: 'friday', desc: 'تیم‌های دونفره، گروهی + حذفی', format: 'groups', levels: ['B', 'C+', 'C'], cap: 16, fee: 750000, prize: 'راکت + توپ', img: EV_IMG[0], status: 'open', note: '' }
+
 function NewBooking({ d, onClose }) {
-  const { club, adminAddBooking, toast } = useStore()
-  const [f, setF] = useState({ court: d.court || 1, date: d.date, start: d.start ?? 17, dur: 1, type: 'private', member: MEMBERS[0].id, coach: COACHES[0].id, pay: 'none', method: 'card', note: '', q: '' })
+  const { club, adminAddBooking, adminEventSave, toast } = useStore()
+  const [f, setF] = useState({ court: d.court || 1, courts: [d.court || 1], date: d.date, start: d.start ?? 17, dur: 1, type: 'private', member: MEMBERS[0].id, coach: COACHES[0].id, pay: 'none', method: 'card', note: '', q: '', title: '', total: null, evId: null })
   const set = (p) => setF((x) => ({ ...x, ...p }))
-  const price = f.type === 'coach' ? coachById(f.coach).price * f.dur : f.type === 'block' ? 0 : priceFor(f.date, f.start, f.dur, club.pricing)
+  const multi = f.type === 'event' || f.type === 'friday'
+  // آدینه‌های همان روز که هنوز برگزار نشده‌اند؛ اولی پیش‌فرض است
+  const sameDay = club.events.filter((e) => e.date === f.date && ['draft', 'open', 'closed'].includes(e.status))
+  const target = f.type === 'friday' && f.evId !== 'new' ? sameDay.find((e) => e.id === f.evId) || sameDay[0] : null
+  const S = target ? target.start : f.start, D = target ? target.dur : f.dur
+  const courts = multi ? f.courts : [f.court]
+  const fresh = target ? courts.filter((c) => !target.courts.includes(c)) : courts
+  const base = f.type === 'coach' ? coachById(f.coach).price * D : f.type === 'block' || f.type === 'friday' ? 0 : priceFor(f.date, S, D, club.pricing) * courts.length
+  const price = f.type === 'event' && f.total != null ? f.total : base
   const coachClash = f.type === 'coach' && club.bookings.some((b) => b.coach === f.coach && b.date === f.date && b.status !== 'cancelled' && f.start < b.start + b.dur && b.start < f.start + f.dur)
-  const free = isFree(club, f.date, f.court, f.start, f.dur) && f.start + f.dur <= 24 && !coachClash
+  const taken = fresh.filter((c) => !isFree(club, f.date, c, S, D))
+  const free = fresh.length > 0 && !taken.length && S + D <= 24 && !coachClash
   const matches = MEMBERS.filter((m) => !m.inactive && (!f.q || m.name.includes(f.q) || m.phone.includes(f.q))).slice(0, 6)
   const times = []; for (let h = 7; h < 24; h += 1) times.push(h)
+  const pickType = (type) => set({ type, total: null, ...(type === 'friday' ? { courts: [1, 2, 3, 4], ...(sameDay.length ? {} : { start: 9, dur: 3 }) } : type === 'event' ? { courts: [f.court] } : {}) })
+  const togCourt = (c) => set({ courts: f.courts.includes(c) ? f.courts.filter((x) => x !== c) : [...f.courts, c].sort() })
+  const where = courts.length === 4 ? 'همه‌ی زمین‌ها' : courts.map((c) => courtById(c).name).join('، ')
   const save = () => {
-    const paid = f.pay === 'full' ? price : 0
-    adminAddBooking({ court: f.court, date: f.date, start: f.start, dur: f.dur, type: f.type, by: f.type === 'block' ? null : f.member, players: f.type === 'block' ? [] : [f.member],
-      levels: f.type === 'open' ? [MEMBERS.find((m) => m.id === f.member).level] : null, coach: f.type === 'coach' ? f.coach : null, price, paid, method: paid ? f.method : null, note: f.note })
-    chime('success'); toast({ icon: '📅', title: 'رزرو ثبت شد', body: `${courtById(f.court).name}، ${range(f.start, f.dur)}` }); onClose()
+    if (f.type === 'friday') {
+      const ev = target ? adminEventSave({ id: target.id, courts: [...new Set([...target.courts, ...courts])].sort() })
+        : adminEventSave({ ...evDefaults, title: f.title.trim() || 'آدینه‌ی کوادرا', date: f.date, start: S, dur: D, courts })
+      chime('success'); toast({ icon: '🏆', title: target ? `زمین به «${ev.title}» اضافه شد` : `«${ev.title}» ساخته شد`, body: target ? where : 'ثبت‌نام و جزئیاتش را در «آدینه‌ها و مسابقات» کامل کنید' }); onClose(); return
+    }
+    // ایونت چندزمینه: هر زمین یک رزرو، مبلغ کل بین زمین‌ها پخش می‌شود
+    const each = Math.floor(price / courts.length)
+    courts.forEach((c, i) => {
+      const pr = i === 0 ? price - each * (courts.length - 1) : each
+      const paid = f.pay === 'full' ? pr : 0
+      adminAddBooking({ court: c, date: f.date, start: S, dur: D, type: f.type, by: f.type === 'block' ? null : f.member, players: f.type === 'block' ? [] : [f.member],
+        levels: f.type === 'open' ? [MEMBERS.find((m) => m.id === f.member).level] : null, coach: f.type === 'coach' ? f.coach : null, price: pr, paid, method: paid ? f.method : null, note: f.type === 'event' ? f.title.trim() || 'ایونت' : f.note })
+    })
+    chime('success'); toast({ icon: '📅', title: f.type === 'event' ? `ایونت «${f.title.trim() || 'ایونت'}» ثبت شد` : 'رزرو ثبت شد', body: `${where}، ${range(S, D)}` }); onClose()
   }
   return (
     <div className="dr">
       <h2 className="dr-h">رزرو دستی</h2>
       <div className="form">
-        <label>نوع<div className="seg-adm">{Object.entries({ private: 'رزرو زمین', open: 'بازی باز', coach: 'کلاس', block: 'تعمیرات' }).map(([k, v]) => <button key={k} className={f.type === k ? 'on' : ''} onClick={() => set({ type: k })}>{v}</button>)}</div></label>
-        <label>زمین<div className="seg-adm">{COURTS.map((c) => <button key={c.id} className={f.court === c.id ? 'on' : ''} onClick={() => set({ court: c.id })}>{c.name}</button>)}</div></label>
+        <label>نوع<div className="seg-adm wrap">{Object.entries(BOOK_TYPES).map(([k, v]) => <button key={k} className={f.type === k ? 'on' : ''} onClick={() => pickType(k)}>{v}</button>)}</div></label>
+        {f.type === 'friday' && sameDay.length > 0 && <label>آدینه<div className="seg-adm wrap">{sameDay.map((e) => <button key={e.id} className={target?.id === e.id ? 'on' : ''} onClick={() => set({ evId: e.id })}>{e.title}</button>)}<button className={!target ? 'on' : ''} onClick={() => set({ evId: 'new' })}>+ آدینه‌ی تازه</button></div></label>}
+        {(f.type === 'event' || (f.type === 'friday' && !target)) && <label>{f.type === 'event' ? 'عنوان ایونت' : 'اسم آدینه'}<input placeholder={f.type === 'event' ? 'مثلاً تولد، تیم‌سازی شرکت' : 'آدینه‌ی کوادرا'} value={f.title} onChange={(e) => set({ title: e.target.value })} /></label>}
+        {multi ? <label>زمین‌ها<div className="seg-adm">{COURTS.map((c) => <button key={c.id} className={f.courts.includes(c.id) ? 'on' : ''} onClick={() => togCourt(c.id)}>{c.name}{target?.courts.includes(c.id) ? ' ✓' : ''}</button>)}</div></label>
+          : <label>زمین<div className="seg-adm">{COURTS.map((c) => <button key={c.id} className={f.court === c.id ? 'on' : ''} onClick={() => set({ court: c.id })}>{c.name}</button>)}</div></label>}
         <div className="form-2">
-          <label>تاریخ<select value={f.date} onChange={(e) => set({ date: e.target.value })}>{Array.from({ length: 21 }, (_, i) => addDays(todayKey(), i - 3)).map((k) => <option key={k} value={k}>{dayLabel(k)} {dayMonth(fromKey(k))}</option>)}</select></label>
-          <label>ساعت شروع<select value={f.start} onChange={(e) => set({ start: +e.target.value })}>{times.map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select></label>
+          <label>تاریخ<select value={f.date} onChange={(e) => set({ date: e.target.value, evId: null })}>{Array.from({ length: 28 }, (_, i) => addDays(todayKey(), i - 3)).map((k) => <option key={k} value={k}>{dayLabel(k)} {dayMonth(fromKey(k))}</option>)}</select></label>
+          <label>ساعت شروع<select disabled={!!target} value={S} onChange={(e) => set({ start: +e.target.value })}>{times.map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select></label>
         </div>
-        <label>مدت<div className="seg-adm">{DURATIONS.map((x) => <button key={x.h} className={f.dur === x.h ? 'on' : ''} onClick={() => set({ dur: x.h })}>{x.name}</button>)}</div></label>
+        {multi ? <label>تا ساعت<select disabled={!!target} value={S + D} onChange={(e) => set({ dur: +e.target.value - S })}>{Array.from({ length: 24 - S }, (_, i) => S + i + 1).map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select></label>
+          : <label>مدت<div className="seg-adm">{DURATIONS.map((x) => <button key={x.h} className={f.dur === x.h ? 'on' : ''} onClick={() => set({ dur: x.h })}>{x.name}</button>)}</div></label>}
+        {target && <small className="muted">ساعت همان آدینه است ({range(S, D)})؛ زمین‌های ✓ از قبل مال آدینه‌اند.</small>}
         {f.type === 'coach' && <label>مربی<select value={f.coach} onChange={(e) => set({ coach: e.target.value })}>{COACHES.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
-        {f.type !== 'block' ? (<>
-          <label>مشتری<input placeholder="جستجوی نام یا موبایل" value={f.q} onChange={(e) => set({ q: e.target.value })} /></label>
+        {f.type === 'friday' ? null : f.type !== 'block' ? (<>
+          <label>{f.type === 'event' ? 'برگزارکننده' : 'مشتری'}<input placeholder="جستجوی نام یا موبایل" value={f.q} onChange={(e) => set({ q: e.target.value })} /></label>
           <div className="pick-list">{matches.map((m) => <button key={m.id} className={f.member === m.id ? 'on' : ''} onClick={() => set({ member: m.id })}><span className="adm-av sm">{m.name[0]}</span><b>{m.name}</b><small dir="ltr">{m.phone}</small><LevelPill id={m.level} /></button>)}</div>
+          {f.type === 'event' && <label>مبلغ کل ایونت<Money value={price} onChange={(total) => set({ total })} /><small className="muted">بر اساس نرخ زمین: {toman(base)}</small></label>}
           <label>پرداخت<div className="seg-adm">{Object.entries({ none: 'در پذیرش، موقع بازی', full: 'همین الان، کامل' }).map(([k, v]) => <button key={k} className={f.pay === k ? 'on' : ''} onClick={() => set({ pay: k })}>{v}</button>)}</div></label>
           {f.pay !== 'none' && <label>روش<div className="seg-adm">{['card', 'cash', 'online'].map((m) => <button key={m} className={f.method === m ? 'on' : ''} onClick={() => set({ method: m })}>{METHOD_NAME[m]}</button>)}</div></label>}
         </>) : <label>توضیح<input placeholder="مثلاً تعویض چمن" value={f.note} onChange={(e) => set({ note: e.target.value })} /></label>}
       </div>
-      <div className="dr-total"><span>{courtById(f.court).name}، {range(f.start, f.dur)}</span><b>{toman(price)}</b></div>
-      {!free && <p className="cancelled">{coachClash ? `${coachById(f.coach).name} در این ساعت کلاس دیگری دارد.` : `این بازه روی ${courtById(f.court).name} آزاد نیست.`}</p>}
-      <button className="adm-btn primary full" disabled={!free} onClick={save}>ثبت رزرو</button>
+      <div className="dr-total"><span>{where || 'زمینی انتخاب نشده'}، {range(S, D)}</span><b>{f.type === 'friday' ? 'ورودی با ثبت‌نام' : toman(price)}</b></div>
+      {!free && <p className="cancelled">{coachClash ? `${coachById(f.coach).name} در این ساعت کلاس دیگری دارد.` : !courts.length ? 'حداقل یک زمین انتخاب کنید.' : !fresh.length ? 'این زمین‌ها از قبل مال همین آدینه‌اند.' : `این بازه روی ${taken.map((c) => courtById(c).name).join('، ')} آزاد نیست.`}</p>}
+      <button className="adm-btn primary full" disabled={!free} onClick={save}>{f.type === 'friday' ? (target ? 'افزودن زمین به آدینه' : 'ساخت آدینه') : f.type === 'event' ? 'ثبت ایونت' : 'ثبت رزرو'}</button>
     </div>
   )
 }

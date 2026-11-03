@@ -22,7 +22,7 @@ const LOW = 3
 const Sw = ({ c, title }) => <i className="sw" style={{ background: c }} title={title} />
 const stockTone = (n) => (n === 0 ? ['bad', 'ناموجود'] : n <= LOW ? ['warn', 'کم'] : ['ok', 'موجود'])
 
-const LOG_ST = { new: ['جدید', 'bad'], ready: ['آماده‌ی تحویل', 'ok'], delivered: ['تحویل شد', 'mute'] }
+const LOG_ST = { new: ['سفارش جدید', 'bad'], ready: ['آماده‌ی تحویل', 'ok'], delivered: ['تحویل شد', 'mute'] }
 const logLines = (o) => o.items.map((x) => [productById(x.pid)?.name || x.sku, x.qty, [x.size, x.color].filter(Boolean).join(' / '), x.price])
 
 export function ShopAdmin() {
@@ -77,7 +77,7 @@ export function ShopAdmin() {
 // ---------- سفارش‌ها ----------
 function Orders({ onAll }) {
   const { club, user, adminOrder } = useStore()
-  const cols = [['new', 'جدید'], ['ready', 'آماده‌ی تحویل'], ['delivered', 'تحویل‌شده‌ی امروز']]
+  const cols = [['new', 'سفارش جدید'], ['ready', 'آماده‌ی تحویل'], ['delivered', 'تحویل‌شده‌ی امروز']]
   const of = (k) => club.orders.filter((o) => o.status === k && (k !== 'delivered' || dk(o.at) === todayKey()))
   return (
     <div className="kanban kb-scroll">
@@ -419,7 +419,7 @@ function Stock({ onRecv }) {
       <div className="kpis four">
         <Kpi icon="box" label="تعداد کالا / SKU" value={`${fa(club.products.length)} / ${fa(all.length)}`} />
         <Kpi icon="bag" label="تعداد کل در انبار" value={`${fa(all.reduce((s, v) => s + v.stock, 0))} عدد`} />
-        <Kpi icon="cash" label="ارزش انبار (بهای تمام‌شده)" value={short(value) + ' تومان'} sub={`به قیمت فروش ${short(retail)}`} />
+        <Kpi icon="cash" label="ارزش انبار (بهای تمام‌شده)" value={short(value)} sub={`به قیمت فروش ${short(retail)}`} />
         <Kpi icon="clock" label="SKU رو به اتمام / ناموجود" tone={all.some((v) => v.stock === 0) ? 'warn' : ''} value={`${fa(all.filter((v) => v.stock > 0 && v.stock <= LOW).length)} / ${fa(all.filter((v) => v.stock === 0).length)}`} />
       </div>
       <Card>
@@ -484,9 +484,9 @@ function Top() {
       <div className="filters-bar"><Seg value={days} onChange={setDays} options={{ 7: '۷ روز', 30: '۳۰ روز', 90: '۹۰ روز' }} /></div>
       <div className="kpis four">
         <Kpi icon="bag" label="تعداد فروش" value={`${fa(T.qty)} عدد`} />
-        <Kpi icon="cash" label="فروش" value={short(T.rev) + ' تومان'} />
-        <Kpi icon="box" label="بهای تمام‌شده" value={short(T.cogs) + ' تومان'} />
-        <Kpi icon="chart" label="سود ناخالص" value={short(T.rev - T.cogs) + ' تومان'} sub={T.rev ? `حاشیه ${fa(Math.round(((T.rev - T.cogs) / T.rev) * 100))}٪` : null} />
+        <Kpi icon="cash" label="فروش" value={short(T.rev)} />
+        <Kpi icon="box" label="بهای تمام‌شده" value={short(T.cogs)} />
+        <Kpi icon="chart" label="سود ناخالص" value={short(T.rev - T.cogs)} sub={T.rev ? `حاشیه ${fa(Math.round(((T.rev - T.cogs) / T.rev) * 100))}٪` : null} />
       </div>
       <div className="two">
         <Card title="فروش به تفکیک دسته"><HBars rows={byCat} /></Card>

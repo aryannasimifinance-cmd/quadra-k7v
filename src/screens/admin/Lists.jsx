@@ -312,7 +312,7 @@ function CoachFile({ c, span, onEdit }) {
         <Kpi icon="users" label="شاگردها" value={fa(f.students.length)} sub={`${fa(f.active)} نفر جلسه‌ی آینده دارند`} />
         <Kpi icon="ticket" label="پکیج‌های فروخته" value={fa(f.packs.length)} sub={COACH_PACKS.map((p) => `${p.name.replace('پکیج ', '')}: ${fa(f.packs.filter((s) => s.pack === p.id).length)}`).join('، ')} />
         <Kpi icon="cal" label="جلسه‌های برگزارشده" value={fa(c.sessions)} sub={`${fa(c.upcoming)} جلسه‌ی آینده`} />
-        <Kpi icon="cash" label="درآمد" value={short(c.revenue) + ' تومان'} sub={`★ ${fa(c.rating)} از ${fa(c.reviews)} نظر`} />
+        <Kpi icon="cash" label="درآمد" value={short(c.revenue)} sub={`★ ${fa(c.rating)} از ${fa(c.reviews)} نظر`} />
       </div>
       <div className="row-between coach-bar">
         <Seg value={tab} onChange={setTab} options={{ students: `شاگردها ${fa(f.students.length)}`, packs: `پکیج‌ها و جلسه‌ها ${fa(f.packs.length)}`, next: `برنامه‌ی پیش‌رو ${fa(f.upcoming.length)}`, reviews: pend.length ? `نظرها (${fa(pend.length)} منتظر)` : `نظرها ${fa(f.reviews.length)}` }} />

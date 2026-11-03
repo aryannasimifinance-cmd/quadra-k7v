@@ -102,9 +102,9 @@ function Orders({ onAll }) {
     <div className="stack">
       <div className="kpis four">
         <Kpi icon="bag" label="سفارش‌های امروز" value={fa(today.length)} sub={`${fa(today.filter((o) => o.to).length)} سفارش سر زمین`} />
-        <Kpi icon="cash" label="فروش امروز کافه" value={short(today.reduce((s, o) => s + o.total, 0)) + ' تومان'} />
+        <Kpi icon="cash" label="فروش امروز کافه" value={short(today.reduce((s, o) => s + o.total, 0))} />
         <Kpi icon="clock" label="در صف" tone={act.length > 4 ? 'warn' : ''} value={fa(act.length)} sub={act.length ? `قدیمی‌ترین ${fa(Math.round((Date.now() - Math.min(...act.map((o) => o.at))) / 6e4))} دقیقه پیش` : 'صف خالی است'} />
-        <Kpi icon="chart" label="میانگین هر سفارش" value={today.length ? short(Math.round(today.reduce((s, o) => s + o.total, 0) / today.length)) + ' تومان' : '—'} />
+        <Kpi icon="chart" label="میانگین هر سفارش" value={today.length ? short(Math.round(today.reduce((s, o) => s + o.total, 0) / today.length)) : '—'} />
       </div>
       <div className="kanban four kb-scroll">
         {cols.map(([k, n]) => {
@@ -275,7 +275,7 @@ function Stock({ onEdit, onRecv, onAdj }) {
     <div className="stack">
       <div className="kpis four">
         <Kpi icon="box" label="مواد اولیه" value={fa(all.length)} sub={`${fa(Object.keys(ING_CATS).length)} گروه`} />
-        <Kpi icon="cash" label="ارزش انبار کافه" value={short(Math.round(value)) + ' تومان'} sub="به بهای میانگین موزون" />
+        <Kpi icon="cash" label="ارزش انبار کافه" value={short(Math.round(value))} sub="به بهای میانگین موزون" />
         <Kpi icon="clock" label="زیر حداقل" tone={all.some((g) => g.stock <= g.min) ? 'warn' : ''} value={fa(all.filter((g) => g.stock > 0 && g.stock <= g.min).length)} sub="نیاز به سفارش خرید" />
         <Kpi icon="close" label="تمام شده" tone={all.some((g) => g.stock <= 0) ? 'bad' : ''} value={fa(all.filter((g) => g.stock <= 0).length)} sub={`${fa(club.cafeItems.filter((it) => it.active !== false && portions(it, all) === 0).length)} آیتم منو ناموجود`} />
       </div>
@@ -686,9 +686,9 @@ function Report() {
       <PeriodBar p={p} setP={setP} right={<><Seg value={mode} onChange={setMode} options={{ all: 'همه', normal: 'روزهای عادی', event: '🏆 مسابقه‌ها' }} tips={{ normal: 'بدون فروش روزهای آدینه و مسابقه', event: 'فقط فروش روزهای آدینه و مسابقه' }} /><XlsxBtn label="گزارش اکسل کافه" onClick={exp} /></>} />
       <div className="kpis four">
         <Kpi icon="bag" label="سفارش‌ها" value={fa(T.n)} sub={`${fa(T.n ? Math.round((T.app / T.n) * 100) : 0)}٪ از اپ، ${fa(T.court)} سر زمین`} />
-        <Kpi icon="cash" label="فروش کافه" value={short(T.rev) + ' تومان'} sub={T.n ? `میانگین ${short(Math.round(T.rev / T.n))}` : null} />
-        <Kpi icon="box" label="بهای تمام‌شده (مواد اولیه)" value={short(T.cogs) + ' تومان'} />
-        <Kpi icon="chart" label="سود ناخالص" value={short(T.rev - T.cogs) + ' تومان'} sub={T.rev ? `حاشیه ${fa(Math.round(((T.rev - T.cogs) / T.rev) * 100))}٪` : null} />
+        <Kpi icon="cash" label="فروش کافه" value={short(T.rev)} sub={T.n ? `میانگین ${short(Math.round(T.rev / T.n))}` : null} />
+        <Kpi icon="box" label="بهای تمام‌شده (مواد اولیه)" value={short(T.cogs)} />
+        <Kpi icon="chart" label="سود ناخالص" value={short(T.rev - T.cogs)} sub={T.rev ? `حاشیه ${fa(Math.round(((T.rev - T.cogs) / T.rev) * 100))}٪` : null} />
       </div>
       <div className="two">
         <Card title="فروش به تفکیک دسته">{byCat.length ? <HBars rows={byCat} /> : <Empty>فروشی در این بازه نیست.</Empty>}</Card>

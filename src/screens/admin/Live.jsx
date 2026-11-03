@@ -1,7 +1,7 @@
 // وضعیت زنده‌ی ۴ زمین: الان چه کسی روی کدام زمین است؛ قابل جابه‌جایی روز به روز و ساعت به ساعت
 import { motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
-import { COURTS, TYPE_NAME, addDays, coachById, dayLabel, fa, hourLabel, range, todayKey } from '../../data'
+import { COURTS, TYPE_NAME, addDays, coachById, dayLabel, fa, fromKey, hourLabel, range, todayKey } from '../../data'
 import { isFree, payState, useStore } from '../../store'
 import { jDateFa } from '../../jalali'
 import { SHIFTS, shiftOn } from '../../hr'
@@ -13,7 +13,7 @@ const H0 = 7, H1 = 24
 export const TYPE_CLS = { private: 't-private', open: 't-open', coach: 't-coach', block: 't-block', event: 't-event' }
 const nowHour = () => { const n = new Date(); return n.getHours() + n.getMinutes() / 60 }
 const covering = (list, t) => list.find((b) => b.start <= t && t < b.start + b.dur)
-const name = (b, user) => (b.type === 'block' ? b.note || 'تعمیرات' : b.type === 'coach' ? `کلاس ${coachById(b.coach)?.name}` : who(b.by, user).replace(' (اپ)', ''))
+const name = (b, user) => (b.type === 'block' ? b.note || 'تعمیرات' : b.type === 'coach' ? `کلاس ${coachById(b.coach)?.name}` : b.type === 'event' && b.note ? b.note : who(b.by, user).replace(' (اپ)', ''))
 const mins = (h) => { const m = Math.round(h * 60); return m >= 60 ? `${fa(Math.floor(m / 60))} ساعت${m % 60 ? ` و ${fa(m % 60)} دقیقه` : ''}` : `${fa(m)} دقیقه` }
 
 export function LiveCourts({ ctx }) {
@@ -146,12 +146,7 @@ export function Timeline({ date, compact, onPick }) {
   const { club, user } = useStore()
   const isToday = date === todayKey()
   const nowX = ((nowHour() - H0) / (H1 - H0)) * 100
-  const pick = (court, e) => {
-    const r = e.currentTarget.getBoundingClientRect()
-    const frac = (r.right - e.clientX) / r.width // راست‌به‌چپ
-    const start = Math.floor((H0 + frac * (H1 - H0)) * 2) / 2
-    if (isFree(club, date, court, start, 1)) onPick({ kind: 'new', court, date, start })
-  }
+  const past = (h) => fromKey(date) < fromKey(todayKey()) || (isToday && h + 1 <= nowHour())
   return (
     <div className={`tl ${compact ? 'compact' : ''}`}>
       <div className="tl-hours"><span />{Array.from({ length: H1 - H0 }, (_, i) => <small key={i}>{fa(H0 + i)}</small>)}</div>
@@ -160,7 +155,10 @@ export function Timeline({ date, compact, onPick }) {
         return (
           <div key={c.id} className={`tl-row ${club.off[c.id] ? 'off' : ''}`}>
             <div className="tl-court"><b>{c.name}</b><small>{c.kind}، {fa(Math.round(occupancy(club, date, c.id) * 100))}٪</small></div>
-            <div className="tl-track" onClick={(e) => e.target === e.currentTarget && pick(c.id, e)}>
+            <div className="tl-track">
+              {!club.off[c.id] && Array.from({ length: H1 - H0 }, (_, i) => H0 + i).filter((h) => !past(h) && isFree(club, date, c.id, h, 1)).map((h) => (
+                <button key={'f' + h} className="tl-free" style={{ right: `${((h - H0) / (H1 - H0)) * 100}%`, width: `${100 / (H1 - H0)}%` }} onClick={() => onPick({ kind: 'new', court: c.id, date, start: h })} data-tip={`رزرو ${c.name}، ${hourLabel(h)}`} aria-label={`رزرو ${c.name} ساعت ${hourLabel(h)}`}><Icon name="plus" size={13} /></button>
+              ))}
               {isToday && nowX > 0 && nowX < 100 && <i className="tl-now" style={{ right: `${nowX}%` }} />}
               {list.map((b) => {
                 const st = payState(b)
@@ -178,7 +176,7 @@ export function Timeline({ date, compact, onPick }) {
         )
       })}
       <div className="tl-legend">
-        {Object.entries({ private: 'رزرو زمین', open: 'بازی باز', coach: 'کلاس مربی', block: 'تعمیرات' }).map(([k, v]) => <span key={k}><i className={TYPE_CLS[k]} />{v}</span>)}
+        {Object.entries({ private: 'رزرو زمین', open: 'بازی باز', coach: 'کلاس مربی', event: 'ایونت', block: 'تعمیرات' }).map(([k, v]) => <span key={k}><i className={TYPE_CLS[k]} />{v}</span>)}
         <span><i className="pd ok" />پرداخت‌شده</span><span><i className="pd warn" />بخشی پرداخت‌شده</span><span><i className="pd bad" />پرداخت‌نشده</span>
       </div>
     </div>

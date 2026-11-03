@@ -7,7 +7,7 @@ import { activeMembership, quests } from '../../select'
 import { Avatar, Button, Chips, Icon, LevelPill, Photo, Sheet, Stars, TopBar, rise, stagger } from '../../components/ui'
 import { leaderboard } from './Home'
 import { Loading } from '../../components/Logo'
-import { EV_FORMAT, appEvents, finished, isLive, showsResults } from '../../events'
+import { EV_FORMAT, appEvents, champOn, finished, isLive, showsResults } from '../../events'
 import { Bracket, Groups, Podium, Teams, champion } from '../../components/Tournament'
 
 // برگه‌ی امتیاز ناشناس
@@ -206,7 +206,7 @@ export function Events({ nav, onBack, kind: initial = 'friday' }) {
         {past.length > 0 && <p className="label">برگزارشده‌ها؛ نتیجه‌ها و برنده‌ها</p>}
         {past.map((e) => {
           const r = ratingOf(club, 'event:' + e.id), done = rated.includes('event:' + e.id)
-          const ch = showsResults(e) && champion(e)
+          const ch = champOn(e) && champion(e)
           return (
             <div key={e.id} className="past-ev" onClick={() => setOpen(e.id)} role="button">
               <div className="grow"><b>{e.title}</b><small>{dayMonth(fromKey(e.date))}، {fa(e.teams.length)} تیم</small>
@@ -240,7 +240,7 @@ function EventInfo({ ev, onJoin }) {
         <span>ورودی {toman(ev.fee)} هر نفر، تیم دونفره؛ جایزه: {ev.prize}</span>
         {ev.note && <span>{ev.note}</span>}
       </div>
-      {show ? <Podium ev={ev} /> : ev.teams.length > 0 && <p className="muted small">نتیجه‌های این مسابقه هنوز اعلام نشده است.</p>}
+      {champOn(ev) ? <Podium ev={ev} /> : ev.teams.length > 0 && <p className="muted small">نتیجه‌های این مسابقه هنوز اعلام نشده است.</p>}
       <Chips id={'evt-' + ev.id} small value={tab} onChange={setTab} options={tabs.map(([id, name]) => ({ id, name }))} />
       {tab === 'people' && (
         <div className="ev-people">

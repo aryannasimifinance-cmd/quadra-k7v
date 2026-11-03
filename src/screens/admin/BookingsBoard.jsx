@@ -1,7 +1,7 @@
-// رزروها به شکل بُرد زمین: هر روز یک بخش، هر زمین یک ستون، هر رزرو یک کارت زمین کوچک با بازیکن‌ها
+// رزروها: «برنامه» (هر رزرو یک ردیف) و «زمین‌ها» (هر زمین یک ستون، با ساعت‌های آزاد بین رزروها)
 import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
-import { COURTS, TYPE_NAME, addDays, coachById, courtById, dayLabel, dayMonth, fa, fromKey, range, short, toman, todayKey } from '../../data'
+import { COURTS, MEMBERS, TYPE_NAME, addDays, coachById, courtById, dayLabel, dayMonth, fa, fromKey, hourLabel, range, short, toman, todayKey } from '../../data'
 import { payState, useStore } from '../../store'
 import { Icon } from '../../components/ui'
 import { jDate } from '../../jalali'
@@ -10,7 +10,7 @@ import { STATUS, who } from './derive'
 import { Card, Empty, Search, Seg, Status, XlsxBtn } from './kit'
 
 const RANGES = [['today', 'امروز', 'رزروهای امروز'], ['tomorrow', 'فردا', 'رزروهای فردا'], ['next', '۷ روز آینده', 'از امروز تا یک هفته‌ی بعد'], ['past', '۷ روز گذشته', 'بازی‌های هفته‌ی گذشته']]
-const TYPES = [['private', 'رزرو زمین', 'کل زمین برای یک نفر و همراهانش؛ در اپ همان موقع کامل پرداخت می‌شود'], ['open', 'بازی باز', 'بازی که بقیه می‌توانند به آن بپیوندند'], ['coach', 'کلاس', 'کلاس با مربی'], ['block', 'تعمیرات', 'زمین برای تعمیر بسته است']]
+const TYPES = [['private', 'رزرو زمین', 'کل زمین برای یک نفر و همراهانش؛ در اپ همان موقع کامل پرداخت می‌شود'], ['open', 'بازی باز', 'بازی که بقیه می‌توانند به آن بپیوندند'], ['coach', 'کلاس', 'کلاس با مربی'], ['event', 'ایونت', 'تولد، شرکتی یا هر برنامه‌ی خصوصی روی یک یا چند زمین'], ['block', 'تعمیرات', 'زمین برای تعمیر بسته است']]
 const PAYS = [['paid', 'پرداخت‌شده', 'کامل پرداخت شده'], ['partial', 'بخشی پرداخت‌شده', 'فقط در بازی باز: بعضی بازیکن‌ها هنوز سهمشان را نداده‌اند'], ['pending', 'پرداخت‌نشده', 'رزرو پذیرش؛ موقع بازی در پذیرش پرداخت می‌شود'], ['void', 'لغوشده', 'رزروهای لغوشده']]
 const SOURCES = [['app', 'اپ', 'رزرو از اپ'], ['desk', 'پذیرش', 'رزرو تلفنی یا حضوری']]
 const nowH = () => { const d = new Date(); return d.getHours() + d.getMinutes() / 60 }
@@ -33,7 +33,6 @@ export function Bookings({ ctx }) {
   const [src, setSrc] = useState('all')
   const [q, setQ] = useState('')
   const [more, setMore] = useState(false)
-  const [view, setView] = useState('agenda')
   const t = todayKey()
   const days = useMemo(() => {
     if (rng === 'today') return [t]
@@ -48,7 +47,7 @@ export function Bookings({ ctx }) {
     if (pay === 'all' ? b.status === 'cancelled' : ps !== pay) return false
     if (type !== 'all' && b.type !== type) return false
     return (court === 'all' || b.court === +court) && (src === 'all' || b.source === src)
-      && (!q || who(b.by, user).includes(q) || b.players.some((p) => who(p, user).includes(q)))
+      && (!q || [b.by, ...b.players].some((p) => who(p, user).includes(q) || MEMBERS.find((m) => m.id === p)?.phone.includes(q.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))))
   }), [club.bookings, days, court, type, pay, src, q, user])
   const sum = list.filter((b) => b.status !== 'cancelled').reduce((s, b) => ({ price: s.price + b.price, paid: s.paid + Math.min(b.paid, b.price) }), { price: 0, paid: 0 })
   const courts = court === 'all' ? COURTS : COURTS.filter((c) => c.id === +court)
@@ -65,11 +64,10 @@ export function Bookings({ ctx }) {
         <div className="bk-row">
           <div className="bk-range">{RANGES.map(([k, n, tip]) => <button key={k} className={rng === k ? 'on' : ''} onClick={() => setRng(k)} data-tip={tip}>{rng === k && <motion.i layoutId="bk-rng" className="bk-rng-bg" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}<span>{n}</span></button>)}</div>
           <select className="bk-court-sel" value={court} onChange={(e) => setCourt(e.target.value)} data-tip="فقط رزروهای یک زمین">{[['all', 'همه‌ی زمین‌ها'], ...COURTS.map((c) => [String(c.id), c.name])].map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>
-          <Search value={q} onChange={setQ} ph="جستجوی نام" />
+          <div className="bk-q"><Search value={q} onChange={setQ} ph="جستجوی نام یا موبایل اعضا" /></div>
           <button className={`adm-btn ghost sm bk-more ${more || extra ? 'on' : ''}`} onClick={() => setMore(!more)} data-tip="فیلتر بر اساس نوع رزرو، پرداخت و منبع">
             <Icon name="filter" size={15} />فیلتر بیشتر{extra > 0 && <em>{fa(extra)}</em>}
           </button>
-          <Seg value={view} onChange={setView} options={{ agenda: 'برنامه', board: 'زمین‌ها', list: 'جدول' }} tips={{ agenda: 'ساده: هر رزرو یک ردیف، به ترتیب ساعت', board: 'هر زمین یک ستون، هر رزرو یک کارت', list: 'جدول کامل با تسویه' }} />
           <XlsxBtn onClick={exp} label="اکسل" />
         </div>
         {more && (
@@ -79,17 +77,8 @@ export function Bookings({ ctx }) {
             <label><small>منبع</small><Chips value={src} onChange={setSrc} options={SOURCES} /></label>
             {active > 0 && <button className="link" onClick={reset}>پاک کردن همه</button>}
         <div className="bk-legend">
-          <span><i className="lg tp-private" />رزرو زمین</span>
-          <span><i className="lg tp-open" />بازی باز</span>
-          <span><i className="lg tp-coach" />کلاس مربی</span>
-          <span><i className="lg tp-block" />تعمیرات</span>
+          {TYPES.map(([k, n]) => <span key={k}><i className={`lg tp-${k}`} />{n}</span>)}
           <span className="sep" />
-          <span data-tip="نوار پایین هر کارت"><i className="lg bar paid" />پرداخت کامل</span>
-          <span data-tip="فقط در بازی باز"><i className="lg bar partial" />بخشی پرداخت‌شده</span>
-          <span><i className="lg bar pending" />پرداخت‌نشده</span>
-          <span className="sep" />
-          <span><i className="lg dot" />بازیکن</span>
-          <span data-tip="فقط در بازی باز"><i className="lg dot empty" />جای خالی</span>
           <span><i className="lg live" />در حال بازی</span>
         </div>
           </motion.div>
@@ -103,10 +92,8 @@ export function Bookings({ ctx }) {
         <div data-tip="باید در پذیرش گرفته شود؛ از بخش «دریافت‌ها» تسویه کنید"><small>هنوز دریافت نشده</small><b className={sum.price - sum.paid ? 'warn' : ''}>{toman(sum.price - sum.paid)}</b></div>
       </div>
 
-      {view === 'list' && <ListView list={list} ctx={ctx} />}
-      {view === 'agenda' && <Agenda list={list} days={days} ctx={ctx} today={t} />}
 
-      {view === 'board' && days.map((k) => {
+      {days.map((k) => {
         const dayList = list.filter((b) => b.date === k)
         if (!dayList.length && days.length > 2) return null
         return (
@@ -119,11 +106,15 @@ export function Bookings({ ctx }) {
             <div className={`bk-lanes ${courts.length === 1 ? 'one' : ''}`} style={{ '--n': courts.length }}>
               {courts.map((c) => {
                 const lane = dayList.filter((b) => b.court === c.id).sort((a, b) => a.start - b.start)
+                const items = [...lane.map((b) => ({ at: b.start, b })), ...(club.off[c.id] ? [] : gaps(lane, k, t).map(([from, to]) => ({ at: from, gap: [from, to] })))].sort((x, y) => x.at - y.at)
                 return (
                   <div key={c.id} className="bk-lane">
-                    <div className="bk-lane-h"><b>{c.name}</b><small>{c.kind}{club.off[c.id] ? '، غیرفعال' : ''}</small><em>{fa(lane.length)}</em></div>
-                    {lane.map((b) => <Ticket key={b.id} b={b} today={k === t} onClick={() => ctx.open({ kind: 'booking', id: b.id })} />)}
-                    {!lane.length && <button className="bk-free" onClick={() => ctx.open({ kind: 'new', date: k, court: c.id })} data-tip="رزرو دستی روی این زمین">آزاد<small>+ رزرو</small></button>}
+                    <div className="bk-lane-h"><b>{c.name}</b><small>{club.off[c.id] ? 'غیرفعال' : c.kind}</small><em>{fa(lane.filter((b) => b.status !== 'cancelled').length)} رزرو</em></div>
+                    {items.map((x) => (x.b
+                      ? <Ticket key={x.b.id} b={x.b} today={k === t} onClick={() => ctx.open({ kind: 'booking', id: x.b.id })} />
+                      : <button key={'g' + x.at} className="bk-gap" onClick={() => ctx.open({ kind: 'new', date: k, court: c.id, start: x.gap[0] })} data-tip="رزرو دستی در این ساعت">
+                        <span dir="ltr">{hourLabel(x.gap[0])}–{hourLabel(x.gap[1])}</span><small>آزاد</small><Icon name="plus" size={14} /></button>))}
+                    {!items.length && <small className="bk-none">{club.off[c.id] ? 'این زمین غیرفعال است' : 'ساعت آزادی نمانده'}</small>}
                   </div>
                 )
               })}
@@ -131,96 +122,39 @@ export function Bookings({ ctx }) {
           </section>
         )
       })}
-      {!list.length && (days.length > 2 || view === 'list') && <Empty>با این فیلترها رزروی نیست. {active > 0 && <button className="link" onClick={reset}>پاک کردن فیلترها</button>}</Empty>}
+      {!list.length && days.length > 2 && <Empty>با این فیلترها رزروی نیست. {active > 0 && <button className="link" onClick={reset}>پاک کردن فیلترها</button>}</Empty>}
     </div>
   )
 }
 
-// کارت هر رزرو: زمین پدل با نسبت واقعی ۲ به ۱، دو بازیکن در هر سمت تور
+// ساعت‌های آزاد یک زمین در روز (از ۷ صبح تا ۱۲ شب)؛ برای امروز از ساعت بعدی، برای روزهای گذشته هیچ
+function gaps(lane, k, today) {
+  if (fromKey(k) < fromKey(today)) return []
+  const out = []
+  let h = k === today ? Math.max(7, Math.ceil(nowH())) : 7
+  lane.filter((b) => b.status !== 'cancelled').forEach((b) => { if (b.start - h >= 1) out.push([h, b.start]); h = Math.max(h, b.start + b.dur) })
+  if (24 - h >= 1) out.push([h, 24])
+  return out
+}
+
+// کارت هر رزرو: نوار رنگی نوع، ساعت، نام، بازیکن‌ها و وضعیت پرداخت
 function Ticket({ b, today, onClick }) {
   const { user } = useStore()
   const st = payState(b)
   const live = today && b.status !== 'cancelled' && nowH() >= b.start && nowH() < b.start + b.dur
-  // جای خالی فقط برای بازی باز معنا دارد؛ رزرو خصوصی و کلاس فقط افراد ثبت‌شده را نشان می‌دهند
   const spots = b.type === 'block' ? [] : b.type === 'open' ? Array.from({ length: 4 }, (_, i) => b.players[i] || null) : b.players.slice(0, 4)
-  const paidPct = b.price ? Math.min(100, (b.paid / b.price) * 100) : 100
+  const title = b.type === 'block' ? b.note || 'تعمیرات' : b.type === 'coach' ? `کلاس ${coachById(b.coach)?.name || ''}` : b.type === 'event' ? b.note || 'ایونت' : who(b.by, user)
   return (
-    <button className={`bk-ticket tp-${b.type} ${b.status === 'cancelled' ? 'cancel' : ''} ${live ? 'is-live' : ''}`} onClick={onClick}
-      data-tip={`${TYPE_NAME[b.type]}، ${b.status === 'cancelled' ? 'لغو شده' : STATUS[st].name}${b.type === 'open' ? `، ${fa(b.players.length)} از ۴ بازیکن` : ''}`}>
-      <div className="bk-court">
-        <i className="net" /><i className="svc a" /><i className="svc b" />
-        {b.type === 'block' ? <span className="bk-block"><Icon name="wrench" size={15} />{b.note || 'تعمیرات'}</span>
-          : spots.map((p, i) => <i key={i} className={`pl p${i} ${p ? 'on' : ''}`}>{p ? who(p, user)[0] : ''}</i>)}
-        {b.type === 'coach' && <i className="pl coach" data-tip="مربی"><Icon name="coach" size={12} /></i>}
-      </div>
-      <div className="bk-info">
-        <div className="bk-top"><span className="bk-time" dir="ltr">{range(b.start, b.dur)}</span>{live && <span className="bk-live"><i />الان</span>}</div>
-        {b.type !== 'block' && <>
-          <b>{who(b.by, user)}</b>
-          <div className="bk-pay"><i style={{ width: `${paidPct}%` }} className={b.status === 'cancelled' ? 'void' : st} /><span>{b.status === 'cancelled' ? 'لغو شده' : st === 'paid' ? toman(b.price) : `${short(b.paid)} از ${short(b.price)}`}</span></div>
-        </>}
-      </div>
+    <button className={`bk-ticket tp-${b.type} ${b.status === 'cancelled' ? 'cancel' : ''} ${live ? 'is-live' : ''}`} onClick={onClick}>
+      <div className="bk-top"><span className="bk-time" dir="ltr">{range(b.start, b.dur)}</span>{live ? <span className="bk-live"><i />الان</span> : <small className="bk-type">{TYPE_NAME[b.type]}</small>}</div>
+      <b className="bk-name">{b.type === 'block' && <Icon name="wrench" size={13} />}{title}</b>
+      {b.type !== 'block' && (
+        <div className="bk-foot">
+          <span className="bk-ppl" data-tip={b.type === 'open' ? `${fa(b.players.length)} از ۴ بازیکن` : `${fa(b.players.length)} بازیکن`}>{spots.map((p, i) => <i key={i} className={p ? 'on' : ''}>{p ? who(p, user)[0] : ''}</i>)}</span>
+          <span className={`bk-paid ${b.status === 'cancelled' ? 'void' : st}`}>{b.status === 'cancelled' ? 'لغو شده' : st === 'paid' ? toman(b.price) : `${short(b.paid)} از ${short(b.price)}`}</span>
+        </div>
+      )}
     </button>
   )
 }
 
-// نمای برنامه: هر روز یک بخش، هر رزرو یک ردیف تمیز به ترتیب ساعت
-function Agenda({ list, days, ctx, today }) {
-  const { user, adminSettle, toast } = useStore()
-  return days.map((k) => {
-    const rows = list.filter((b) => b.date === k).sort((a, b) => a.start - b.start || a.court - b.court)
-    if (!rows.length && days.length > 2) return null
-    return (
-      <section key={k} className="ag-day">
-        <header><h3>{dayLabel(k)}<small>{dayMonth(fromKey(k))}</small></h3><span>{fa(rows.filter((b) => b.status !== 'cancelled').length)} رزرو</span>
-          <button className="adm-btn ghost sm" onClick={() => ctx.open({ kind: 'new', date: k })}><Icon name="plus" size={14} />رزرو</button></header>
-        <div className="ag-list">
-          {rows.map((b) => {
-            const st = payState(b), due = b.status === 'cancelled' ? 0 : Math.max(0, b.price - b.paid)
-            const live = k === today && b.status !== 'cancelled' && nowH() >= b.start && nowH() < b.start + b.dur
-            return (
-              <button key={b.id} className={`ag-row tp-${b.type} ${b.status === 'cancelled' ? 'cancel' : ''} ${live ? 'is-live' : ''}`} onClick={() => ctx.open({ kind: 'booking', id: b.id })}>
-                <span className="ag-time" dir="ltr">{range(b.start, b.dur)}</span>
-                <span className="ag-court">{courtById(b.court).name}</span>
-                <span className="ag-main"><b>{b.type === 'block' ? (b.note || 'تعمیرات') : b.type === 'coach' ? `کلاس ${coachById(b.coach)?.name || ''}` : who(b.by, user)}</b>
-                  <small>{TYPE_NAME[b.type]}{b.type === 'open' ? `، ${fa(b.players.length)} از ۴` : ''}{b.type === 'coach' ? `، ${who(b.by, user)}` : ''}{live ? '، الان در حال بازی' : ''}</small></span>
-                {b.type !== 'block' && <span className="ag-pay">{b.status === 'cancelled' ? <em className="void">لغو شده</em> : <><b>{toman(b.price)}</b><Status s={st} /></>}</span>}
-                {due > 0 && <span className="ag-act" onClick={(e) => { e.stopPropagation(); adminSettle(b.id, 'card'); toast({ icon: '✅', title: 'تسویه شد', body: toman(due) }) }} data-tip="مانده با کارتخوان دریافت شد">تسویه</span>}
-              </button>
-            )
-          })}
-          {!rows.length && <button className="ag-empty" onClick={() => ctx.open({ kind: 'new', date: k })}>رزروی نیست؛ + رزرو دستی</button>}
-        </div>
-      </section>
-    )
-  })
-}
-
-// نمای لیست: همان فیلترها، یک فهرست ساده بر اساس روز و ساعت
-function ListView({ list, ctx }) {
-  const { user, adminSettle, toast } = useStore()
-  const rows = [...list].sort((a, b) => fromKey(a.date) - fromKey(b.date) || a.start - b.start || a.court - b.court)
-  if (!rows.length) return null
-  return (
-    <Card>
-      <div className="tbl-wrap"><table className="tbl bk-list">
-        <thead><tr><th>روز و ساعت</th><th>زمین</th><th>نوع</th><th>رزروکننده</th><th data-tip="در بازی باز: چند نفر از ۴ نفر">بازیکن</th><th>مبلغ</th><th>پرداخت</th><th /></tr></thead>
-        <tbody>{rows.map((b) => {
-          const st = payState(b), due = b.status === 'cancelled' ? 0 : Math.max(0, b.price - b.paid)
-          return (
-            <tr key={b.id} className={`click ${b.status === 'cancelled' ? 'dim' : ''}`} onClick={() => ctx.open({ kind: 'booking', id: b.id })}>
-              <td className="nowrap"><b>{dayLabel(b.date)}</b><small dir="ltr">{range(b.start, b.dur)}</small></td>
-              <td>{courtById(b.court).name}</td>
-              <td><span className={`type-dot tp-${b.type}`} />{TYPE_NAME[b.type]}</td>
-              <td>{b.type === 'block' ? (b.note || '—') : who(b.by, user)}<small>{b.source === 'app' ? 'از اپ' : 'پذیرش'}</small></td>
-              <td className="num">{b.type === 'block' ? '—' : b.type === 'open' ? `${fa(b.players.length)} از ۴` : fa(b.players.length)}</td>
-              <td className="num">{b.price ? toman(b.price) : '—'}</td>
-              <td>{b.type === 'block' ? '—' : <Status s={b.status === 'cancelled' ? 'void' : st} />}{due > 0 && <small>مانده {short(due)}</small>}</td>
-              <td onClick={(e) => e.stopPropagation()}>{due > 0 && <button className="adm-btn primary sm" data-tip="مانده با کارتخوان دریافت شد" onClick={() => { adminSettle(b.id, 'card'); toast({ icon: '✅', title: 'تسویه شد', body: toman(due) }) }}>تسویه</button>}</td>
-            </tr>
-          )
-        })}</tbody>
-      </table></div>
-    </Card>
-  )
-}

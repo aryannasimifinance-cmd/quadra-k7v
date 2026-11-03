@@ -51,8 +51,8 @@ export function OrderLog({ orders, lines, status, title, file, initialRange = 'm
       </div>
       <div className="kpis four">
         <Kpi icon="bag" label={one ? one.name : 'سفارش‌ها'} value={fa(list.length)} sub={one ? one.phone && <span dir="ltr">{one.phone}</span> : `${fa(people)} مشتری`} />
-        <Kpi icon="cash" label="جمع مبلغ" value={short(sum) + ' تومان'} />
-        <Kpi icon="chart" label="میانگین هر سفارش" value={list.length ? short(Math.round(sum / list.length)) + ' تومان' : '—'} />
+        <Kpi icon="cash" label="جمع مبلغ" value={short(sum)} />
+        <Kpi icon="chart" label="میانگین هر سفارش" value={list.length ? short(Math.round(sum / list.length)) : '—'} />
         <Kpi icon="sparkle" label={words.length ? 'بیشتر از همه' : 'پرفروش‌های این بازه'} value={top[0] ? top[0][0] : '—'} sub={top.slice(1, 4).map(([n, c]) => `${n} ${fa(c)}`).join('، ')} />
       </div>
       <div className="tbl-wrap">

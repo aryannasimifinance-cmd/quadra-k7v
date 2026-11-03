@@ -9,7 +9,7 @@ import { ProductImage } from '../../components/Merch'
 import { Dish } from '../../components/Dish'
 import { Tracker, courtTargets } from './Cafe'
 import { available } from '../../cafe'
-import { appEvents } from '../../events'
+import { appEvents, champOn, finished, podium, teamName } from '../../events'
 
 export default function Home({ nav }) {
   const s = useStore()
@@ -23,6 +23,9 @@ export default function Home({ nav }) {
   const st = streak(s)
   const evs = appEvents(club)
   const nextEv = ['friday', 'official'].map((k) => evs.find((e) => e.kind === k)).filter(Boolean)
+  // آخرین قهرمان‌هایی که مدیر اجازه‌ی نمایششان را داده
+  const champEv = finished(club).find(champOn)
+  const pod = champEv && podium(champEv)
   const first = user.name.split(' ')[0]
   const h = new Date().getHours()
   const hello = h < 12 ? 'صبح بخیر' : h < 17 ? 'روز بخیر' : 'عصر بخیر'
@@ -125,6 +128,16 @@ export default function Home({ nav }) {
             {qs.map((q) => <Quest key={q.id} q={q} />)}
           </div>
         </section>
+
+        {champEv && <section className="h-sec"><SectionHead title="قهرمان‌ها" action="همه‌ی نتیجه‌ها" onAction={() => nav.open('events')} />
+          <motion.button className="champ-card" whileTap={{ scale: 0.98 }} onClick={() => nav.open('events')}>
+            <span className="cc-tag">🏆 {champEv.title}، {dayLabel(champEv.date)} {dayMonth(fromKey(champEv.date))}</span>
+            <div className="cc-pod">
+              <div className="cc-p second"><i>🥈</i><b>{teamName(champEv, pod.second)}</b><small>دوم</small></div>
+              <div className="cc-p first"><i>🏆</i><b>{teamName(champEv, pod.first)}</b><small>قهرمان</small></div>
+              <div className="cc-p third"><i>🥉</i><b>{pod.third.map((t) => teamName(champEv, t)).join('، ') || '—'}</b><small>سوم</small></div>
+            </div>
+          </motion.button></section>}
 
         {nextEv.length > 0 && <section className="h-sec"><SectionHead title="مسابقه‌ها" action="همه" onAction={() => nav.open('events')} />
         {nextEv.map((ev) => (

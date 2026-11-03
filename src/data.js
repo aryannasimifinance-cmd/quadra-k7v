@@ -166,9 +166,13 @@ export function hash(str) {
   return (h >>> 0) / 4294967295
 }
 export const fa = (n) => Number(n).toLocaleString('fa-IR')
-export const toman = (n) => fa(Math.round(n / 1000) * 1000) + ' تومان'
-export const mil = (n) => (n >= 1e9 ? fa(+(n / 1e9).toFixed(2)) + ' میلیارد' : fa(+(n / 1e6).toFixed(1)) + ' میلیون') + ' تومان'
-export const short = (n) => (n >= 1e9 ? fa(+(n / 1e9).toFixed(1)) + ' میلیارد' : n >= 1e6 ? fa(+(n / 1e6).toFixed(1)) + ' م' : fa(n))
+// پنل مدیر مبلغ‌ها را کامل و بدون واحد می‌نویسد (plainMoney)؛ اپ بازیکن همان شکل کوتاه با «تومان» را دارد
+let PLAIN = false
+export const plainMoney = (v) => { PLAIN = v }
+const whole = (n) => fa(Math.round(n / 1000) * 1000)
+export const toman = (n) => (PLAIN ? whole(n) : whole(n) + ' تومان')
+export const mil = (n) => (PLAIN ? whole(n) : (n >= 1e9 ? fa(+(n / 1e9).toFixed(2)) + ' میلیارد' : fa(+(n / 1e6).toFixed(1)) + ' میلیون') + ' تومان')
+export const short = (n) => (PLAIN ? whole(n) : n >= 1e9 ? fa(+(n / 1e9).toFixed(1)) + ' میلیارد' : n >= 1e6 ? fa(+(n / 1e6).toFixed(1)) + ' م' : fa(n))
 export function hourLabel(h) {
   const hh = Math.floor(h) % 24, mm = h % 1 ? '۳۰' : '۰۰'
   return `${fa(hh).padStart(2, '۰')}:${mm}`
@@ -321,7 +325,7 @@ export function events() {
 // ---------- داده‌ی اولیه‌ی باشگاه (برای پنل مدیر) ----------
 const METHODS = ['online', 'online', 'online', 'card', 'cash', 'wallet', 'package']
 export const METHOD_NAME = { online: 'درگاه آنلاین', card: 'کارتخوان', cash: 'نقدی', wallet: 'کیف پول', package: 'پکیج', 'coach-pack': 'پکیج مربی' }
-export const TYPE_NAME = { private: 'رزرو زمین', open: 'بازی باز', coach: 'کلاس مربی', event: 'تورنمنت', block: 'تعمیرات' }
+export const TYPE_NAME = { private: 'رزرو زمین', open: 'بازی باز', coach: 'کلاس مربی', event: 'ایونت', block: 'تعمیرات' }
 
 export function seedClub() {
   const bookings = []

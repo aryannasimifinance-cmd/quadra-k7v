@@ -6,7 +6,7 @@ import { chime } from '../../fx'
 import { useStore } from '../../store'
 import { Icon } from '../../components/ui'
 import { payments } from './derive'
-import { Card, Field, Money, Seg, Side } from './kit'
+import { Card, Field, Money, Secret, Seg, Side } from './kit'
 import { CustomerField, useCustomer } from './PosKit'
 
 const time = new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' })
@@ -29,13 +29,15 @@ export function TodayIn({ compact }) {
   const { adminPayinDel, toast } = useStore()
   const t = useTodayIn()
   const [add, setAdd] = useState(false)
+  // در داشبورد هر مبلغ جدا پنهان است و چشم خودش را دارد
+  const m = (n) => (compact ? <Secret value={toman(n)} /> : toman(n))
   return (
-    <Card className="today-in" title="دریافت‌های امروز" sub={`${fa(t.list.length)} دریافت، جمع ${toman(t.total)}`}
-      right={<button className="adm-btn primary sm" onClick={() => setAdd(true)} data-tip="پول نقد یا کارتخوانی که در پذیرش گرفتید و در سیستم نیست"><Icon name="plus" size={15} />ثبت دریافت دستی</button>}>
+    <Card className="today-in" title="دریافت‌های امروز" sub={<>{fa(t.list.length)} دریافت، جمع {m(t.total)}</>}
+      right={<div className="row-btns"><button className="adm-btn primary sm" onClick={() => setAdd(true)} data-tip="پول نقد یا کارتخوانی که در پذیرش گرفتید و در سیستم نیست"><Icon name="plus" size={15} />ثبت دریافت دستی</button></div>}>
       <div className="ti-ch">
         {Object.entries(CHANNEL).map(([k, [n, sub]]) => (
           <div key={k} className={`ti-${k}`}>
-            <small>{n}</small><b>{toman(t.by[k])}</b>
+            <small>{n}</small><b>{m(t.by[k])}</b>
             <i style={{ width: `${t.total ? (t.by[k] / t.total) * 100 : 0}%` }} />
             <em>{sub}</em>
           </div>

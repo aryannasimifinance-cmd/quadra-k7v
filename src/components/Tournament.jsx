@@ -2,7 +2,7 @@
 // اگر onScore داده شود (پنل مدیر)، نتیجه‌ی هر بازی قابل ثبت است.
 import { useState } from 'react'
 import { fa, levelById } from '../data'
-import { ROUND, koRounds, podium, scored, standings, teamName, teamOf, winnerOf } from '../events'
+import { ROUND, judge, koRounds, podium, scored, scoringOf, setsOf, standings, teamName, teamOf, winnerOf } from '../events'
 
 export function Podium({ ev }) {
   const p = podium(ev)
@@ -36,28 +36,42 @@ export function Teams({ ev, onPick, picked }) {
 // عدد فارسی یا انگلیسی، حداکثر دو رقم
 const digits = (v) => v.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[^\d]/g, '').slice(0, 2)
 
-function Match({ ev, m, onScore }) {
+// هر بازی ست به ست: هر تیم برای هر ست یک خانه‌ی گیم دارد؛ وقتی نتیجه طبق قانون کامل شد ذخیره می‌شود
+export function Match({ ev, m, onScore }) {
+  const sc = scoringOf(ev)
   const w = winnerOf(m)
-  // ویرایش: هر تیم ورودی گیم خودش را کنار اسمش دارد؛ وقتی هر دو پر و نابرابر شد ذخیره می‌شود
-  const [s, setS] = useState({ a: m.sa ?? '', b: m.sb ?? '' })
-  const put = (k, v) => {
-    const n = { ...s, [k]: digits(v) }
-    setS(n)
-    if (n.a !== '' && n.b !== '' && +n.a !== +n.b) onScore(m.id, +n.a, +n.b)
-    else if (n.a === '' && n.b === '') onScore(m.id, null, null)
+  const saved = setsOf(m)
+  const [raw, setD] = useState(() => Array.from({ length: sc.sets }, (_, i) => (saved[i] ? [String(saved[i][0]), String(saved[i][1])] : ['', ''])))
+  // اگر روش امتیاز عوض شود تعداد ست‌ها فرق می‌کند؛ ردیف‌ها همیشه به اندازه‌ی روش فعلی‌اند
+  const d = Array.from({ length: sc.sets }, (_, i) => raw[i] || ['', ''])
+  const full = (rows) => rows.filter(([x, y]) => x !== '' && y !== '').map(([x, y]) => [+x, +y])
+  const r = judge(ev, full(d))
+  const put = (i, t, v) => {
+    const n = d.map((x, j) => (j === i ? (t ? [x[0], digits(v)] : [digits(v), x[1]]) : x))
+    setD(n)
+    const sets = full(n), res = judge(ev, sets)
+    if (!sets.length) { if (saved.length) onScore(m.id, null) } else if (res.done || m.sa != null) onScore(m.id, sets)
   }
-  const side = (id, k, score) => (
-    <div className={`trn-side ${w && w === id ? 'win' : ''} ${!id ? 'tbd' : ''}`}>
-      <span>{id ? teamName(ev, id) : 'منتظر نتیجه'}</span>
-      {onScore && k ? <input className="trn-in" inputMode="numeric" value={s[k]} onChange={(e) => put(k, e.target.value)} aria-label={`گیم ${id ? teamName(ev, id) : ''}`} /> : <b>{score ?? ''}</b>}
-    </div>
-  )
-  if (m.b == null) return <div className="trn-match bye">{side(m.a)}<small>استراحت؛ مستقیم به دور بعد</small></div>
+  // ست سوم فقط وقتی لازم است که دو ست اول یکی‌یکی شده باشد
+  const n = onScore ? (sc.sets === 1 ? 1 : d[2]?.some((x) => x !== '') || (r.a === 1 && r.b === 1) ? 3 : 2) : saved.length
+  const side = (t) => {
+    const id = t ? m.b : m.a
+    return (
+      <div className={`trn-side ${w && w === id ? 'win' : ''} ${!id ? 'tbd' : ''}`}>
+        <span>{id ? teamName(ev, id) : 'منتظر نتیجه'}</span>
+        <div className="trn-sets">{Array.from({ length: n }, (_, i) => (onScore
+          ? <input key={i} className={`trn-in ${sc.stb && i === 2 ? 'stb' : ''}`} inputMode="numeric" value={d[i][t] && fa(d[i][t])} onChange={(e) => put(i, t, e.target.value)} aria-label={`${sc.stb && i === 2 ? 'سوپرتای‌بریک' : `ست ${i + 1}`} ${id ? teamName(ev, id) : ''}`} />
+          : <b key={i} className={saved[i][t] > saved[i][1 - t] ? 'w' : ''}>{fa(saved[i][t])}</b>))}</div>
+      </div>
+    )
+  }
+  if (m.b == null) return <div className="trn-match bye"><div className="trn-side"><span>{teamName(ev, m.a)}</span></div><small>استراحت؛ مستقیم به دور بعد</small></div>
   return (
     <div className={`trn-match ${scored(m) ? 'done' : ''} ${onScore ? 'edit' : ''}`}>
       {m.court && <small className="trn-court">زمین {fa(m.court)}</small>}
-      <div className="trn-pair">{side(m.a, 'a', m.sa)}{side(m.b, 'b', m.sb)}</div>
-      {onScore && s.a !== '' && s.b !== '' && +s.a === +s.b && <small className="trn-tie">نتیجه مساوی ثبت نمی‌شود</small>}
+      {onScore && sc.sets > 1 && <div className="trn-sh">{Array.from({ length: n }, (_, i) => <small key={i}>{sc.stb && i === 2 ? 'تای‌بریک' : `ست ${fa(i + 1)}`}</small>)}</div>}
+      <div className="trn-pair">{side(0)}{side(1)}</div>
+      {onScore && r.why && <small className="trn-tie">{r.why}</small>}
     </div>
   )
 }
@@ -70,9 +84,9 @@ export function Groups({ ev, onScore }) {
         <div key={g.id} className="trn-group" style={{ '--h': (ev.groups.indexOf(g) * 57) % 360 }}>
           <h4><span className="trn-gl">{g.id}</span>گروه {g.id}</h4>
           <table className="trn-table">
-            <thead><tr><th>#</th><th>تیم</th><th>بازی</th><th>برد</th><th>باخت</th><th>تفاضل</th></tr></thead>
+            <thead><tr><th>#</th><th>تیم</th><th>بازی</th><th>برد</th><th>ست</th><th>گیم</th><th>امتیاز</th></tr></thead>
             <tbody>{standings(ev, g.id).map((r, i) => (
-              <tr key={r.id} className={i < (ev.setup?.advance || (ev.groups.length === 1 ? 4 : 2)) ? 'up' : ''}><td>{fa(i + 1)}</td><td>{r.name}{i < (ev.setup?.advance || (ev.groups.length === 1 ? 4 : 2)) && <em className="trn-up">صعود</em>}</td><td>{fa(r.p)}</td><td>{fa(r.w)}</td><td>{fa(r.l)}</td><td dir="ltr">{r.gf - r.ga > 0 ? '+' : ''}{fa(r.gf - r.ga)}</td></tr>
+              <tr key={r.id} className={i < (ev.setup?.advance || (ev.groups.length === 1 ? 4 : 2)) ? 'up' : ''}><td>{fa(i + 1)}</td><td>{r.name}{i < (ev.setup?.advance || (ev.groups.length === 1 ? 4 : 2)) && <em className="trn-up">صعود</em>}</td><td>{fa(r.p)}</td><td>{fa(r.w)}</td><td dir="ltr">{r.sf - r.sa > 0 ? '+' : ''}{fa(r.sf - r.sa)}</td><td dir="ltr">{r.gf - r.ga > 0 ? '+' : ''}{fa(r.gf - r.ga)}</td><td><b>{fa(r.w)}</b></td></tr>
             ))}</tbody>
           </table>
           <div className="trn-ms">{ev.matches.filter((m) => m.stage === 'group' && m.group === g.id).map((m) => <Match key={`${m.id}-${m.a}-${m.b}`} ev={ev} m={m} onScore={onScore} />)}</div>

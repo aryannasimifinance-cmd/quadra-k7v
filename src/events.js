@@ -6,12 +6,45 @@ import { dk } from './jalali'
 export const EV_STATUS = { draft: ['پیش‌نویس', 'mute'], open: ['ثبت‌نام باز', 'ok'], closed: ['ثبت‌نام بسته', 'warn'], done: ['برگزار شد', 'mute'], cancelled: ['لغو شد', 'bad'] }
 export const EV_FORMAT = { groups: 'گروهی + حذفی', knockout: 'فقط حذفی' }
 export const ROUND = { 32: 'یک‌شانزدهم', 16: 'یک‌هشتم', 8: 'یک‌چهارم', 4: 'نیمه‌نهایی', 2: 'فینال' }
-const GROUP_IDS = 'ABCDEFGH'
+export const GROUP_IDS = 'ABCDEFGHIJKLMNOP'
 
 export const regPower = (r) => levelById(r.level)?.base || 1500
 export const teamOf = (ev, id) => ev.teams.find((t) => t.id === id)
 export const teamName = (ev, id) => teamOf(ev, id)?.name || '—'
 export const isLive = (ev) => ev.status === 'open' || ev.status === 'closed'
+
+// ---------- امتیازدهی پدل (همان قانون تنیس) ----------
+// گیم: ۱۵، ۳۰، ۴۰، گیم؛ ست: هر کس زودتر ۶ گیم با دو اختلاف (۶–۴، ۷–۵)؛ در ۶–۶ تای‌بریک و ست ۷–۶ تمام می‌شود.
+// پرو ست: ۹ گیم با دو اختلاف، در ۸–۸ تای‌بریک (۹–۸). سوپرتای‌بریک: ۱۰ امتیاز با دو اختلاف (۱۰–۸، ۱۱–۹).
+export const SCORING = {
+  set6: { name: 'یک ست ۶ گیمی', sub: 'در ۶–۶ تای‌بریک؛ مثل ۶–۳ یا ۷–۶', sets: 1, games: 6, tbAt: 6 },
+  pro9: { name: 'پرو ست ۹ گیمی', sub: 'در ۸–۸ تای‌بریک؛ مثل ۹–۵ یا ۹–۸', sets: 1, games: 9, tbAt: 8 },
+  bo3: { name: 'دو ست از سه', sub: 'ست‌های ۶ گیمی، ست سوم سوپرتای‌بریک ۱۰ امتیازی', sets: 3, games: 6, tbAt: 6, stb: true },
+}
+export const scoringOf = (ev) => SCORING[ev.scoring] || SCORING.set6
+// آیا نتیجه‌ی یک ست درست است؟
+export function setOk(a, b, sc, stb) {
+  const hi = Math.max(a, b), lo = Math.min(a, b), g = sc.games
+  if (a == null || b == null || a === b) return false
+  if (stb) return hi >= 10 && hi - lo >= 2 && (hi === 10 || hi - lo === 2)
+  if (hi === g) return lo <= g - 2 || (sc.tbAt === g - 1 && lo === g - 1)
+  if (hi === g + 1 && sc.tbAt === g) return lo === g - 1 || lo === g
+  return false
+}
+// ست‌های هر بازی؛ داده‌ی قدیمی فقط گیم یک ست را در sa/sb داشت
+export const setsOf = (m) => m.sets || (m.sa != null && m.sb != null ? [[m.sa, m.sb]] : [])
+// نتیجه‌ی بازی از روی ست‌ها: چند ست هر تیم برده، تمام شده یا نه، و اگر غلط است چرا
+export function judge(ev, sets) {
+  const sc = scoringOf(ev), need = Math.ceil(sc.sets / 2)
+  let a = 0, b = 0, why = null
+  for (let i = 0; i < sets.length; i++) {
+    const [x, y] = sets[i]
+    if (a === need || b === need) { why = 'بازی قبلاً تمام شده'; break }
+    if (!setOk(x, y, sc, sc.stb && i === 2)) { why = sc.stb && i === 2 ? `سوپرتای‌بریک ${x}–${y} درست نیست` : `ست ${x}–${y} درست نیست`; break }
+    if (x > y) a++; else b++
+  }
+  return { a, b, done: !why && (a === need || b === need), why }
+}
 
 // ---------- انتخاب‌ها ----------
 export const upcoming = (club) => (club.events || []).filter((e) => isLive(e) && fromKey(e.date) >= fromKey(todayKey())).sort((a, b) => fromKey(a.date) - fromKey(b.date) || a.start - b.start)
@@ -53,7 +86,12 @@ export const singles = (ev) => { const inT = new Set(ev.teams.flatMap((t) => t.p
 export const loosePairs = (ev) => { const m = new Map(); singles(ev).filter((r) => r.pair).forEach((r) => m.set(r.pair, [...(m.get(r.pair) || []), r.id])); return [...m.values()].filter((p) => p.length === 2) }
 export const withPairs = (ev) => loosePairs(ev).reduce((e, p, i) => ({ ...e, teams: [...e.teams, named(e, { id: 't' + e.teams.length + 'p' + i + Date.now().toString(36), players: p, pair: true })] }), ev)
 export const pairUp = (ev, a, b) => ({ ...ev, teams: [...ev.teams, named(ev, { id: 't' + Date.now().toString(36), players: [a, b].filter(Boolean) })], groups: [], matches: [] })
-export const unpair = (ev, tid) => ({ ...ev, teams: ev.teams.filter((t) => t.id !== tid), groups: [], matches: [] })
+// جدا کردن تیم؛ اگر با هم ثبت‌نام کرده بودند پیوندشان هم برداشته می‌شود تا دوباره خودکار جفت نشوند
+export const unpair = (ev, tid) => {
+  const t = ev.teams.find((x) => x.id === tid)
+  const out = new Set(t?.players || [])
+  return { ...ev, regs: ev.regs.map((r) => (out.has(r.id) && r.pair ? { ...r, pair: null, waiting: true } : r)), teams: ev.teams.filter((x) => x.id !== tid), groups: [], matches: [] }
+}
 // تیم‌های موجود می‌مانند؛ زوج‌های ثبت‌نامی تیم می‌شوند و منتظرها هم‌سطح جفت می‌شوند
 export function fillTeams(ev) {
   let e = ev
@@ -70,10 +108,12 @@ export function moveTeam(ev, tid, gid) {
   const groups = ev.groups.map((g) => ({ ...g, teams: g.id === gid ? [...g.teams.filter((x) => x !== tid), tid] : g.teams.filter((x) => x !== tid) }))
   const touched = [from, gid]
   const keep = ev.matches.filter((m) => m.stage === 'group' && !touched.includes(m.group))
-  const fresh = groups.filter((g) => touched.includes(g.id)).flatMap((g) => roundRobin(g.teams).map(([a, b], k) => ({ id: `g${g.id}${k + 1}`, stage: 'group', group: g.id, a, b, sa: null, sb: null, court: ev.courts?.[k % (ev.courts?.length || 1)] || 1 })))
+  const fresh = groups.filter((g) => touched.includes(g.id)).flatMap((g) => rr(ev, g))
   return { ...ev, groups, matches: [...keep, ...fresh] }
 }
 export const showsResults = (ev) => ev.showResults !== false
+// صفحه‌ی قهرمان در اپ: مدیر انتخاب می‌کند نشان داده شود یا نه (پیش‌فرض: نشان داده می‌شود)
+export const champOn = (ev) => ev.champPub !== false && !!podium(ev)
 
 // جابه‌جا کردن دو بازیکن بین تیم‌ها (یا داخل یک تیم که اثری ندارد)
 export function swapPlayers(ev, p1, p2) {
@@ -91,6 +131,22 @@ export function makeGroups(ev, opt = {}) {
   groups.forEach((g) => roundRobin(g.teams).forEach(([a, b], k) => matches.push({ id: `g${g.id}${k + 1}`, stage: 'group', group: g.id, a, b, sa: null, sb: null, court: ev.courts?.[k % (ev.courts?.length || 1)] || 1 })))
   const size = Math.min(...groups.map((g) => g.teams.length))
   return { ...ev, groups, matches, setup: { groups: n, advance: Math.min(opt.advance || (n === 1 ? Math.min(4, teams.length) : 2), size) } }
+}
+const rr = (ev, g) => roundRobin(g.teams).map(([a, b], k) => ({ id: `g${g.id}${k + 1}`, stage: 'group', group: g.id, a, b, sa: null, sb: null, court: ev.courts?.[k % (ev.courts?.length || 1)] || 1 }))
+// گروه‌های خالی تا مدیر تیم‌ها را خودش در آن‌ها بچیند
+export const emptyGroups = (ev, n, advance = 2) => ({ ...ev, groups: Array.from({ length: Math.min(16, n) }, (_, i) => ({ id: GROUP_IDS[i], teams: [] })), matches: [], setup: { groups: n, advance } })
+export const addGroup = (ev) => (ev.groups.length >= 16 ? ev : { ...ev, groups: [...ev.groups, { id: GROUP_IDS.split('').find((L) => !ev.groups.some((g) => g.id === L)), teams: [] }] })
+// حذف گروه: تیم‌هایش بیرون می‌آیند و حذفی پاک می‌شود
+export const dropGroup = (ev, gid) => ({ ...ev, groups: ev.groups.filter((g) => g.id !== gid), matches: ev.matches.filter((m) => m.stage === 'group' && m.group !== gid) })
+// تیم‌های بیرون از گروه‌ها به ترتیب قدرت در گروه‌های کم‌جمعیت‌تر پخش می‌شوند؛ تیم‌های چیده‌شده جابه‌جا نمی‌شوند
+export function fillGroups(ev) {
+  const placed = new Set(ev.groups.flatMap((g) => g.teams))
+  const rest = ev.teams.filter((t) => !placed.has(t.id)).sort((a, b) => teamPower(ev, b) - teamPower(ev, a))
+  if (!ev.groups.length || !rest.length) return ev
+  const groups = ev.groups.map((g) => ({ ...g, teams: [...g.teams] }))
+  rest.forEach((t) => { const g = groups.reduce((m, x) => (x.teams.length < m.teams.length ? x : m)); g.teams.push(t.id) })
+  const touched = groups.filter((g, i) => g.teams.length !== ev.groups[i].teams.length).map((g) => g.id)
+  return { ...ev, groups, matches: [...ev.matches.filter((m) => m.stage === 'group' && !touched.includes(m.group)), ...groups.filter((g) => touched.includes(g.id)).flatMap((g) => rr(ev, g))] }
 }
 // پیش‌نمایش طرح مسابقه: چند تیم صعود می‌کنند و حذفی از کدام دور شروع می‌شود
 export function plan(teams, groups, advance) {
@@ -116,14 +172,16 @@ export const loserOf = (m) => (m.b == null || !scored(m) ? null : m.sa > m.sb ? 
 
 export function standings(ev, gid) {
   const g = ev.groups.find((x) => x.id === gid)
-  const rows = g.teams.map((id) => ({ id, name: teamName(ev, id), p: 0, w: 0, l: 0, gf: 0, ga: 0 }))
+  const rows = g.teams.map((id) => ({ id, name: teamName(ev, id), p: 0, w: 0, l: 0, sf: 0, sa: 0, gf: 0, ga: 0 }))
   ev.matches.filter((m) => m.stage === 'group' && m.group === gid && scored(m)).forEach((m) => {
     const A = rows.find((r) => r.id === m.a), B = rows.find((r) => r.id === m.b)
-    A.p++; B.p++; A.gf += m.sa; A.ga += m.sb; B.gf += m.sb; B.ga += m.sa
+    if (!A || !B) return
+    A.p++; B.p++
+    setsOf(m).forEach(([x, y]) => { A.gf += x; A.ga += y; B.gf += y; B.ga += x; if (x > y) { A.sf++; B.sa++ } else { B.sf++; A.sa++ } })
     if (m.sa > m.sb) { A.w++; B.l++ } else { B.w++; A.l++ }
   })
-  // برد، بعد تفاضل گیم، بعد گیم زده، بعد بازی رودررو
-  return rows.sort((a, b) => b.w - a.w || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf || h2h(ev, a.id, b.id))
+  // قانون پدل (FIP): بیشترین برد، بعد بازی رودررو، بعد تفاضل ست، بعد تفاضل گیم
+  return rows.sort((a, b) => b.w - a.w || h2h(ev, a.id, b.id) || (b.sf - b.sa) - (a.sf - a.sa) || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf)
 }
 function h2h(ev, a, b) {
   const m = ev.matches.find((x) => x.stage === 'group' && ((x.a === a && x.b === b) || (x.a === b && x.b === a)))
@@ -173,9 +231,10 @@ export function advance(ev) {
   }
 }
 // ثبت نتیجه؛ اگر نتیجه‌ی یک دور حذفی عوض شود، دورهای بعدش از نو ساخته می‌شوند
-export function setScore(ev, id, sa, sb) {
+export function setScore(ev, id, sets) {
   const m = ev.matches.find((x) => x.id === id)
-  let matches = ev.matches.map((x) => (x.id === id ? { ...x, sa, sb } : x))
+  const r = sets?.length ? judge(ev, sets) : null
+  let matches = ev.matches.map((x) => (x.id === id ? { ...x, sets: sets?.length ? sets : null, sa: r?.done ? r.a : null, sb: r?.done ? r.b : null } : x))
   if (m.stage === 'ko') matches = matches.filter((x) => x.stage !== 'ko' || x.round >= m.round)
   return advance({ ...ev, matches })
 }
@@ -216,12 +275,12 @@ function play(ev, m, key) {
 }
 function runAll(ev) {
   let e = ev
-  e.matches.filter((m) => m.stage === 'group').forEach((m) => { const [a, b] = play(e, m, e.id + m.id); e = setScore(e, m.id, a, b) })
+  e.matches.filter((m) => m.stage === 'group').forEach((m) => { e = setScore(e, m.id, [play(e, m, e.id + m.id)]) })
   e = makeKnockout(e)
   for (let guard = 0; guard < 8; guard++) {
     const open = e.matches.find((m) => m.stage === 'ko' && m.b != null && !scored(m))
     if (!open) break
-    const [a, b] = play(e, open, e.id + open.id); e = setScore(e, open.id, a, b)
+    e = setScore(e, open.id, [play(e, open, e.id + open.id)])
   }
   return e
 }
@@ -257,25 +316,38 @@ export function seedEvents() {
     ev.regs = fakeRegs(ev.id, Math.floor(32 * (0.3 + rh('of' + i) * 0.35)), ev.fee, k).map((r) => ({ ...r, at: Math.min(r.at, Date.now() - (i + 2) * 36e5) }))
     out.push(ev)
   })
-  // هر تیم یک فروش «رویداد» در حسابداری است (کسی که پرداخت کرده، ورودی هر دو نفر)
-  out.forEach((ev) => {
-    const seen = new Map()
-    ev.regs.forEach((r) => {
-      const key = r.pair || r.id
-      if (!seen.has(key)) {
-        const id = `S-E${ev.id}-${r.id}`, both = ev.regs.filter((x) => (x.pair || x.id) === key)
-        seen.set(key, id)
-        sales.push({ id, kind: 'event', item: ev.id, name: both.length > 1 ? `${ev.title}، تیم ${both.map((x) => x.name.split(' ')[0]).join(' و ')}` : ev.title, by: r.payer || r.by, price: both.reduce((s, x) => s + x.paid, 0), method: r.method, at: r.at })
-      }
-      r.sale = seen.get(key)
-    })
-  })
+  out.forEach((ev) => sales.push(...regSales(ev)))
   return { events: out, sales }
+}
+// هر تیم یک فروش «رویداد» در حسابداری است (کسی که پرداخت کرده، ورودی هر دو نفر)
+function regSales(ev) {
+  const seen = new Map(), sales = []
+  ev.regs.forEach((r) => {
+    const key = r.pair || r.id
+    if (!seen.has(key)) {
+      const id = `S-E${ev.id}-${r.id}`, both = ev.regs.filter((x) => (x.pair || x.id) === key)
+      seen.set(key, id)
+      sales.push({ id, kind: 'event', item: ev.id, name: both.length > 1 ? `${ev.title}، تیم ${both.map((x) => x.name.split(' ')[0]).join(' و ')}` : ev.title, by: r.payer || r.by, price: both.reduce((s, x) => s + x.paid, 0), method: r.method, at: r.at })
+    }
+    r.sale = seen.get(key)
+  })
+  return sales
+}
+// آدینه‌ی این هفته در داده‌ی نمونه: چند تیم دونفره و چند نفر بی‌یار، تا سازوکار تیم‌سازی دیده شود
+function withSingles(c) {
+  const i = c.events.findIndex((e) => e.kind === 'friday' && e.status === 'open' && fromKey(e.date) >= fromKey(todayKey()))
+  if (i < 0) return { ...c, evSingles: true }
+  const e = c.events[i]
+  const regs = fakeRegs(e.id, 11, e.fee, e.date).map((r, k, all) => ({ ...r, at: Math.min(r.at, Date.now() - (all.length - k) * 36e5), ...(k >= all.length - 3 ? { pair: null, payer: null, waiting: true } : {}) }))
+  const ev = { ...e, regs, teams: [], groups: [], matches: [] }
+  const sales = regSales(ev)
+  return { ...c, events: c.events.map((x, j) => (j === i ? ev : x)), sales: [...sales, ...c.sales.filter((s) => s.item !== e.id)].sort((a, b) => b.at - a.at), evSingles: true }
 }
 // داده‌ی قبلی بدون رویداد: یک بار رویدادهای نمونه اضافه می‌شود؛ زمین‌های مسابقه‌های پیش‌رو هم در تقویم بسته می‌شوند
 export function withEvents(club) {
   let c = club
   if (!c.events) { const { events, sales } = seedEvents(); c = { ...c, events, sales: [...sales, ...c.sales].sort((a, b) => b.at - a.at) } }
+  if (!c.evSingles) c = withSingles(c)
   if (c.evBlocks) return c
   // رزروهای نمونه‌ای که با ساعت مسابقه تداخل دارند کنار می‌روند (رزروهای خود کاربر می‌مانند)
   let bookings = c.bookings

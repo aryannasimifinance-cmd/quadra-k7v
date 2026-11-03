@@ -27,7 +27,8 @@ function load() {
   try { tab = sessionStorage.getItem(SESSION_KEY) } catch { /* */ }
   const session = tab !== null ? read(sessionStorage, SESSION_KEY) : read(localStorage, SESSION_KEY)
   if (club?.v === SEED_V) return { ...blankPlayer, accounts: DEMO_ACCOUNTS, ...me, session, club: withCoaches(withEvents(club)) }
-  return { ...blankPlayer, accounts: DEMO_ACCOUNTS, session: null, club: withCoaches(withEvents(withOps(seedClub()))) }
+  // داده‌ی تازه: مدیر وارد می‌ماند (مثلاً بعد از «بازنشانی داده‌ها»)، بازیکن از نو وارد می‌شود
+  return { ...blankPlayer, accounts: DEMO_ACCOUNTS, session: session?.role === 'admin' ? session : null, club: withCoaches(withEvents(withOps(seedClub()))) }
 }
 // حساب بازیکن با ترتیب ثابت کلیدها، تا تب‌ها یک رشته‌ی یکسان بنویسند و رفت‌وبرگشت بی‌پایان پیش نیاید
 const personalOf = (s) => JSON.stringify(Object.fromEntries([...Object.keys(blankPlayer), 'accounts'].map((k) => [k, s[k]])))
@@ -142,7 +143,7 @@ export function StoreProvider({ children }) {
           return { ...s, ...blankPlayer, accounts, session: null }
         })
       },
-      resetDemo() { try { [KEY, CLUB_KEY, SESSION_KEY].forEach((k) => localStorage.removeItem(k)); sessionStorage.removeItem(SESSION_KEY) } catch { /* */ } location.reload() },
+      resetDemo() { try { [KEY, CLUB_KEY].forEach((k) => localStorage.removeItem(k)); if (ref.current.session?.role !== 'admin') { localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY) } } catch { /* */ } location.reload() },
       updateUser(p) { commit((s) => ({ ...s, user: { ...s.user, ...p } })) },
 
       // رزرو زمین یا کلاس — b شامل court,date,start,dur,type,price و ...
