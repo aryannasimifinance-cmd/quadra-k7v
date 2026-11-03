@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { COURTS, PACKAGES, levelById, productById, seedClub, setCatalog, setMembers, todayKey, variantOf } from './data'
 import { makeVariants, nextCode } from './catalog'
-import { nextIngCode, nextItemCode, placeCafe, receiveInto } from './cafe'
+import { fits, nextIngCode, nextItemCode, placeCafe, receiveInto } from './cafe'
 import { jMonthLabel } from './jalali'
 import { payroll } from './hr'
 import { withOps } from './ops'
@@ -288,6 +288,8 @@ export function StoreProvider({ children }) {
       cafeCheckout(method, to) {
         let out
         commit((s) => {
+          // ممکن است از زمان افزودن به سبد، موجودی با سفارش‌های دیگر کم شده باشد
+          if (!fits(s.club.cafeIngs, s.club.cafeItems, s.cafeCart)) { out = { error: 'stock' }; return s }
           const r = placeCafe(s.club.cafeIngs, s.club.cafeItems, s.cafeCart)
           const order = { id: 'K-' + String(Date.now()).slice(-5), by: ME, items: r.lines, use: r.use, total: r.total, method, to: to || null, status: 'new', source: 'app', at: Date.now() }
           const g = reward(pay({ ...s, cafeCart: [] }, r.total, method), Math.max(5, Math.round(r.total / 100000)), [])
@@ -420,11 +422,13 @@ export function StoreProvider({ children }) {
         })
       },
       adminCafeOrder(id, status) { club((c) => ({ ...c, cafeOrders: c.cafeOrders.map((o) => (o.id === id ? { ...o, status } : o)) })) },
-      adminCafePos(lines, method, by, to) {
-        let order
+      // سفارش حضوری؛ now = تحویل همان لحظه (مثلاً آب یا نوشابه)، وگرنه به صف آماده‌سازی می‌رود
+      adminCafePos(lines, method, by, to, now = false) {
+        let order = null
         club((c) => {
+          if (!fits(c.cafeIngs, c.cafeItems, lines)) return c
           const r = placeCafe(c.cafeIngs, c.cafeItems, lines)
-          order = { id: 'K-' + String(Date.now()).slice(-5), by: by || 'walkin', items: r.lines, use: r.use, total: r.total, method, to: to || null, status: 'prep', source: 'desk', at: Date.now() }
+          order = { id: 'K-' + String(Date.now()).slice(-5), by: by || 'walkin', items: r.lines, use: r.use, total: r.total, method, to: to || null, status: now ? 'delivered' : 'prep', source: 'desk', at: Date.now() }
           return { ...c, cafeOrders: [order, ...c.cafeOrders], cafeIngs: r.ings }
         })
         return order

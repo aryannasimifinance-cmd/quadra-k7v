@@ -2,7 +2,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
 import { courtById, fa, hourLabel, range, toman, todayKey } from '../../data'
-import { BIG_K, CAFE_CATS, DRINKS, NOTES, ORDER_FLOW, ORDER_ST, available, cafeCat, portions, priceOf } from '../../cafe'
+import { CAFE_CATS, DRINKS, NOTES, ORDER_FLOW, ORDER_ST, available, cafeCat, fits, moreOf, priceOf, shortage } from '../../cafe'
 import { myBookings, startsAt } from '../../select'
 import { celebrate, chime, haptic } from '../../fx'
 import { ME, useStore } from '../../store'
@@ -133,8 +133,8 @@ function Item({ it, onClose }) {
   const [note, setNote] = useState('')
   const [qty, setQty] = useState(1)
   const drink = DRINKS.includes(it.cat)
-  const used = cafeCart.filter((x) => x.iid === it.id).reduce((s, x) => s + x.qty * (x.big ? BIG_K : 1), 0)
-  const max = Math.max(0, Math.floor(portions(it, club.cafeIngs, big) - used * (big ? 1 / BIG_K : 1)))
+  // مواد کل سبد (حتی آیتم‌های دیگر با ماده‌ی مشترک) کنار گذاشته می‌شود
+  const max = moreOf(it, big, club.cafeIngs, club.cafeItems, cafeCart)
   const add = () => {
     cafeAdd({ iid: it.id, big, note, qty })
     chime('success'); haptic([10, 30, 10])
@@ -168,11 +168,14 @@ function Cart({ onClose }) {
   const lines = useMemo(() => cafeCart.map((x) => ({ ...x, it: club.cafeItems.find((y) => y.id === x.iid) })).filter((x) => x.it), [cafeCart, club.cafeItems])
   const total = lines.reduce((s, x) => s + x.qty * priceOf(x.it, x.big), 0)
   const prep = Math.max(0, ...lines.map((x) => x.it.prep))
-  const ok = method !== 'wallet' || wallet >= total
+  const short = shortage(club.cafeIngs, club.cafeItems, cafeCart)
+  const inStock = fits(club.cafeIngs, club.cafeItems, cafeCart)
+  const ok = inStock && (method !== 'wallet' || wallet >= total)
   const pay = () => {
     setBusy(true)
     setTimeout(() => {
       const r = cafeCheckout(method, to || null)
+      if (r.error) { setBusy(false); toast({ icon: '⚠️', title: 'موجودی کافه تغییر کرد', body: 'بعضی آیتم‌ها همین حالا تمام شد؛ سبد را اصلاح کنید.' }); return }
       celebrate(); chime('level')
       toast({ icon: '☕', title: `سفارش ${r.order.id} ثبت شد`, body: `${to ? `سر ${courtById(to).name}` : 'تحویل در کافه'}، حدود ${fa(prep + 3)} دقیقه، +${fa(r.xp)} XP`, duration: 4500 })
       notify({ icon: '☕', title: 'سفارش کافه ثبت شد', body: `${r.order.items.map((x) => x.name).join('، ')}؛ ${to ? `سر ${courtById(to).name} میاریم.` : 'آماده که شد خبرتون می‌کنیم.'}` })
@@ -186,9 +189,11 @@ function Cart({ onClose }) {
         <motion.div key={i} layout className="cart-item cafe-line" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
           <Dish it={x.it} />
           <div className="grow"><b>{x.it.name}</b><small>{[x.big && 'بزرگ', x.note].filter(Boolean).join('، ') || cafeCat(x.it.cat).name}</small><span>{toman(priceOf(x.it, x.big) * x.qty)}</span></div>
-          <Stepper value={x.qty} onChange={(q) => cafeQty(i, q)} max={x.qty + Math.max(0, portions(x.it, club.cafeIngs, x.big) - x.qty)} />
+          <Stepper value={x.qty} onChange={(q) => cafeQty(i, q)} max={x.qty + moreOf(x.it, x.big, club.cafeIngs, club.cafeItems, cafeCart)} />
         </motion.div>
       ))}
+      {short.length > 0 && <div className="empty-card">این تعداد الان در کافه موجود نیست ({short.map(([g]) => g.name).join('، ')})؛ تعداد را کم کنید.</div>}
+      {lines.some((x) => x.it.active === false) && <div className="empty-card">بعضی آیتم‌ها از منو برداشته شده‌اند؛ حذفشان کنید.</div>}
       <p className="label">تحویل</p>
       <div className="methods">
         {targets.map((b) => (
@@ -211,7 +216,7 @@ function Cart({ onClose }) {
         ))}
       </div>
       <Loading show={busy} text={method === 'online' ? 'اتصال به درگاه پرداخت…' : 'ثبت سفارش…'} />
-      <Button full variant="q" disabled={!ok || busy} onClick={pay}>{busy ? 'در حال ثبت…' : ok ? `پرداخت و ثبت سفارش، ${toman(total)}` : 'موجودی کیف پول کافی نیست'}</Button>
+      <Button full variant="q" disabled={!ok || busy} onClick={pay}>{busy ? 'در حال ثبت…' : ok ? `پرداخت و ثبت سفارش، ${toman(total)}` : !inStock ? 'موجودی کافه کافی نیست' : 'موجودی کیف پول کافی نیست'}</Button>
     </div>
   )
 }

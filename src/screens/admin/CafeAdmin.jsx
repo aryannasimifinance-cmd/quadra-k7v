@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { Fragment, useMemo, useState } from 'react'
 import { MEMBERS, METHOD_NAME, addDays, dayLabel, fa, short, toman, todayKey } from '../../data'
 import {
-  BIG_K, CAFE_CATS, DRINKS, ING_CATS, NOTES, UNITS, bigCost, cafeCat, fmtQty, ingAcc, itemAcc, itemCost, nextIngCode, nextItemCode, portions, priceOf,
+  BIG_K, CAFE_CATS, DRINKS, ING_CATS, NOTES, UNITS, bigCost, cafeCat, fits, fmtQty, ingAcc, itemAcc, itemCost, moreOf, nextIngCode, nextItemCode, portions, priceOf, shortage,
 } from '../../cafe'
 import { PAY_FROM } from '../../accounting'
 import { daysOf, dk, inPeriod, jDate, jDateFa, ord, period } from '../../jalali'
@@ -42,11 +42,11 @@ export function CafeAdmin() {
           ['report', 'گزارش فروش', null, 'پرفروش‌ها، ساعت‌های شلوغ و سود کافه'],
         ]} />
         <div className="sec-actions">
-          <button className="adm-btn ghost sm" onClick={() => setPos(true)} data-tip="ثبت سفارش مشتری حاضر در کافه یا سر زمین"><Icon name="cash" size={16} />سفارش حضوری</button>
+          <button className={`adm-btn ${tab === 'orders' ? 'primary' : 'ghost'} sm`} onClick={() => setPos(true)} data-tip="ثبت دستی سفارش مشتری‌ای که حضوری به کافه آمده"><Icon name="plus" size={16} />ثبت سفارش حضوری</button>
           <button className="adm-btn ghost sm" onClick={() => setRecv(true)} data-tip="قهوه، شیر، نان و… که خریدید را وارد انبار کنید"><Icon name="box" size={16} />خرید مواد اولیه</button>
           {tab === 'stock'
             ? <button className="adm-btn primary sm" onClick={() => setIng('new')} data-tip="ماده‌ای که هنوز در انبار تعریف نشده"><Icon name="plus" size={16} />ماده‌ی اولیه‌ی جدید</button>
-            : <button className="adm-btn primary sm" onClick={() => setEdit('new')} data-tip="نوشیدنی یا غذای تازه با عکس و دستور تهیه"><Icon name="plus" size={16} />آیتم جدید منو</button>}
+            : <button className={`adm-btn ${tab === 'orders' ? 'ghost' : 'primary'} sm`} onClick={() => setEdit('new')} data-tip="نوشیدنی یا غذای تازه با عکس و دستور تهیه"><Icon name="plus" size={16} />آیتم جدید منو</button>}
         </div>
       </div>
       <Guide>{{
@@ -423,65 +423,83 @@ function Adjust({ g, onClose }) {
 }
 
 // ---------- سفارش حضوری ----------
+// موجودی هر آیتم با کسر مواد کل سبد حساب می‌شود، چون آیتم‌ها مواد مشترک دارند (قهوه، شیر، لیوان)
 function Pos({ onClose }) {
   const { club, adminCafePos, toast } = useStore()
   const [cat, setCat] = useState('all')
+  const [q, setQ] = useState('')
   const [cart, setCart] = useState([])
   const [method, setMethod] = useState('card')
   const [to, setTo] = useState(0)
+  const [now, setNow] = useState(false)
   const [mq, setMq] = useState('')
   const [member, setMember] = useState(null)
-  const ings = club.cafeIngs
-  const items = club.cafeItems.filter((it) => it.active !== false && (cat === 'all' || it.cat === cat))
-  const inCart = (id, big) => cart.filter((x) => x.iid === id && x.big === big).reduce((s, x) => s + x.qty, 0)
+  const { cafeIngs: ings, cafeItems: all } = club
+  const items = all.filter((it) => it.active !== false && (cat === 'all' || it.cat === cat) && (!q || (it.name + it.code).includes(q)))
+  const more = (it, big) => moreOf(it, big, ings, all, cart)
   const add = (it, big) => setCart((c) => {
     const k = c.findIndex((x) => x.iid === it.id && x.big === big && !x.note)
     return k >= 0 ? c.map((x, i) => (i === k ? { ...x, qty: x.qty + 1 } : x)) : [...c, { iid: it.id, big, qty: 1, note: '' }]
   })
-  const total = cart.reduce((s, x) => s + x.qty * priceOf(club.cafeItems.find((y) => y.id === x.iid), x.big), 0)
-  const members = mq ? MEMBERS.filter((m) => m.name.includes(mq) || m.phone.includes(mq)).slice(0, 5) : []
+  const setQty = (i, d) => setCart((c) => c.map((y, j) => (j === i ? { ...y, qty: y.qty + d } : y)).filter((y) => y.qty > 0))
+  const lines = cart.filter((x) => all.some((y) => y.id === x.iid))
+  const total = lines.reduce((s, x) => s + x.qty * priceOf(all.find((y) => y.id === x.iid), x.big), 0)
+  const short = shortage(ings, all, lines)
+  const ok = fits(ings, all, lines)
+  const members = mq ? MEMBERS.filter((m) => m.name?.includes(mq) || m.phone?.includes(mq)).slice(0, 5) : []
+  const guest = mq.trim()
   const save = () => {
-    const o = adminCafePos(cart, method, member?.id, to || null)
-    chime('success'); toast({ icon: '☕', title: `سفارش ${o.id} به آشپزخانه رفت`, body: `${toman(o.total)}، ${dest(o)}` }); onClose()
+    const o = adminCafePos(lines, method, member?.id || (guest ? 'f:' + guest : null), to || null, now && !to)
+    if (!o) { chime('alarm'); toast({ icon: '⚠️', title: 'موجودی کافی نیست', body: 'انبار همین حالا تغییر کرده؛ سفارش را دوباره بررسی کنید.' }); return }
+    chime('success')
+    toast({ icon: '☕', title: o.status === 'delivered' ? `سفارش ${o.id} تحویل شد` : `سفارش ${o.id} به آشپزخانه رفت`, body: `${toman(o.total)}، ${dest(o)}` })
+    onClose()
   }
   return (
     <div className="form">
+      <Search value={q} onChange={setQ} ph="جستجوی نام یا کد آیتم" />
       <div className="pick-chips">{[['all', 'همه', '✦'], ...CAFE_CATS.map((c) => [c.id, c.name, c.ic])].map(([k, n, ic]) => <button key={k} type="button" className={cat === k ? 'on' : ''} onClick={() => setCat(k)}>{ic} {n}</button>)}</div>
       <div className="cafe-pos">
         {items.map((it) => {
-          const n = portions(it, ings) - inCart(it.id, false) - Math.ceil(inCart(it.id, true) * BIG_K)
+          const n = more(it, false), nb = it.big > 0 ? more(it, true) : 0
           return (
-            <div key={it.id} className={`cp-item ${n <= 0 ? 'out' : ''}`}>
-              <button type="button" disabled={n <= 0} onClick={() => add(it, false)}><Dish it={it} /><b>{it.name}</b><small>{n <= 0 ? 'ناموجود' : toman(it.price)}</small></button>
-              {it.big > 0 && n > 1 && <button type="button" className="cp-big" onClick={() => add(it, true)}>بزرگ +{short(it.big)}</button>}
+            <div key={it.id} className={`cp-item ${n <= 0 && nb <= 0 ? 'out' : ''}`}>
+              <button type="button" disabled={n <= 0} onClick={() => add(it, false)} data-tip={n > 0 ? `${fa(n)} پرس دیگر قابل تهیه است` : 'مواد اولیه کافی نیست'}>
+                <Dish it={it} /><b>{it.name}</b><small>{n <= 0 ? 'ناموجود' : `${toman(it.price)}، ${fa(n)} پرس`}</small>
+              </button>
+              {nb > 0 && <button type="button" className="cp-big" onClick={() => add(it, true)}>بزرگ +{short(it.big)}</button>}
             </div>
           )
         })}
+        {!items.length && <Empty>آیتمی پیدا نشد</Empty>}
       </div>
       {cart.length > 0 && (<>
-        <h4>سفارش</h4>
+        <div className="row-between"><h4>سفارش</h4><button type="button" className="link" onClick={() => setCart([])}>خالی کردن</button></div>
         <div className="lines">
           {cart.map((x, i) => {
-            const it = club.cafeItems.find((y) => y.id === x.iid)
+            const it = all.find((y) => y.id === x.iid)
+            if (!it) return null
             return (
               <div key={i} className="pos-line">
                 <div className="grow"><b>{it.emoji} {it.name}{x.big ? '، بزرگ' : ''}</b>
                   <select className="note-sel" value={x.note} onChange={(e) => setCart(cart.map((y, j) => (j === i ? { ...y, note: e.target.value } : y)))}><option value="">بدون توضیح</option>{NOTES.map((n) => <option key={n}>{n}</option>)}</select></div>
-                <div className="qty"><button onClick={() => setCart(cart.map((y, j) => (j === i ? { ...y, qty: y.qty - 1 } : y)).filter((y) => y.qty > 0))}>−</button><b>{fa(x.qty)}</b><button onClick={() => setCart(cart.map((y, j) => (j === i ? { ...y, qty: y.qty + 1 } : y)))} disabled={portions(it, ings, x.big) <= inCart(it.id, x.big)}>+</button></div>
+                <div className="qty"><button type="button" onClick={() => setQty(i, -1)}>−</button><b>{fa(x.qty)}</b><button type="button" onClick={() => setQty(i, 1)} disabled={more(it, x.big) < 1}>+</button></div>
                 <b className="num">{toman(x.qty * priceOf(it, x.big))}</b>
               </div>
             )
           })}
         </div>
+        {short.length > 0 && <Empty>کمبود در انبار: {short.map(([g, d]) => `${g.name} ${fmtQty(g, d)}`).join('، ')}</Empty>}
         <Field label="تحویل"><div className="pick-chips">{[0, 1, 2, 3, 4].map((c) => <button key={c} type="button" className={to === c ? 'on' : ''} onClick={() => setTo(c)}>{c ? `سر زمین ${fa(c)}` : 'در کافه'}</button>)}</div></Field>
+        {!to && <Field label="آماده‌سازی"><Seg value={now ? 'now' : 'queue'} onChange={(v) => setNow(v === 'now')} options={{ queue: 'ارسال به صف آماده‌سازی', now: 'تحویل همان لحظه' }} tips={{ queue: 'سفارش در ستون «در حال آماده‌سازی» می‌نشیند', now: 'برای آیتم آماده مثل آب و نوشابه؛ مستقیم تحویل‌شده ثبت می‌شود' }} /></Field>}
         <Field label="مشتری">
-          {member ? <div className="picked"><b>{member.name}</b><button className="link" onClick={() => setMember(null)}>تغییر</button></div>
-            : <><input placeholder="مشتری حضوری، یا جستجوی عضو" value={mq} onChange={(e) => setMq(e.target.value)} />
-              {members.length > 0 && <div className="pick-list">{members.map((m) => <button key={m.id} onClick={() => { setMember(m); setMq('') }}><b>{m.name}</b><small dir="ltr">{m.phone}</small></button>)}</div>}</>}
+          {member ? <div className="picked"><b>{member.name}</b><button type="button" className="link" onClick={() => setMember(null)}>تغییر</button></div>
+            : <><input placeholder="نام مشتری حضوری (اختیاری)، یا جستجوی عضو" value={mq} onChange={(e) => setMq(e.target.value)} />
+              {members.length > 0 && <div className="pick-list">{members.map((m) => <button type="button" key={m.id} onClick={() => { setMember(m); setMq('') }}><b>{m.name}</b><small dir="ltr">{m.phone}</small></button>)}</div>}</>}
         </Field>
         <Field label="روش پرداخت"><Seg value={method} onChange={setMethod} options={{ card: 'کارتخوان', cash: 'نقدی' }} /></Field>
-        <div className="dr-total"><span>{fa(cart.reduce((s, x) => s + x.qty, 0))} قلم</span><b>{toman(total)}</b></div>
-        <button className="adm-btn primary full" onClick={save}>ثبت و ارسال به آشپزخانه</button>
+        <div className="dr-total"><span>{fa(lines.reduce((s, x) => s + x.qty, 0))} قلم</span><b>{toman(total)}</b></div>
+        <button className="adm-btn primary full" disabled={!ok} onClick={save}>{now && !to ? 'ثبت و تحویل' : 'ثبت و ارسال به آشپزخانه'}</button>
       </>)}
     </div>
   )

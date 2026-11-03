@@ -64,6 +64,33 @@ export function portions(it, ings, big = false) {
 export const priceOf = (it, big) => it.price + (big && it.big ? it.big : 0)
 export const available = (it, ings) => it.active !== false && portions(it, ings) > 0
 
+// مصرف کل مواد اولیه‌ی یک سبد؛ آیتم‌های مختلف ممکن است ماده‌ی مشترک داشته باشند (قهوه، شیر، لیوان)
+function usage(items, lines) {
+  const m = new Map()
+  lines.forEach((x) => {
+    const it = items.find((y) => y.id === x.iid)
+    if (it) recipeOf(it, x.big).forEach(([id, q]) => m.set(id, (m.get(id) || 0) + q * x.qty))
+  })
+  return m
+}
+// موجودی باقی‌مانده بعد از کنار گذاشتن مواد سبد
+export function leftAfter(ings, items, lines) {
+  const m = usage(items, lines)
+  return ings.map((g) => (m.has(g.id) ? { ...g, stock: g.stock - m.get(g.id) } : g))
+}
+// ماده‌هایی که برای این سبد کم است: [ماده, کمبود به واحد پایه]
+export function shortage(ings, items, lines) {
+  const m = usage(items, lines)
+  return ings.filter((g) => m.has(g.id) && m.get(g.id) > g.stock + 1e-9).map((g) => [g, m.get(g.id) - g.stock])
+}
+// سبد با موجودی فعلی قابل تهیه است؛ آیتم حذف‌شده یا غیرفعال هم مانع ثبت است
+export function fits(ings, items, lines) {
+  const ok = lines.every((x) => { const it = items.find((y) => y.id === x.iid); return it && it.active !== false && x.qty > 0 })
+  return lines.length > 0 && ok && !shortage(ings, items, lines).length
+}
+// چند پرس دیگر از این آیتم کنار سبد فعلی جا می‌شود
+export const moreOf = (it, big, ings, items, lines) => (it.active === false ? 0 : portions(it, leftAfter(ings, items, lines), big))
+
 // ثبت سفارش: قیمت، بهای تمام‌شده و مصرف هر ماده با بهای همان لحظه؛ موجودی کم می‌شود
 export function placeCafe(ings, items, lines) {
   const use = new Map()
