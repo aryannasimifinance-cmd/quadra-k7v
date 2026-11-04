@@ -17,6 +17,8 @@ export const COURTS = [
 ]
 export const courtById = (id) => COURTS.find((c) => c.id === id)
 
+// سقف رزرو پشت‌سرهم: مربی ۵ ساعت، بازیکن‌ها ۳ ساعت (مدیر در تنظیمات عوض می‌کند)
+export const limitsOf = (club) => ({ coachRun: 5, playerRun: 3, ...(club?.limits || {}) })
 export const DURATIONS = [
   { h: 1, name: '۱ ساعت' },
   { h: 2, name: '۲ ساعت', tag: 'محبوب' },
@@ -74,8 +76,8 @@ export function setCoaches(list) {
 export const coachById = (id) => COACHES.find((c) => c.id === id)
 // اطلاعات خصوصی نمونه؛ فقط در پنل مدیر دیده می‌شود
 const COACH_PRIVATE = [
-  { phone: '09121234501', since: '1400/06/01', share: 60, note: 'قرارداد سالانه؛ تمدید در شهریور' },
-  { phone: '09121234502', since: '1401/02/15', share: 55, note: '' },
+  { phone: '09121234501', since: '1400/06/01', share: 60, note: 'قرارداد سالانه؛ تمدید در شهریور', login: { on: true, user: 'faraz', pass: '1234', day: 5, week: 15 } },
+  { phone: '09121234502', since: '1401/02/15', share: 55, note: '', login: { on: false, user: 'soheil', pass: '5678', day: 5, week: 15 } },
   { phone: '09121234503', since: '1401/09/01', share: 55, note: 'فقط کلاس بانوان' },
   { phone: '09121234504', since: '1402/07/01', share: 50, note: 'کلاس‌های نوجوانان عصرها' },
 ]
@@ -262,10 +264,10 @@ export function setMembers(extra = NO_LIST, edits = NO_EDITS) {
 export const memberById = (id) => MEMBERS.find((m) => m.id === id)
 
 // ---------- رویدادها ----------
-// دو نوع: «مسابقات آدینه» (دوستانه، هر جمعه) و «تورنمنت رسمی» (جدول گروهی + حذفی، امتیاز رنکینگ)
+// دو نوع: «مسابقات آدینه» و «ایونت ویبورا»؛ هر دو با همان روال: تیم دونفره، گروهی + حذفی
 export const EVENT_KIND = {
-  friday: { name: 'مسابقات آدینه', sub: 'هر جمعه صبح، دوستانه با یار جدید در هر بازی' },
-  official: { name: 'تورنمنت‌های رسمی', sub: 'گروهی + حذفی، داور، امتیاز رنکینگ کوادرا' },
+  friday: { name: 'مسابقات آدینه', sub: 'دوستانه با تیم‌های دونفره؛ معمولاً جمعه صبح' },
+  official: { name: 'ایونت‌های ویبورا', sub: 'دورهمی ورزشی کوادرا؛ همان روال آدینه، تیم دونفره، گروهی + حذفی' },
 }
 export const FRIDAY = [
   { title: 'آدینه‌ی دوستانه', format: 'هر بازی با یار جدید' },
@@ -274,20 +276,21 @@ export const FRIDAY = [
   { title: 'میکس دبل آدینه', format: 'تیم‌های مختلط، هر بازی با یار جدید' },
 ]
 export const OFFICIAL = [
-  { title: 'تورنمنت ۵۰۰ امتیازی کشوری پدل', format: 'گروهی + حذفی، ۳۲ تیم، ۵۰۰ امتیاز رنکینگ کشوری', prize: 'جایزه‌ی نقدی + جام', in: 9 },
-  { title: 'تور رنکینگ کوادرا — مرحله‌ی پاییز', format: 'گروهی + حذفی، ۱۶ تیم، امتیاز ۲ برابر', prize: 'جایزه‌ی نقدی + راکت', in: 23 },
+  { title: 'ایونت ویبورا — شب پاییزی', format: 'تیم‌های دونفره، گروهی + حذفی', prize: 'راکت + کارت هدیه‌ی کافه', in: 9 },
+  { title: 'ایونت ویبورا — میکس دوستانه', format: 'تیم‌های مختلط، گروهی + حذفی', prize: 'راکت + توپ', in: 23 },
 ]
-// فقط عکس زمین، بدون آدم
-export const EV_IMG = [img('court-blue'), img('tiles'), img('court-outdoor'), img('ball-court'), img('welcome-courts'), img('welcome-night')]
+// عکس‌های آماده‌ی رویداد (اولی عکس ایونت ویبورا)
+export const VIBORA_IMG = img('vibora')
+export const EV_IMG = [VIBORA_IMG, img('court-blue'), img('tiles'), img('court-outdoor'), img('ball-court'), img('welcome-courts'), img('welcome-night')]
 // مسابقه‌های برگزارشده — برای نظر و امتیاز
 export function pastEvents() {
   const out = []
   for (let d = -1; d >= -30 && out.length < 3; d--) {
     const k = addDays(todayKey(), d)
-    if (fromKey(k).getDay() === 5) out.push({ id: 'fr-' + k, kind: 'friday', title: 'آدینه‌ی کوادرا', format: 'هر بازی با یار جدید', date: k, img: EV_IMG[out.length % EV_IMG.length] })
+    if (fromKey(k).getDay() === 5) out.push({ id: 'fr-' + k, kind: 'friday', title: 'آدینه‌ی کوادرا', format: 'هر بازی با یار جدید', date: k, img: EV_IMG[1 + (out.length % (EV_IMG.length - 1))] })
   }
   const off = addDays(todayKey(), -12)
-  out.push({ id: 'of-' + off, kind: 'official', title: 'جام ماهانه‌ی کوادرا', format: 'گروهی + حذفی', date: off, img: EV_IMG[4] })
+  out.push({ id: 'of-' + off, kind: 'official', title: 'ایونت ویبورا — دورهمی ماه', format: 'گروهی + حذفی', date: off, img: VIBORA_IMG })
   return out
 }
 
@@ -310,7 +313,7 @@ export function events() {
     return {
       id: 'fr-' + dayKey(d), kind: 'friday', title: f.title, format: f.format, date: dayKey(d), start: 9, dur: 3,
       levels: LEVELS.slice(lv, lv + 3).map((l) => l.id), cap: 16, taken: Math.floor(16 * (0.4 + hash('tk' + i) * 0.5)),
-      fee: 750000, prize: 'راکت Volt + توپ', img: EV_IMG[i % EV_IMG.length],
+      fee: 750000, prize: 'راکت Volt + توپ', img: EV_IMG[1 + (i % (EV_IMG.length - 1))],
     }
   })
   const official = OFFICIAL.map((o, i) => {
@@ -319,7 +322,7 @@ export function events() {
     return {
       id: 'of-' + dayKey(d), kind: 'official', title: o.title, format: o.format, date: dayKey(d), start: 10, dur: 8,
       levels: LEVELS.slice(0, 5).map((l) => l.id), cap: 32, taken: Math.floor(32 * (0.35 + hash('of' + i) * 0.4)),
-      fee: 1500000, prize: o.prize, img: EV_IMG[(i + 3) % EV_IMG.length],
+      fee: 900000, prize: o.prize, img: VIBORA_IMG,
     }
   })
   return [...fridays, ...official].sort((a, b) => fromKey(a.date) - fromKey(b.date))
@@ -428,7 +431,12 @@ export function seedClub() {
       reviews.push({ id: `r-${e.id}-${k}`, target: 'event:' + e.id, stars: r < 0.55 ? 5 : r < 0.88 ? 4 : 3, text: ['برگزاری منظم بود', 'جو خیلی خوبی داشت', 'داوری می‌تونست بهتر باشه', ''][k % 4], at: fromKey(e.date).getTime() + 864e5 })
     }
   })
-  return { v: 14, pricing, off: {}, bookings, orders, sales, expenses: [], reviews }
+  const t1 = addDays(todayKey(), 1), t2 = addDays(todayKey(), 2)
+  const coachReqs = [
+    { id: 'CR-demo1', coach: 'k1', date: t1, court: 2, start: 8, dur: 1, student: null, note: 'جلسه‌ی آزمایشی شاگرد جدید', status: 'pending', at: Date.now() - 2 * 36e5 },
+    { id: 'CR-demo2', coach: 'k1', date: t2, court: 3, start: 7, dur: 2, student: null, note: 'کلاس گروهی صبح', status: 'pending', at: Date.now() - 36e5 },
+  ]
+  return { v: 17, pricing, off: {}, bookings, orders, sales, expenses: [], reviews, coachReqs }
 }
 
 // ---------- گیمیفیکیشن ----------
@@ -469,6 +477,7 @@ export const BADGES = [
 ]
 
 export const CREDITS = [
+  'Karl Schlich / TC Rheinbach e.V. — Vibora event group photo, Wikimedia Commons (copyrighted free use)',
   'Gianluca Guidi — aerial view of padel court, welcome video (Pexels License)',
   'Vincenzo Morelli — padel rackets on court (Unsplash License)',
   'Padel courts from above — welcome screen (photo supplied by the club)',

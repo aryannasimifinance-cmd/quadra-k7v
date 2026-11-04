@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { hoursOf, COURTS, PACKAGES, levelById, productById, seedClub, setCatalog, setCoaches, setMembers, todayKey, variantOf, withCoaches } from './data'
+import { addDays, fromKey, limitsOf, hoursOf, COURTS, PACKAGES, levelById, productById, seedClub, setCatalog, setCoaches, setMembers, todayKey, variantOf, withCoaches } from './data'
 import { makeVariants, nextCode } from './catalog'
 import { fits, nextIngCode, nextItemCode, placeCafe, receiveInto } from './cafe'
 import { jMonthLabel } from './jalali'
@@ -11,7 +11,7 @@ import { syncBlocks, withEvents } from './events'
 const KEY = 'quadra-v1'
 const CLUB_KEY = 'quadra-club-v1'
 const SESSION_KEY = 'quadra-session'
-const SEED_V = 14
+const SEED_V = 17
 const blankPlayer = { user: null, xp: 0, badges: [], wallet: 0, rated: [], membership: null, cart: [], wish: [], notifications: [], quests: {}, events: [], cafeCart: [] }
 
 // حساب نمونه برای «ورود سریع نمایشی»
@@ -135,15 +135,16 @@ export function StoreProvider({ children }) {
         }))
       },
       loginAdmin() { commit((s) => ({ ...s, session: { role: 'admin' } })) },
+      loginCoach(id) { commit((s) => ({ ...s, session: { role: 'coach', id } })) },
       logout() {
         commit((s) => {
-          if (s.session?.role === 'admin') return { ...s, session: null }
+          if (s.session?.role === 'admin' || s.session?.role === 'coach') return { ...s, session: null }
           const snap = Object.fromEntries(PERSONAL.map((k) => [k, s[k]]))
           const accounts = s.user?.phone ? { ...s.accounts, [s.user.phone]: snap } : s.accounts
           return { ...s, ...blankPlayer, accounts, session: null }
         })
       },
-      resetDemo() { try { [KEY, CLUB_KEY].forEach((k) => localStorage.removeItem(k)); if (ref.current.session?.role !== 'admin') { localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY) } } catch { /* */ } location.reload() },
+      resetDemo() { try { [KEY, CLUB_KEY].forEach((k) => localStorage.removeItem(k)); if (ref.current.session?.role === 'player') { localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY) } } catch { /* */ } location.reload() },
       updateUser(p) { commit((s) => ({ ...s, user: { ...s.user, ...p } })) },
 
       // رزرو زمین یا کلاس — b شامل court,date,start,dur,type,price و ...
@@ -357,6 +358,41 @@ export function StoreProvider({ children }) {
         })
         return saved
       },
+      // ---------- پنل مربی: درخواست رزرو زمین (تا سقف ساعت هفتگی) و تأیید مدیر ----------
+      coachReq(r) {
+        let out = { ok: true }
+        club((c) => {
+          const co = c.coaches.find((x) => x.id === r.coach)
+          const lim = coachLimits(c, co, r.date)
+          if (!co?.login?.on) { out = { error: 'off' }; return c }
+          if (openHours(c, co.id).length) { out = { error: 'open' }; return c }
+          if (r.dur > lim.day || r.dur > lim.week) { out = { error: 'quota', left: Math.min(lim.day, lim.week) }; return c }
+          if (coachRun(c, co, r.date, r.start, r.dur) > lim.run) { out = { error: 'run', run: lim.run }; return c }
+          if (!isFree(c, r.date, r.court, r.start, r.dur)) { out = { error: 'busy' }; return c }
+          return { ...c, coachReqs: [{ id: 'CR' + Date.now(), status: 'pending', at: Date.now(), ...r }, ...(c.coachReqs || [])] }
+        })
+        return out
+      },
+      coachSetPlayers(coach, id, players) {
+        club((c) => ({ ...c, bookings: c.bookings.map((b) => (b.id === id && b.coach === coach ? { ...b, players: players.slice(0, 4), by: players[0] || null } : b)) }))
+      },
+      coachReqCancel(id) { club((c) => ({ ...c, coachReqs: (c.coachReqs || []).map((x) => (x.id === id && x.status === 'pending' ? { ...x, status: 'cancelled' } : x)) })) },
+      adminCoachReq(id, ok) {
+        let out = { ok: true }
+        club((c) => {
+          const r = (c.coachReqs || []).find((x) => x.id === id)
+          if (!r || r.status !== 'pending') { out = { error: 'gone' }; return c }
+          const reqs = (status) => c.coachReqs.map((x) => (x.id === id ? { ...x, status, done: Date.now() } : x))
+          if (!ok) return { ...c, coachReqs: reqs('rejected') }
+          if (!isFree(c, r.date, r.court, r.start, r.dur)) { out = { error: 'busy' }; return c }
+          const co = c.coaches.find((x) => x.id === r.coach), now = Date.now()
+          const hours = Array.from({ length: r.dur }, (_, i) => ({ id: `cb${now}-${i}`, status: 'ok', source: 'coach', at: now, type: 'coach', coach: r.coach, court: r.court, date: r.date, start: r.start + i, dur: 1, players: r.student ? [r.student] : [], by: r.student || null, price: co?.price || 0, paid: 0, note: r.note || '', block: r.id }))
+          return { ...c, coachReqs: reqs('ok'), bookings: [...c.bookings, ...hours] }
+        })
+        return out
+      },
+      adminLimits(l) { club((c) => ({ ...c, limits: { ...limitsOf(c), ...l } })) },
+      adminCoachLogin(id, login) { club((c) => ({ ...c, coaches: c.coaches.map((x) => (x.id === id ? { ...x, login } : x)) })) },
       adminAddBooking(b) { club((c) => ({ ...c, bookings: [...c.bookings, { id: 'd' + Date.now(), status: 'ok', source: 'desk', at: Date.now(), ...b }] })) },
       // تسویه: مبلغ و زمان پرداخت جدا ثبت می‌شود تا سند حسابداری در همان روز بخورد
       // دریافت دستی در پذیرش (نقدی یا کارتخوان)؛ در دریافت‌ها، داشبورد و حسابداری دیده می‌شود
@@ -564,6 +600,33 @@ function takeStock(products, items) {
 }
 
 // ---------- انتخاب‌گرهای مشترک ----------
+// سقف رزرو مربی: روزانه و هفتگی (شنبه تا جمعه) برای هر مربی، و پشت‌سرهم برای همه‌ی مربی‌ها
+// درخواست‌های منتظر و تأییدشده از سقف کم می‌شوند
+export const coachCaps = (co) => ({ day: co?.login?.day ?? 5, week: co?.login?.week ?? co?.login?.hours ?? 15 })
+export function weekOf(date) {
+  const from = addDays(date, -((fromKey(date).getDay() + 1) % 7))
+  return [from, addDays(from, 6)]
+}
+const liveReqs = (club, co) => (club.coachReqs || []).filter((r) => r.coach === co.id && (r.status === 'pending' || r.status === 'ok'))
+export function coachLimits(club, co, date) {
+  if (!co) return { day: 0, week: 0, run: 0, caps: coachCaps(co) }
+  const caps = coachCaps(co), [a, z] = weekOf(date), reqs = liveReqs(club, co)
+  const dayUsed = reqs.filter((r) => r.date === date).reduce((s, r) => s + r.dur, 0)
+  const weekUsed = reqs.filter((r) => fromKey(r.date) >= fromKey(a) && fromKey(r.date) <= fromKey(z)).reduce((s, r) => s + r.dur, 0)
+  return { day: Math.max(0, caps.day - dayUsed), week: Math.max(0, caps.week - weekUsed), run: limitsOf(club).coachRun, caps }
+}
+// طول بلوک پشت‌سرهمِ مربی در آن روز اگر این بازه اضافه شود (کلاس‌ها + درخواست‌های منتظر)
+export function coachRun(club, co, date, start, dur) {
+  const spans = [
+    ...club.bookings.filter((b) => b.coach === co.id && b.date === date && b.status !== 'cancelled').map((b) => [b.start, b.start + b.dur]),
+    ...(club.coachReqs || []).filter((r) => r.coach === co.id && r.date === date && r.status === 'pending').map((r) => [r.start, r.start + r.dur]),
+  ]
+  let a = start, z = start + dur, grew = true
+  while (grew) { grew = false; spans.forEach(([s, e]) => { if (s <= z && e >= a && (s < a || e > z)) { a = Math.min(a, s); z = Math.max(z, e); grew = true } }) }
+  return z - a
+}
+// ساعت‌های تأییدشده‌ی مربی که هنوز شاگرد ندارند (کلاس آموزشی نباید بی‌شاگرد بماند)
+export const openHours = (club, coachId) => club.bookings.filter((b) => b.coach === coachId && b.block && b.status !== 'cancelled' && !b.players.length && fromKey(b.date).getTime() + (b.start + b.dur) * 36e5 > Date.now())
 export function busyOn(club, date, court) {
   return club.bookings.filter((b) => b.date === date && b.court === court && b.status !== 'cancelled')
 }

@@ -267,7 +267,7 @@ export function Coaches() {
                 <div><b>{fa(x.packsSold)}</b><small>پکیج ({COACH_PACKS.filter((p) => p.sessions > 1).map((p) => `${fa(p.sessions)}: ${fa(x.byPack[p.id])}`).join('، ')})</small></div>
                 <div><b>{short(x.revenue)}</b><small>درآمد</small></div>
               </div>
-              <div className="ca-foot"><span>★ {fa(x.rating)} <small>از {fa(x.reviews)} امتیاز</small></span>{x.pending > 0 && <span className="ca-pending">{fa(x.pending)} نظر منتظر تأیید</span>}</div>
+              <div className="ca-foot"><span>★ {fa(x.rating)} <small>از {fa(x.reviews)} امتیاز</small></span>{x.pending > 0 && <span className="ca-pending">{fa(x.pending)} نظر منتظر تأیید</span>}{x.login?.on && <span className="ca-login" data-tip={`پنل مربی فعال؛ نام کاربری ${x.login.user}`}>پنل فعال</span>}</div>
             </div>
           </button>
         ))}
@@ -419,12 +419,15 @@ function CoachForm({ co, from, onClose }) {
         <select value={f.member || ''} onChange={(e) => set({ member: e.target.value || null })}><option value="">— وصل نیست —</option>{[...MEMBERS].sort((a, b) => (b.phone === phone) - (a.phone === phone) || a.name.localeCompare(b.name, 'fa')).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.phone})</option>)}</select>
       </Field>
       <Field label="یادداشت خصوصی"><textarea rows={2} value={f.note} onChange={(e) => set({ note: e.target.value })} placeholder="قرارداد، ساعت‌های آزاد، …" /></Field>
+
+      <p className="muted small">نام کاربری، رمز و تأیید ورود این مربی در بخش «پنل مربی‌ها» است.</p>
       <button className="adm-btn primary full" disabled={!ok} onClick={save}>{co ? 'ذخیره' : 'افزودن مربی'}</button>
     </div>
   )
 }
 
 // ساعت کاری: همه‌ی بازه‌های رزرو، تقویم، اپ و داشبورد از همین دو ساعت ساخته می‌شوند
+import { LimitsCard } from './CoachAccess'
 function HoursCard() {
   const { club, adminHours, toast } = useStore()
   const [h, setH] = useState(hoursOf(club))
@@ -470,6 +473,7 @@ export function Settings() {
       </Card>
       <div className="stack">
         <HoursCard />
+      <LimitsCard />
         <Card title="وضعیت زمین‌ها" sub="زمین غیرفعال در اپ قابل رزرو نیست">
           <div className="courts-set">
             {COURTS.map((c) => (

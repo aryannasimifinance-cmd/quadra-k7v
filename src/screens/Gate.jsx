@@ -18,7 +18,7 @@ export default function Gate() {
   const set = (p) => setForm((f) => ({ ...f, ...p }))
   const order = ['welcome', 'phone', 'otp', 'name', 'level', 'side', 'done']
   const go = (s) => { setDir(order.indexOf(s) >= order.indexOf(step) ? 1 : -1); setStep(s) }
-  const back = () => go(step === 'admin' ? 'welcome' : order[order.indexOf(step) - 1])
+  const back = () => go(step === 'admin' || step === 'coach' ? 'welcome' : order[order.indexOf(step) - 1])
   const afterOtp = () => {
     // عضو قبلی فقط با شماره و کد وارد می‌شود — بدون پرسیدن نام و سطح
     if (mode === 'login' || hasAccount(form.phone)) { loginPlayer({ phone: form.phone }); return }
@@ -29,14 +29,15 @@ export default function Gate() {
 
   return (
     <div className="auth">
-      <HeroSlides dim={step !== 'welcome'} admin={step === 'admin'} />
+      <HeroSlides dim={step !== 'welcome'} admin={step === 'admin' || step === 'coach'} />
       <AnimatePresence mode="popLayout" custom={dir} initial={false}>
         <motion.div key={step} className={`auth-pane ${step === 'welcome' ? 'welcome' : ''}`} custom={dir}
           variants={{ in: (d) => ({ x: d * -60, opacity: 0 }), on: { x: 0, opacity: 1 }, out: (d) => ({ x: d * 60, opacity: 0 }) }}
           initial="in" animate="on" exit="out" transition={{ type: 'spring', stiffness: 300, damping: 32 }}>
-          {step === 'welcome' && <Welcome onStart={() => { setMode('signup'); go('phone') }} onLogin={() => { setMode('login'); go('phone') }} onAdmin={() => go('admin')} />}
+          {step === 'welcome' && <Welcome onStart={() => { setMode('signup'); go('phone') }} onLogin={() => { setMode('login'); go('phone') }} onAdmin={() => go('admin')} onCoach={() => go('coach')} />}
           {step === 'admin' && <AdminLogin onBack={back} />}
-          {!['welcome', 'done', 'admin'].includes(step) && (
+          {step === 'coach' && <AdminLogin coach onBack={back} />}
+          {!['welcome', 'done', 'admin', 'coach'].includes(step) && (
             <div className="auth-card">
               <TopBar onBack={back} total={5} step={progress} title={mode === 'login' && step === 'phone' ? 'ورود' : 'عضویت در کوادرا'} transparent />
               {step === 'phone' && <PhoneStep value={form.phone} onChange={(phone) => set({ phone })} onNext={() => go('otp')} mode={mode} />}
@@ -75,7 +76,7 @@ function HeroSlides({ dim, admin }) {
   )
 }
 
-function Welcome({ onStart, onLogin, onAdmin }) {
+function Welcome({ onStart, onLogin, onAdmin, onCoach }) {
   const words = ['فراتر از', 'یک بازی']
   return (
     <div className="welcome-in">
@@ -97,20 +98,35 @@ function Welcome({ onStart, onLogin, onAdmin }) {
       <motion.div className="welcome-cta" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.95 }}>
         <Button full variant="q" onClick={onStart}>شروع کنیم</Button>
         <Button full variant="glass" onClick={onLogin}>قبلاً عضو شده‌ام</Button>
-        <button className="admin-link" onClick={onAdmin}><Icon name="shield" size={16} /> ورود مدیر باشگاه</button>
+        <div className="staff-links">
+          <button className="admin-link" onClick={onAdmin}><Icon name="shield" size={16} /> ورود مدیر باشگاه</button>
+          <i />
+          <button className="admin-link" onClick={onCoach}><Icon name="coach" size={16} /> ورود مربی‌ها</button>
+        </div>
       </motion.div>
     </div>
   )
 }
 
-function AdminLogin({ onBack }) {
-  const { loginAdmin, toast } = useStore()
+// ورود مدیر یا مربی؛ نام کاربری و رمز هر مربی را مدیر در پرونده‌ی مربی می‌دهد و دسترسی را فعال می‌کند
+function AdminLogin({ onBack, coach }) {
+  const { loginAdmin, loginCoach, club, toast } = useStore()
+  const [why, setWhy] = useState('')
   const [u, setU] = useState('')
   const [p, setP] = useState('')
   const [err, setErr] = useState(false)
   const [busy, setBusy] = useState(false)
   const submit = () => {
-    if (u.trim().toLowerCase() !== 'admin' || p !== 'quadra') { setErr(true); haptic([30, 30, 30]); return }
+    const fail = (msg) => { setErr(true); setWhy(msg); haptic([30, 30, 30]) }
+    if (coach) {
+      const c = (club.coaches || []).find((x) => x.login?.user && x.login.user.toLowerCase() === u.trim().toLowerCase())
+      if (!c || c.login.pass !== p) return fail('نام کاربری یا رمز درست نیست')
+      if (!c.login.on) return fail('دسترسی شما هنوز توسط مدیر فعال نشده است')
+      setBusy(true); chime('success')
+      setTimeout(() => { loginCoach(c.id); toast({ icon: '🎾', title: `خوش آمدید، ${c.name.split(' ')[0]}`, body: 'پنل مربی کوادرا' }) }, 700)
+      return
+    }
+    if (u.trim().toLowerCase() !== 'admin' || p !== 'quadra') return fail('نام کاربری یا رمز درست نیست')
     setBusy(true); chime('success')
     setTimeout(() => { loginAdmin(); toast({ icon: '🛡', title: 'خوش آمدید، مدیر', body: 'پنل مدیریت کوادرا' }) }, 700)
   }
@@ -120,13 +136,14 @@ function AdminLogin({ onBack }) {
         <button className="icon-btn ghost" onClick={onBack} aria-label="بازگشت"><Icon name="back" /></button>
         <div className="admin-card-head">
           <QuadraMark size={44} tone="light" />
-          <div><b>پنل مدیریت</b><small>فقط برای کارکنان کوادرا</small></div>
+          <div><b>{coach ? 'پنل مربی' : 'پنل مدیریت'}</b><small>{coach ? 'نام کاربری و رمز را از مدیر باشگاه بگیرید' : 'فقط برای کارکنان کوادرا'}</small></div>
         </div>
-        <label className="field dark"><Icon name="user" /><input dir="ltr" placeholder="نام کاربری" value={u} onChange={(e) => setU(e.target.value)} autoFocus /></label>
-        <label className="field dark"><Icon name="lock" /><input dir="ltr" type="password" placeholder="رمز عبور" value={p} onChange={(e) => setP(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} /></label>
+        <label className="field dark"><Icon name="user" /><input dir="ltr" placeholder="نام کاربری" value={u} onChange={(e) => { setU(e.target.value); setWhy('') }} autoFocus /></label>
+        <label className="field dark"><Icon name="lock" /><input dir="ltr" type="password" placeholder="رمز عبور" value={p} onChange={(e) => { setP(e.target.value); setWhy('') }} onKeyDown={(e) => e.key === 'Enter' && submit()} /></label>
+        {why && <p className="login-why">{why}</p>}
         <Button full variant="q" onClick={submit} disabled={!u || !p || busy}>{busy ? 'در حال ورود…' : 'ورود به پنل'}</Button>
-        <Loading show={busy} text="ورود به پنل مدیریت…" />
-        <p className="demo-hint">نسخه‌ی نمایشی — نام کاربری <code>admin</code>، رمز <code>quadra</code></p>
+        <Loading show={busy} text={coach ? 'ورود به پنل مربی…' : 'ورود به پنل مدیریت…'} />
+        <p className="demo-hint">{coach ? <>نسخه‌ی نمایشی — نام کاربری <code>faraz</code>، رمز <code>1234</code></> : <>نسخه‌ی نمایشی — نام کاربری <code>admin</code>، رمز <code>quadra</code></>}</p>
       </motion.div>
     </div>
   )

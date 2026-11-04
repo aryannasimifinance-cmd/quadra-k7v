@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import {
   BADGES, COACHES, COACH_PACKS, COURTS, DAYPARTS, DURATIONS, EVENT_KIND, LEVELS, MEMBERS, SERIES, coachById, coachPackPrice, coachPacks, courtById, dayKey, dayLabel, dayMonth, dayNum,
-  SIDES, coachesRanked, fa, fromKey, hourLabel, isPeak, isWeekend, levelById, levelIndex, nearLevels, nextDays, priceFor, range, short, sideById, toman, weekday,
+  SIDES, limitsOf, coachesRanked, fa, fromKey, hourLabel, isPeak, isWeekend, levelById, levelIndex, nearLevels, nextDays, priceFor, range, short, sideById, toman, weekday,
 } from '../../data'
 import { celebrate, chime, haptic } from '../../fx'
 import { ME, freeStarts, isFree, memberOff, useStore } from '../../store'
@@ -26,8 +26,8 @@ const INTENTS = [
   { id: 'court', name: 'رزرو زمین', desc: 'تک جلسه یا پکیج ۵ و ۱۰ جلسه؛ جای خالی رو با هم‌سطح پر می‌کنیم', img: './img/court-pano.jpg', xp: 50, icon: '🎾' },
   { id: 'match', name: 'ساخت مچ', desc: 'یار ندارید؟ به بازی باز هم‌سطحتون بپیوندید', img: './img/court-indoor.jpg', xp: 40, icon: '⚡' },
   { id: 'coach', name: 'پدل با مربی', desc: 'تک جلسه یا پکیج ۵ و ۱۰ جلسه', img: './img/welcome.jpg', xp: 40, icon: '🧢' },
-  { id: 'friday', name: 'مسابقات آدینه', desc: 'هر جمعه صبح، دوستانه', img: './img/welcome-courts.jpg', xp: 60, icon: '☀️' },
-  { id: 'official', name: 'تورنمنت‌های رسمی', desc: 'گروهی + حذفی، امتیاز رنکینگ', img: './img/welcome-night.jpg', xp: 80, icon: '🏆' },
+  { id: 'friday', name: 'مسابقات آدینه', desc: 'دوستانه، تیم دونفره', img: './img/welcome-courts.jpg', xp: 60, icon: '☀️' },
+  { id: 'official', name: 'ایونت‌های ویبورا', desc: 'دورهمی ورزشی، همان روال آدینه', img: './img/vibora.jpg', xp: 60, icon: '🎉' },
 ]
 
 export default function Wizard({ preset = {}, onClose, onDone, onStep }) {
@@ -238,6 +238,7 @@ function StepSlot({ w, set, onNext }) {
   for (let h = dp.from; h < Math.min(dp.to, 24); h++) if (!today || h > nowH) hours.push(h)
   const rows = hours.filter((h) => COURTS.some((c) => free(c.id, h) || inSel(c.id, h)))
   const showPeak = club.pricing.peak !== club.pricing.offpeak
+  const maxRun = limitsOf(club).playerRun
 
   const tap = (c, h) => {
     haptic(8)
@@ -250,7 +251,7 @@ function StepSlot({ w, set, onNext }) {
       return set({ dur: h - s0 })
     }
     if (h === e0 || h === s0 - 1) {
-      if (w.dur >= 3) { toast({ icon: '⏱', title: 'حداکثر ۳ ساعت پشت هم' }); return }
+      if (w.dur >= maxRun) { toast({ icon: '⏱', title: `حداکثر ${fa(maxRun)} ساعت پشت هم` }); return }
       return h === e0 ? set({ dur: w.dur + 1 }) : set({ start: h, dur: w.dur + 1 })
     }
     set({ court: c, start: h, dur: 1 })
@@ -259,7 +260,7 @@ function StepSlot({ w, set, onNext }) {
 
   return (
     <div className="slot">
-      <p className="slot-help">{isCoach ? 'یک ساعت آزاد را انتخاب کنید.' : 'روی یک ساعت بزنید. برای بیشتر، ساعت قبل یا بعدش را هم بزنید (تا ۳ ساعت). با زدن دوباره، آن ساعت برداشته می‌شود.'}</p>
+      <p className="slot-help">{isCoach ? 'یک ساعت آزاد را انتخاب کنید.' : `روی یک ساعت بزنید. برای بیشتر، ساعت قبل یا بعدش را هم بزنید (تا ${fa(maxRun)} ساعت). با زدن دوباره، آن ساعت برداشته می‌شود.`}</p>
       <div className="slot-courts">
         <span />
         {COURTS.map((c) => (

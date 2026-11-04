@@ -1201,3 +1201,6 @@ button.trn-pl:hover { background: var(--paper2); }
 .kb-champ b { font-size: 16px; }
 .kb-champ small { font-size: 11.5px; color: rgba(255,255,255,.6); }
 .ag-more { text-align: center; }
+.staff-links { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.staff-links i { width: 1px; height: 14px; background: currentColor; opacity: .3; }
+.login-why { margin: -2px 0 0; font-size: 12.5px; color: #FF8A7A; text-align: center; }

@@ -61,7 +61,7 @@ export default function Home({ nav }) {
           </motion.div>
           <motion.div className="hero-cta" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
             <motion.button className="cta-main" whileTap={{ scale: 0.96 }} onClick={() => nav.start({})}>
-              <span><b>بازی بسازید</b><small>زمین، مچ، مربی، تورنمنت</small></span>
+              <span><b>بازی بسازید</b><small>زمین، مچ، مربی، آدینه و ویبورا</small></span>
               <i><Icon name="plus" size={24} stroke={2.6} /></i>
             </motion.button>
             <motion.button className="cta-side" whileTap={{ scale: 0.96 }} onClick={() => nav.start({ intent: 'match' })}>

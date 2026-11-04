@@ -7,12 +7,14 @@ import Gate from './screens/Gate'
 import Main from './screens/player/Main'
 
 const Admin = lazy(() => import('./screens/admin/Admin'))
+const Coach = lazy(() => import('./screens/coach/Coach'))
 
 export default function App() {
   const { session } = useStore()
   const [sting, setSting] = useState(true)
   useEffect(() => { const t = setTimeout(() => setSting(false), 3400); return () => clearTimeout(t) }, [])
   const admin = session?.role === 'admin'
+  const coach = session?.role === 'coach'
 
   return (
     <>
@@ -22,7 +24,9 @@ export default function App() {
         <div className="stage">
           <div className="stage-bg" style={{ backgroundImage: 'url(./img/welcome-night.jpg)' }} />
           <div className="app">
-            {!sting && (session?.role === 'player' ? <Main key="m" /> : <Gate key="g" />)}
+            {!sting && (coach
+              ? <Suspense fallback={<Loading text="بارگذاری پنل مربی…" />}><Coach key="c" /></Suspense>
+              : session?.role === 'player' ? <Main key="m" /> : <Gate key="g" />)}
             <div id="portal" />
           </div>
         </div>

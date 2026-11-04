@@ -1,6 +1,6 @@
 // آدینه‌ها و تورنمنت‌ها: تعریف مسابقه، ثبت‌نام‌های دونفره، تیم‌بندی، طراحی گروه‌ها، مرحله‌ی حذفی، برنده‌ها، ورودی‌ها و فروش کافه‌ی روز مسابقه
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { EVENT_KIND, EV_IMG, LEVELS, MEMBERS, METHOD_NAME, addDays, hoursOf, levelById, dayLabel, fa, fromKey, hourLabel, short, toman, todayKey } from '../../data'
+import { EVENT_KIND, EV_IMG, VIBORA_IMG, LEVELS, MEMBERS, METHOD_NAME, addDays, hoursOf, levelById, dayLabel, fa, fromKey, hourLabel, short, toman, todayKey } from '../../data'
 import {
   EV_FORMAT, EV_STATUS, GROUP_IDS, ROUND, SCORING, addGroup, dropGroup, emptyGroups, fillGroups, scored, scoringOf, setsOf, cafeOf, clashes, entryTotal, eventAt, fillTeams, finished, groupsDone, isLive, loosePairs, withPairs, koRounds, makeGroups, makeKnockout, makeTeams, moveTeam, pairUp, plan, podium, regPower, setScore, showsResults, singles, standings, teamName, unpair, upcoming,
 } from '../../events'
@@ -78,7 +78,7 @@ function List({ tab, setTab, onOpen, onNew }) {
   const rest = list.filter((r) => r !== spot)
   const pg = useSlice(rest, 12, tab + w)
   const exp = () => downloadXlsx(`quadra-events-${jDate(todayKey()).replace(/\//g, '-')}`, [{
-    name: 'مسابقه‌ها', rows: table('آدینه‌ها و تورنمنت‌های کوادرا', ['تاریخ', 'ساعت', 'عنوان', 'نوع', 'وضعیت', 'ثبت‌نام', 'ظرفیت', 'ورودی هر نفر', 'جمع ورودی', 'فروش کافه', 'جمع درآمد', 'قهرمان'],
+    name: 'مسابقه‌ها', rows: table('آدینه‌ها و ایونت‌های ویبورای کوادرا', ['تاریخ', 'ساعت', 'عنوان', 'نوع', 'وضعیت', 'ثبت‌نام', 'ظرفیت', 'ورودی هر نفر', 'جمع ورودی', 'فروش کافه', 'جمع درآمد', 'قهرمان'],
       list.map(({ e, champ }) => { const c = sum(cafeOf(club, e), (o) => o.total); return [jDate(e.date), hourLabel(e.start), e.title, EVENT_KIND[e.kind].name, EV_STATUS[e.status][0], e.regs.length, e.cap, e.fee, entryTotal(e), c, entryTotal(e) + c, champ || ''] })),
   }])
   const months = []
@@ -634,10 +634,10 @@ function JCal({ value, onChange, events }) {
 function nextFriday() { const d = new Date(); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7 || 7)); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}` }
 
 // فرم مسابقه در پنج بخش مرتب؛ دکمه‌ی ذخیره همیشه پایین فرم دیده می‌شود
-const KINDS = { friday: ['☀️', 'مسابقه‌ی آدینه', 'دوستانه؛ جمعه یا هر روز دیگر'], official: ['🏆', 'تورنمنت رسمی', 'امتیاز رنکینگ، جایزه'] }
+const KINDS = { friday: ['☀️', 'مسابقه‌ی آدینه', 'دوستانه؛ جمعه یا هر روز دیگر'], official: ['🎉', 'ایونت ویبورا', 'دورهمی ورزشی؛ همان روال آدینه'] }
 const KIND_DEF = {
   friday: { title: 'آدینه‌ی کوادرا', desc: 'تیم‌های دونفره، گروهی + حذفی', start: 9, dur: 3, cap: 16, fee: 750000, prize: 'راکت + توپ', levels: ['B', 'C+', 'C'], scoring: 'set6' },
-  official: { title: 'تورنمنت کوادرا', desc: 'گروهی + حذفی، امتیاز رنکینگ', start: 10, dur: 8, cap: 32, fee: 1500000, prize: 'جایزه‌ی نقدی + جام', levels: ['A', 'B+', 'B', 'C+'], scoring: 'bo3' },
+  official: { title: 'ایونت ویبورا', desc: 'تیم‌های دونفره، گروهی + حذفی', start: 17, dur: 4, cap: 24, fee: 900000, prize: 'راکت + کارت هدیه‌ی کافه', levels: ['B', 'C+', 'C'], scoring: 'set6', img: VIBORA_IMG },
 }
 const Sec = ({ n, title, sub, children }) => (
   <section className="efs"><header><i>{fa(n)}</i><div><b>{title}</b>{sub && <small>{sub}</small>}</div></header><div className="efs-b">{children}</div></section>
@@ -646,7 +646,7 @@ const Sec = ({ n, title, sub, children }) => (
 function EventForm({ ev, onClose }) {
   const { club, adminEventSave, toast } = useStore()
   const { open, close } = hoursOf(club)
-  const [f, setF] = useState(() => ev || { kind: 'friday', ...KIND_DEF.friday, format: 'groups', date: nextFriday(), courts: [1, 2, 3, 4], img: EV_IMG[0], status: 'open', note: '' })
+  const [f, setF] = useState(() => ev || { kind: 'friday', img: EV_IMG[1], ...KIND_DEF.friday, format: 'groups', date: nextFriday(), courts: [1, 2, 3, 4], status: 'open', note: '' })
   const set = (p) => setF((x) => ({ ...x, ...p }))
   const tog = (k, v) => set({ [k]: f[k].includes(v) ? f[k].filter((x) => x !== v) : [...f[k], v].sort() })
   const same = eventAt(club.events.filter((e) => e.id !== ev?.id), fromKey(f.date).getTime() + f.start * 36e5)
@@ -662,7 +662,7 @@ function EventForm({ ev, onClose }) {
     <div className="ef">
       <Sec n={1} title="چه مسابقه‌ای؟">
         <div className="ef-kinds">{Object.entries(KINDS).map(([k, [ic, n, d]]) => (
-          <button key={k} type="button" className={f.kind === k ? 'on' : ''} onClick={() => set({ kind: k, ...(ev ? {} : KIND_DEF[k]) })}><i>{ic}</i><b>{n}</b><small>{d}</small></button>
+          <button key={k} type="button" className={f.kind === k ? 'on' : ''} onClick={() => set({ kind: k, ...(ev ? {} : { img: EV_IMG[1], ...KIND_DEF[k] }) })}><i>{ic}</i><b>{n}</b><small>{d}</small></button>
         ))}</div>
         <Field label="اسم مسابقه"><input value={f.title} onChange={(e) => set({ title: e.target.value })} placeholder="مثلاً آدینه‌ی بانوان" /></Field>
         <Field label="توضیح کوتاه" hint="زیر اسم در اپ"><input value={f.desc} onChange={(e) => set({ desc: e.target.value })} /></Field>

@@ -1,6 +1,6 @@
 // مسابقات آدینه و تورنمنت‌ها: ثبت‌نام، تیم‌بندی متعادل، گروه‌ها، مرحله‌ی حذفی، برنده‌ها و فروش کافه‌ی همان روز
 // همه‌ی داده در club.events ذخیره می‌شود تا مدیر تعریف و ویرایش کند و اپ همان را نشان دهد.
-import { EV_IMG, FRIDAY, LEVELS, MEMBERS, OFFICIAL, addDays, dayKey, fromKey, hash, levelById, nextDays, todayKey } from './data'
+import { EV_IMG, VIBORA_IMG, FRIDAY, LEVELS, MEMBERS, OFFICIAL, addDays, dayKey, fromKey, hash, levelById, nextDays, todayKey } from './data'
 import { dk } from './jalali'
 
 export const EV_STATUS = { draft: ['پیش‌نویس', 'mute'], open: ['ثبت‌نام باز', 'ok'], closed: ['ثبت‌نام بسته', 'warn'], done: ['برگزار شد', 'mute'], cancelled: ['لغو شد', 'bad'] }
@@ -296,26 +296,26 @@ export function seedEvents() {
   for (let d = -1; d >= -50 && pastF.length < 6; d--) { const k = addDays(today, d); if (fromKey(k).getDay() === 5) pastF.push(k) }
   pastF.forEach((k, i) => {
     const f = FRIDAY[i % FRIDAY.length]
-    let ev = base({ id: 'fr-' + k, kind: 'friday', title: i === 0 ? 'آدینه‌ی کوادرا' : f.title, desc: f.format, format: 'groups', date: k, start: 9, dur: 3, levels: LEVELS.slice(2, 6).map((l) => l.id), cap: 16, fee: 750000, prize: 'راکت Volt + توپ', img: EV_IMG[i % EV_IMG.length], status: 'done' })
+    let ev = base({ id: 'fr-' + k, kind: 'friday', title: i === 0 ? 'آدینه‌ی کوادرا' : f.title, desc: f.format, format: 'groups', date: k, start: 9, dur: 3, levels: LEVELS.slice(2, 6).map((l) => l.id), cap: 16, fee: 750000, prize: 'راکت Volt + توپ', img: EV_IMG[1 + (i % (EV_IMG.length - 1))], status: 'done' })
     ev.regs = fakeRegs(ev.id, 12 + 2 * Math.floor(rh(k) * 3), ev.fee, k)
     out.push(runAll(makeGroups(makeTeams(ev))))
   })
   const off = (() => { for (let d = -9; d >= -20; d--) { const k = addDays(today, d); if (fromKey(k).getDay() === 4) return k } return addDays(today, -12) })()
-  let cup = base({ id: 'of-' + off, kind: 'official', title: 'جام ماهانه‌ی کوادرا', desc: 'گروهی + حذفی، امتیاز رنکینگ کوادرا', format: 'groups', date: off, start: 10, dur: 8, levels: LEVELS.slice(0, 5).map((l) => l.id), cap: 32, fee: 1500000, prize: 'جایزه‌ی نقدی + جام', img: EV_IMG[4], status: 'done' })
-  cup.regs = fakeRegs(cup.id, 24, cup.fee, off)
+  let cup = base({ id: 'of-' + off, kind: 'official', title: 'ایونت ویبورا — دورهمی ماه', desc: 'تیم‌های دونفره، گروهی + حذفی', format: 'groups', date: off, start: 17, dur: 4, levels: LEVELS.slice(0, 5).map((l) => l.id), cap: 24, fee: 900000, prize: 'راکت + کارت هدیه‌ی کافه', img: VIBORA_IMG, status: 'done' })
+  cup.regs = fakeRegs(cup.id, 20, cup.fee, off)
   out.push(runAll(makeGroups(makeTeams(cup))))
-  // پیش‌رو: چهار آدینه‌ی بعدی و دو تورنمنت رسمی، با ثبت‌نام‌های تا امروز
+  // پیش‌رو: چهار آدینه‌ی بعدی و دو ایونت ویبورا، با ثبت‌نام‌های تا امروز
   nextDays(28, 1).filter((d) => d.getDay() === 5).slice(0, 4).forEach((d, i) => {
     const k = dayKey(d), lv = Math.floor(rh('lv' + k) * 5)
     const f = i === 0 ? { ...FRIDAY[0], title: 'آدینه‌ی این هفته‌ی کوادرا' } : FRIDAY[i % FRIDAY.length]
-    const ev = base({ id: 'fr-' + k, kind: 'friday', title: f.title, desc: f.format, format: 'groups', date: k, start: 9, dur: 3, levels: LEVELS.slice(lv, lv + 3).map((l) => l.id), cap: 16, fee: 750000, prize: 'راکت Volt + توپ', img: EV_IMG[i % EV_IMG.length], status: 'open' })
+    const ev = base({ id: 'fr-' + k, kind: 'friday', title: f.title, desc: f.format, format: 'groups', date: k, start: 9, dur: 3, levels: LEVELS.slice(lv, lv + 3).map((l) => l.id), cap: 16, fee: 750000, prize: 'راکت Volt + توپ', img: EV_IMG[1 + (i % (EV_IMG.length - 1))], status: 'open' })
     ev.regs = fakeRegs(ev.id, Math.floor(16 * (0.35 + rh('tk' + i) * 0.45)), ev.fee, k).map((r) => ({ ...r, at: Math.min(r.at, Date.now() - (i + 1) * 36e5) }))
     out.push(ev)
   })
   OFFICIAL.forEach((o, i) => {
     const d = nextDays(7, o.in).find((x) => x.getDay() === 4), k = dayKey(d)
-    const ev = base({ id: 'of-' + k, kind: 'official', title: o.title, desc: o.format, format: 'groups', date: k, start: 10, dur: 8, levels: LEVELS.slice(0, 5).map((l) => l.id), cap: 32, fee: 1500000, prize: o.prize, img: EV_IMG[(i + 3) % EV_IMG.length], status: 'open' })
-    ev.regs = fakeRegs(ev.id, Math.floor(32 * (0.3 + rh('of' + i) * 0.35)), ev.fee, k).map((r) => ({ ...r, at: Math.min(r.at, Date.now() - (i + 2) * 36e5) }))
+    const ev = base({ id: 'of-' + k, kind: 'official', title: o.title, desc: o.format, format: 'groups', date: k, start: 17, dur: 4, levels: LEVELS.slice(0, 5).map((l) => l.id), cap: 24, fee: 900000, prize: o.prize, img: VIBORA_IMG, status: 'open' })
+    ev.regs = fakeRegs(ev.id, 2 * Math.floor(12 * (0.3 + rh('of' + i) * 0.35)), ev.fee, k).map((r) => ({ ...r, at: Math.min(r.at, Date.now() - (i + 2) * 36e5) }))
     out.push(ev)
   })
   out.forEach((ev) => sales.push(...regSales(ev)))

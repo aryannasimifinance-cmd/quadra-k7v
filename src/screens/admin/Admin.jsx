@@ -13,6 +13,7 @@ import { Icon, LevelPill } from '../../components/ui'
 import { Logo } from '../../components/Logo'
 import { occupancy, who } from './derive'
 import { Coaches, Members, Payments, Settings } from './Lists'
+import { CoachPanel } from './CoachAccess'
 import { Bookings } from './BookingsBoard'
 import { ShopAdmin } from './ShopAdmin'
 import { CafeAdmin } from './CafeAdmin'
@@ -32,7 +33,7 @@ const NAV = [
     { id: 'overview', name: 'داشبورد', icon: 'grid', tip: 'خلاصه‌ی امروز، زمین‌های زنده و کارهای مانده' },
     { id: 'calendar', name: 'تقویم زمین‌ها', icon: 'court', tip: 'برنامه‌ی ساعتی ۴ زمین؛ رزرو دستی با کلیک روی جای خالی' },
     { id: 'bookings', name: 'رزروها', icon: 'cal', tip: 'فهرست همه‌ی رزروها با جستجو و فیلتر' },
-    { id: 'events', name: 'آدینه‌ها و مسابقات', icon: 'trophy', tip: 'تعریف آدینه و تورنمنت، ثبت‌نام، تیم‌بندی، نتایج و برنده‌ها' },
+    { id: 'events', name: 'آدینه و ایونت ویبورا', icon: 'trophy', tip: 'تعریف آدینه و ایونت ویبورا، ثبت‌نام، تیم‌بندی، نتایج و برنده‌ها' },
   ] },
   { group: 'فروش و مالی', items: [
     { id: 'shop', name: 'فروشگاه و انبار', icon: 'bag', tip: 'کالاها، سفارش‌های اپ، فروش حضوری و موجودی' },
@@ -43,6 +44,7 @@ const NAV = [
   { group: 'افراد', items: [
     { id: 'members', name: 'اعضا', icon: 'users', tip: 'بازیکن‌ها، سطح و سابقه‌ی بازی' },
     { id: 'coaches', name: 'مربی‌ها و پکیج‌ها', icon: 'coach', tip: 'کلاس‌ها، امتیاز و درآمد هر مربی' },
+    { id: 'coachpanel', name: 'پنل مربی‌ها', icon: 'lock', tip: 'نام کاربری و رمز مربی‌ها، تأیید دسترسی و درخواست‌های رزرو زمین' },
     { id: 'hr', name: 'منابع انسانی', icon: 'shield', tip: 'پرسنل، شیفت، حضور و غیاب، مرخصی و حقوق' },
   ] },
   { group: 'باشگاه', items: [{ id: 'settings', name: 'تنظیمات', icon: 'cog', tip: 'قیمت ساعت‌ها و فعال یا غیرفعال کردن زمین' }] },
@@ -53,6 +55,7 @@ const GUIDES = {
   calendar: 'برنامه‌ی ساعتی ۴ زمین. روی جای خالی بزنید تا رزرو دستی ثبت شود؛ خانه‌های «🏆» زمین‌هایی است که برای آدینه یا مسابقه رزرو شده.',
   bookings: 'همه‌ی رزروها با جستجو و فیلتر؛ روی هر رزرو بزنید تا پرداخت، جابه‌جایی یا لغو را انجام دهید.',
   payments: 'پول‌هایی که رسیده و رزروهایی که هنوز تسویه نشده‌اند؛ مانده‌ها را از همین‌جا دریافت کنید.',
+  coachpanel: 'هر مربی با نام کاربری و رمزی که این‌جا می‌دهید وارد پنل خودش می‌شود. درخواست‌های رزرو زمینِ مربی‌ها هم این‌جا تأیید یا رد می‌شود.',
   hr: 'پرسنل، شیفت، حضور و غیاب، مرخصی و حقوق. مربی‌ها هم اگر کارمند باشند این‌جا تعریف می‌شوند.',
   settings: 'قیمت ساعت‌های عادی و پیک، و باز یا بسته کردن هر زمین.',
 }
@@ -82,8 +85,8 @@ export default function Admin() {
   // هر بار زدن یک بخش، آن بخش از صفحه‌ی اولش باز می‌شود (مثلاً از جزئیات یک آدینه به فهرست)
   const [visit, setVisit] = useState(0)
   const ctx = { go: (s) => { setSec(s); setVisit((v) => v + 1); window.scrollTo(0, 0) }, open: setDrawer }
-  const S = { overview: Overview, calendar: Calendar, bookings: Bookings, payments: Payments, shop: ShopAdmin, cafe: CafeAdmin, accounting: Accounting, coaches: Coaches, events: Events, members: Members, hr: Hr, settings: Settings }[sec]
-  const badges = { shop: club.orders.filter((o) => o.status === 'new').length, cafe: club.cafeOrders.filter((o) => o.status !== 'delivered').length, hr: club.leaves.filter((l) => l.status === 'pending').length }
+  const S = { overview: Overview, calendar: Calendar, bookings: Bookings, payments: Payments, shop: ShopAdmin, cafe: CafeAdmin, accounting: Accounting, coaches: Coaches, coachpanel: CoachPanel, events: Events, members: Members, hr: Hr, settings: Settings }[sec]
+  const badges = { shop: club.orders.filter((o) => o.status === 'new').length, cafe: club.cafeOrders.filter((o) => o.status !== 'delivered').length, hr: club.leaves.filter((l) => l.status === 'pending').length, coachpanel: (club.coachReqs || []).filter((r) => r.status === 'pending').length }
   return (
     <div className="adm" dir="rtl">
       <aside className={`adm-side ${menu ? 'open' : ''}`}>
