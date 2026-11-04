@@ -1,22 +1,22 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { addDays, fromKey, limitsOf, hoursOf, COURTS, PACKAGES, levelById, productById, seedClub, stockOf, setCatalog, setCoaches, setCourts, setMembers, todayKey, variantOf, withCoaches } from './data'
+import { addDays, fromKey, limitsOf, hoursOf, COURTS, PACKAGES, levelById, productById, seedClub, MEMBERS, memberById, passHash, USER_RE, stockOf, setCatalog, setCoaches, setCourts, setMembers, todayKey, variantOf, withCoaches } from './data'
 import { makeVariants, nextCode } from './catalog'
 import { fits, nextIngCode, nextItemCode, placeCafe, receiveInto } from './cafe'
 import { jMonthLabel } from './jalali'
 import { payroll } from './hr'
 import { withOps } from './ops'
-import { syncBlocks, withEvents } from './events'
+import { whyNot, syncBlocks, withEvents } from './events'
 
 // داده‌ی باشگاه، حساب بازیکن و نشست هر تب جدا ذخیره می‌شوند تا مدیر و بازیکن در دو تب همزمان کار کنند
 const KEY = 'quadra-v1'
 const CLUB_KEY = 'quadra-club-v1'
 const SESSION_KEY = 'quadra-session'
-const SEED_V = 18
+const SEED_V = 19
 const blankPlayer = { user: null, xp: 0, badges: [], wallet: 0, rated: [], membership: null, cart: [], wish: [], notifications: [], quests: {}, events: [], cafeCart: [] }
 
 // حساب نمونه برای «ورود سریع نمایشی»
 const DEMO_ACCOUNTS = {
-  '09120000000': { user: { name: 'آریان نسیمی‌فر', phone: '09120000000', level: 'C+', side: 'right', joined: Date.now() - 90 * 864e5 }, xp: 340, wallet: 800000, badges: ['first', 'host', 'social'] },
+  '09120000000': { user: { name: 'آریان نسیمی‌فر', phone: '09120000000', level: 'C+', side: 'right', gender: 'm', birth: 1374, username: 'aryan', joined: Date.now() - 90 * 864e5 }, xp: 340, wallet: 800000, badges: ['first', 'host', 'social'] },
 }
 const read = (store, k) => { try { return JSON.parse(store.getItem(k)) } catch { return null } }
 function load() {
@@ -120,15 +120,55 @@ export function StoreProvider({ children }) {
     return {
       // ورود با شماره: اگر حساب قبلی هست، همان برمی‌گردد؛ وگرنه حساب تازه
       hasAccount(phone) { return !!ref.current.accounts?.[phone] },
+      // نام کاربری آزاد است؟ (حساب‌های اپ، مربی‌ها و مدیر)
+      loginTaken(u, phone) {
+        const k = String(u).toLowerCase(), c = ref.current.club
+        return k === 'admin' || c.coaches.some((x) => x.login?.user?.toLowerCase() === k) || (!!c.logins?.[k] && c.logins[k].phone !== phone)
+      },
+      // ورود بدون پیامک: نام کاربری و رمز
+      loginWithPass(u, pass) {
+        const k = String(u).trim().toLowerCase(), L = ref.current.club.logins?.[k]
+        if (!L || L.h !== passHash(k, pass)) return { error: 'bad' }
+        api.loginPlayer({ phone: L.phone })
+        return { ok: true }
+      },
+      // تعیین یا تغییر نام کاربری و رمز برای کاربر واردشده
+      setLogin(u, pass) {
+        const k = String(u).trim().toLowerCase(), s0 = ref.current, phone = s0.user?.phone
+        if (!phone || !USER_RE.test(k) || (pass && pass.length < 6)) return { error: 'bad' }
+        if (api.loginTaken(k, phone)) return { error: 'taken' }
+        const old = Object.entries(s0.club.logins || {}).find(([, v]) => v.phone === phone)
+        if (!pass && !old) return { error: 'bad' }
+        commit((s) => {
+          const logins = Object.fromEntries(Object.entries(s.club.logins || {}).filter(([, v]) => v.phone !== phone))
+          logins[k] = { phone, h: pass ? passHash(k, pass) : old && old[0] === k ? old[1].h : null }
+          if (!logins[k].h) return s
+          return { ...s, user: { ...s.user, username: k }, club: { ...s.club, logins } }
+        })
+        return { ok: true }
+      },
+      // مشخصات بازیکن (جنسیت، سال تولد و…) در حساب و در پرونده‌ی عضو باشگاه
+      updateProfile(p) {
+        commit((s) => ({ ...s, user: { ...s.user, ...p }, club: { ...s.club, members: (s.club.members || []).map((m) => (m.phone === s.user?.phone ? { ...m, ...p } : m)) } }))
+      },
       loginPlayer(user) {
-        // «قبلاً عضو شده‌ام» با شماره‌ی ناشناخته: پروفایل نمونه با همان شماره
+        // ورود با شماره‌ای که روی این دستگاه حساب ندارد: اگر عضو باشگاه است، از پرونده‌اش؛ وگرنه پروفایل نمونه
         const demo = DEMO_ACCOUNTS['09120000000']
-        const saved = ref.current.accounts?.[user.phone] || (!user.name && { ...demo, user: { ...demo.user, phone: user.phone } })
+        const mem = !user.name && MEMBERS.find((m) => m.phone === user.phone)
+        const fromMember = mem && { user: { name: mem.name, phone: mem.phone, level: mem.level, side: mem.side, gender: mem.gender, birth: mem.birth, joined: Date.now() }, xp: 0, wallet: 0 }
+        const saved = ref.current.accounts?.[user.phone] || fromMember || (!user.name && { ...demo, user: { ...demo.user, phone: user.phone } })
         if (saved) { commit((s) => ({ ...s, ...blankPlayer, ...saved, user: { ...saved.user }, session: { role: 'player' } })); return }
+        // عضو تازه: رمز (اگر گذاشته) فقط به‌صورت هش در club.logins می‌رود
+        const { pass, ...clean } = user
+        const uname = clean.username && pass ? clean.username.toLowerCase() : null
+        if (!uname) delete clean.username
         commit((s) => ({
-          ...s, session: { role: 'player' }, user, ...(s.user ? {} : { xp: 20, wallet: 500000 }),
-          club: (s.club.members || []).some((m) => m.phone === user.phone) ? s.club
-            : { ...s.club, members: [...(s.club.members || []), { id: 'a' + user.phone, name: user.name, phone: user.phone, level: user.level, side: user.side || 'both', games: 0, wins: 0, points: levelById(user.level).base, joined: 0, at: Date.now(), source: 'app', member: null }] },
+          ...s, session: { role: 'player' }, user: clean, ...(s.user ? {} : { xp: 20, wallet: 500000 }),
+          club: (() => {
+            const c = (s.club.members || []).some((m) => m.phone === user.phone) ? s.club
+              : { ...s.club, members: [...(s.club.members || []), { id: 'a' + user.phone, name: user.name, phone: user.phone, level: user.level, side: user.side || 'both', gender: user.gender || null, birth: user.birth || null, games: 0, wins: 0, points: levelById(user.level).base, joined: 0, at: Date.now(), source: 'app', member: null }] }
+            return uname && !api.loginTaken(uname, user.phone) ? { ...c, logins: { ...c.logins, [uname]: { phone: user.phone, h: passHash(uname, pass) } } } : c
+          })(),
           notifications: s.user ? s.notifications : [{
             id: 'welcome', at: Date.now(), read: false, icon: '👋', title: `${user.name}، به کوادرا خوش اومدید`,
             body: '۲۰ امتیاز و ۵۰۰ هزار تومان اعتبار هدیه گرفتید. اولین بازیتون رو بسازید تا نشان «اولین سرو» باز بشه.',
@@ -229,7 +269,7 @@ export function StoreProvider({ children }) {
           // partner.solo: بدون یار ثبت‌نام می‌کند و مدیر برایش یار هم‌سطح می‌گذارد
           const solo = !!partner?.solo, n = solo ? 1 : 2
           const ids = [ME, solo ? null : partner?.id].filter(Boolean)
-          if (!cur || !partner || cur.status !== 'open' || cur.regs.length + n > cur.cap || cur.regs.some((r) => ids.includes(r.by)) || (cur.levels?.length && (!cur.levels.includes(s.user?.level) || (!solo && !cur.levels.includes(partner.level))))) { out = { error: 'closed' }; return s }
+          if (!cur || !partner || cur.status !== 'open' || cur.regs.length + n > cur.cap || cur.regs.some((r) => ids.includes(r.by)) || whyNot(cur, s.user) || (!solo && whyNot(cur, partner.guest ? partner : { ...memberById(partner.id), ...partner }))) { out = { error: 'closed' }; return s }
           const total = cur.fee * n, now = Date.now(), pair = solo ? null : 'p' + now
           const me = s.user?.name || 'کاربر اپ'
           const sale = { id: 'S-' + now, kind: 'event', item: ev.id, name: solo ? `${cur.title}، ${me.split(' ')[0]} (منتظر یار)` : `${cur.title}، تیم ${me.split(' ')[0]} و ${partner.name.split(' ')[0]}`, by: ME, price: total, method, at: now }

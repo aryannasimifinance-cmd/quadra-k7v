@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
+import { jParts } from '../jalali'
 import { useEffect, useRef, useState } from 'react'
-import { LEVELS, SIDES, fa } from '../data'
+import { LEVELS, SIDES, fa, USER_RE, todayKey } from '../data'
 import { celebrate, chime, haptic } from '../fx'
 import { useStore } from '../store'
 import { Button, Icon, LevelPill, Photo, TopBar } from '../components/ui'
@@ -10,22 +11,22 @@ const toLatin = (s) => s.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.index
 const fa0 = (s) => s.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d])
 
 export default function Gate() {
-  const { loginPlayer, hasAccount } = useStore()
+  const { loginPlayer, hasAccount, loginWithPass, loginTaken } = useStore()
   const [step, setStep] = useState('welcome') // welcome → phone → otp → name → level → done | admin
   const [mode, setMode] = useState('signup')
   const [dir, setDir] = useState(1)
-  const [form, setForm] = useState({ phone: '', name: '', level: null, side: null })
+  const [form, setForm] = useState({ phone: '', name: '', gender: null, birth: '', level: null, side: null, username: '', pass: '' })
   const set = (p) => setForm((f) => ({ ...f, ...p }))
-  const order = ['welcome', 'phone', 'otp', 'name', 'level', 'side', 'done']
+  const order = ['welcome', 'userlogin', 'phone', 'otp', 'name', 'about', 'level', 'side', 'cred', 'done']
   const go = (s) => { setDir(order.indexOf(s) >= order.indexOf(step) ? 1 : -1); setStep(s) }
-  const back = () => go(step === 'admin' || step === 'coach' ? 'welcome' : order[order.indexOf(step) - 1])
+  const back = () => go(step === 'admin' || step === 'coach' ? 'welcome' : step === 'userlogin' ? 'phone' : step === 'phone' ? 'welcome' : order[order.indexOf(step) - 1])
   const afterOtp = () => {
     // عضو قبلی فقط با شماره و کد وارد می‌شود — بدون پرسیدن نام و سطح
     if (mode === 'login' || hasAccount(form.phone)) { loginPlayer({ phone: form.phone }); return }
     go('name')
   }
   const finish = () => { celebrate(); chime('level'); haptic([20, 40, 20]); go('done') }
-  const progress = { phone: 0, otp: 1, name: 2, level: 3, side: 4 }[step]
+  const progress = { phone: 0, otp: 1, name: 2, about: 3, level: 4, side: 5, cred: 6 }[step]
 
   return (
     <div className="auth">
@@ -39,15 +40,18 @@ export default function Gate() {
           {step === 'coach' && <AdminLogin coach onBack={back} />}
           {!['welcome', 'done', 'admin', 'coach'].includes(step) && (
             <div className="auth-card">
-              <TopBar onBack={back} total={5} step={progress} title={mode === 'login' && step === 'phone' ? 'ورود' : 'عضویت در کوادرا'} transparent />
-              {step === 'phone' && <PhoneStep value={form.phone} onChange={(phone) => set({ phone })} onNext={() => go('otp')} mode={mode} />}
+              <TopBar onBack={back} total={step === 'userlogin' ? 0 : 7} step={progress} title={step === 'userlogin' || (mode === 'login' && step === 'phone') ? 'ورود' : 'عضویت در کوادرا'} transparent />
+              {step === 'phone' && <PhoneStep value={form.phone} onChange={(phone) => set({ phone })} onNext={() => go('otp')} mode={mode} onPass={() => go('userlogin')} />}
+              {step === 'userlogin' && <UserLogin onLogin={loginWithPass} onPhone={() => go('phone')} />}
               {step === 'otp' && <OtpStep phone={form.phone} onNext={afterOtp} />}
-              {step === 'name' && <NameStep form={form} set={set} onNext={() => go('level')} />}
+              {step === 'name' && <NameStep form={form} set={set} onNext={() => go('about')} />}
+              {step === 'about' && <AboutStep form={form} set={set} onNext={() => go('level')} />}
               {step === 'level' && <LevelStep value={form.level} onChange={(level) => set({ level })} onNext={() => go('side')} />}
-              {step === 'side' && <SideStep value={form.side} onChange={(side) => set({ side })} onNext={finish} />}
+              {step === 'side' && <SideStep value={form.side} onChange={(side) => set({ side })} onNext={() => go('cred')} />}
+              {step === 'cred' && <CredStep form={form} set={set} taken={(u) => loginTaken(u, form.phone)} onNext={finish} />}
             </div>
           )}
-          {step === 'done' && <Done form={form} onEnter={() => loginPlayer({ ...form, joined: Date.now() })} />}
+          {step === 'done' && <Done form={form} onEnter={() => loginPlayer({ ...form, birth: +form.birth || null, username: form.pass ? form.username : undefined, pass: form.pass || undefined, joined: Date.now() })} />}
         </motion.div>
       </AnimatePresence>
     </div>
@@ -149,7 +153,7 @@ function AdminLogin({ onBack, coach }) {
   )
 }
 
-function PhoneStep({ value, onChange, onNext, mode }) {
+function PhoneStep({ value, onChange, onNext, mode, onPass }) {
   const valid = /^09\d{9}$/.test(value)
   const pretty = value.replace(/^(\d{4})(\d{0,3})(\d{0,4}).*/, (_, a, b, c) => [a, b, c].filter(Boolean).join(' '))
   return (
@@ -165,6 +169,79 @@ function PhoneStep({ value, onChange, onNext, mode }) {
       </label>
       <Button full variant="q" disabled={!valid} onClick={onNext}>ارسال کد</Button>
       <button className="link center" onClick={() => { onChange('09120000000'); setTimeout(onNext, 150) }}>ورود سریع نمایشی</button>
+      {mode === 'login' && <button className="link center pass-link" onClick={onPass}><Icon name="lock" size={15} /> پیامک نمی‌رسد؟ ورود با نام کاربری و رمز</button>}
+    </div>
+  )
+}
+
+// ورود بدون پیامک؛ نام کاربری و رمز در ثبت‌نام یا از «پروفایل» ساخته می‌شود
+function UserLogin({ onLogin, onPhone }) {
+  const [u, setU] = useState('')
+  const [p, setP] = useState('')
+  const [err, setErr] = useState(false)
+  const [show, setShow] = useState(false)
+  const ok = u.trim().length >= 3 && p.length >= 6
+  const go = () => { if (!ok) return; const r = onLogin(u, p); if (r?.error) { setErr(true); haptic([30, 30, 30]); chime('alarm') } }
+  return (
+    <div className="step-body">
+      <h2>ورود با نام کاربری</h2>
+      <p className="muted">برای وقتی که پیامک نمی‌رسد یا شماره در دسترس نیست.</p>
+      <label className={`field ${err ? 'bad' : ''}`}><Icon name="user" /><input dir="ltr" autoFocus autoCapitalize="none" autoComplete="username" placeholder="username" value={u} onChange={(e) => { setU(e.target.value.replace(/\s/g, '').toLowerCase()); setErr(false) }} /></label>
+      <label className={`field ${err ? 'bad' : ''}`}><Icon name="lock" /><input dir="ltr" type={show ? 'text' : 'password'} autoComplete="current-password" placeholder="رمز" value={p} onChange={(e) => { setP(e.target.value); setErr(false) }} onKeyDown={(e) => e.key === 'Enter' && go()} />
+        <button type="button" className="pw-eye" onClick={() => setShow(!show)} aria-label="نمایش رمز"><Icon name="eye" size={17} /></button></label>
+      {err && <p className="login-why">نام کاربری یا رمز درست نیست.</p>}
+      <Button full variant="q" disabled={!ok} onClick={go}>ورود</Button>
+      <button className="link center" onClick={onPhone}>ورود با شماره موبایل</button>
+      <p className="demo-hint">نسخه‌ی نمایشی: <code>aryan</code> / <code>123456</code></p>
+    </div>
+  )
+}
+
+// جنسیت و سن: برای رویدادهای ویژه‌ی بانوان/آقایان و رده‌های سنی
+const J_NOW = jParts(todayKey()).y
+function AboutStep({ form, set, onNext }) {
+  const y = +toLatin(String(form.birth || ''))
+  const age = y ? J_NOW - y : null
+  const okY = y >= J_NOW - 90 && y <= J_NOW - 7
+  const ok = form.gender && okY
+  return (
+    <div className="step-body">
+      <h2>کمی درباره‌ی شما</h2>
+      <p className="muted">برای رویدادهای ویژه‌ی بانوان یا آقایان و رده‌های سنی؛ جای دیگری نمایش داده نمی‌شود.</p>
+      <div className="gender-pick">
+        {[['f', 'خانم', '👩'], ['m', 'آقا', '👨']].map(([id, n, e]) => (
+          <button key={id} type="button" className={form.gender === id ? 'on' : ''} onClick={() => { haptic(6); set({ gender: id }) }}><i>{e}</i><b>{n}</b></button>
+        ))}
+      </div>
+      <label className={`field ${form.birth && !okY ? 'bad' : ''}`}>
+        <Icon name="cal" />
+        <input inputMode="numeric" dir="ltr" placeholder={`سال تولد، مثلاً ${fa(J_NOW - 28)}`} value={fa0(String(form.birth || ''))} maxLength={4}
+          onChange={(e) => set({ birth: toLatin(e.target.value).replace(/\D/g, '').slice(0, 4) })} onKeyDown={(e) => e.key === 'Enter' && ok && onNext()} />
+        {okY && <span className="field-age">{fa(age)} ساله</span>}
+      </label>
+      {form.birth && String(form.birth).length === 4 && !okY && <p className="login-why">سال تولد شمسی را درست وارد کنید (مثلاً ۱۳۷۵).</p>}
+      <Button full variant="q" disabled={!ok} onClick={onNext}>ادامه</Button>
+    </div>
+  )
+}
+
+// نام کاربری و رمز (اختیاری): اگر روزی پیامک نرسید، با این وارد می‌شوید
+function CredStep({ form, set, taken, onNext }) {
+  const [show, setShow] = useState(false)
+  const u = form.username
+  const badU = u && !USER_RE.test(u), dup = USER_RE.test(u) && taken(u)
+  const ok = USER_RE.test(u) && !dup && form.pass.length >= 6
+  return (
+    <div className="step-body">
+      <h2>ورود بدون پیامک</h2>
+      <p className="muted">یک نام کاربری و رمز بسازید؛ اگر پیامک نرسید یا شماره عوض شد، با همین وارد می‌شوید.</p>
+      <label className={`field ${badU || dup ? 'bad' : ''}`}><Icon name="user" /><input dir="ltr" autoCapitalize="none" autoComplete="username" placeholder="username" value={u} onChange={(e) => set({ username: e.target.value.replace(/\s/g, '').toLowerCase().slice(0, 20) })} /></label>
+      {badU && <p className="login-why">فقط حروف انگلیسی کوچک، عدد، نقطه و زیرخط؛ حداقل ۳ حرف.</p>}
+      {dup && <p className="login-why">این نام کاربری گرفته شده؛ یکی دیگر انتخاب کنید.</p>}
+      <label className="field"><Icon name="lock" /><input dir="ltr" type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="رمز، حداقل ۶ کاراکتر" value={form.pass} onChange={(e) => set({ pass: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && ok && onNext()} />
+        <button type="button" className="pw-eye" onClick={() => setShow(!show)} aria-label="نمایش رمز"><Icon name="eye" size={17} /></button></label>
+      <Button full variant="q" disabled={!ok} onClick={onNext}>تموم شد!</Button>
+      <button className="link center" onClick={() => { set({ username: '', pass: '' }); onNext() }}>بعداً از پروفایل می‌سازم</button>
     </div>
   )
 }

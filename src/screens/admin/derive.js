@@ -25,17 +25,20 @@ export function who(id, user) {
 export function payments(club, user) {
   const out = []
   club.bookings.forEach((b) => {
-    if (b.type === 'block' || b.method === 'package' || b.method === 'coach-pack') return
+    if (b.type === 'block') return
+    const settled = b.settled || [], later = settled.reduce((s, x) => s + x.amt, 0)
+    // رزرو پکیجی: سهم پکیج قبلاً موقع خرید پکیج فروش خورده؛ فقط مانده‌ی نقدی (و تسویه‌هایش) این‌جا می‌آید
+    const pkg = b.method === 'package' || b.method === 'coach-pack'
+    if (pkg && b.paid - later >= b.price) return
     const st = payState(b)
     // پرداخت اول با روش خود رزرو؛ هر تسویه‌ی بعدی (پذیرش) با روش و زمان خودش جدا می‌آید
-    const settled = b.settled || [], later = settled.reduce((s, x) => s + x.amt, 0)
     const row = {
       ref: b, bid: b.id, kind: b.type === 'coach' ? 'coach' : 'court',
       title: b.type === 'coach' ? `کلاس ${coachById(b.coach)?.name}` : `${courtById(b.court).name}، ${b.type === 'open' ? 'بازی باز' : 'رزرو زمین'}`,
       sub: `${dayMonth(fromKey(b.date))}، ${range(b.start, b.dur)}`, who: who(b.by, user), status: st,
     }
     out.push({
-      ...row, id: b.id, at: fromKey(b.date).getTime() + b.start * 36e5, amount: b.price, paid: st === 'refunded' ? 0 : Math.max(0, b.paid - later),
+      ...row, id: b.id, at: fromKey(b.date).getTime() + b.start * 36e5, amount: pkg ? b.price - (b.paid - later) : b.price, paid: st === 'refunded' || pkg ? 0 : Math.max(0, b.paid - later), pkg,
       due: st === 'paid' || st === 'void' || st === 'refunded' ? 0 : b.price - b.paid, method: b.method,
     })
     if (st !== 'refunded') settled.forEach((x, i) => out.push({ ...row, id: `${b.id}~s${i}`, at: x.at, amount: x.amt, paid: x.amt, due: 0, method: x.method }))

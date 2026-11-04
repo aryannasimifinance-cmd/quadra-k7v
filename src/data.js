@@ -173,6 +173,15 @@ export const stockOf = (p) => (p?.variants || []).reduce((s, v) => s + v.stock, 
 export const variantOf = (p, size, color) => p?.variants?.find((v) => (v.size || null) === (size || null) && (v.color || null) === (color || null)) || p?.variants?.[0]
 
 // ---------- ابزار ----------
+// رمز ورود هیچ‌وقت خام ذخیره نمی‌شود (نسخه‌ی نمایشی؛ در نسخه‌ی واقعی سمت سرور با bcrypt)
+export function passHash(user, pass) {
+  let a = 0x811c9dc5, b = 0x01000193
+  const s = `quadra:${String(user).toLowerCase()}:${pass}`
+  for (let k = 0; k < 3; k++) for (let i = 0; i < s.length; i++) { a = Math.imul(a ^ s.charCodeAt(i), 16777619) >>> 0; b = Math.imul(b ^ (a & 0xff), 2246822519) >>> 0 }
+  return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0')
+}
+// نام کاربری مجاز: انگلیسی کوچک، عدد، نقطه و زیرخط، ۳ تا ۲۰ حرف
+export const USER_RE = /^[a-z0-9._]{3,20}$/
 export function hash(str) {
   let h = 2166136261
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) }
@@ -236,6 +245,8 @@ export function priceFor(date, start, dur, pricing) {
 
 // ---------- اعضا ----------
 const FIRST = ['آرین', 'نیما', 'سارا', 'مهسا', 'کیان', 'پارسا', 'الناز', 'رها', 'سینا', 'امید', 'تینا', 'بهار', 'ماهان', 'یاسمن', 'دانیال', 'نگار', 'آرمان', 'شیوا', 'پویا', 'هستی', 'رامین', 'لیلا', 'سپهر', 'مریم', 'کامیار', 'ترانه', 'بردیا', 'آیدا']
+// نام‌های زنانه برای تعیین جنسیت اعضای نمونه
+const FEMALE = new Set(['سارا', 'مهسا', 'الناز', 'رها', 'تینا', 'بهار', 'یاسمن', 'نگار', 'شیوا', 'هستی', 'لیلا', 'مریم', 'ترانه', 'آیدا'])
 const LAST = ['کریمی', 'محمدی', 'رضایی', 'نوری', 'صالحی', 'جعفری', 'فرهادی', 'شریفی', 'طاهری', 'بهرامی', 'احمدی', 'موسوی', 'کاظمی', 'یزدانی']
 // اعضای فعلی باشگاه (بقیه نمونه‌اند)
 const CLUB_NAMES = ['خشایار نظری', 'آریان نسیمی‌فر', 'یاشار امین‌ترابی', 'امیرحسین حیدری', 'عرفان دیو', 'فراز گلچین', 'اشکان دهقان', 'نعیم تهرانی', 'خالد بوکوفسکی', 'اصغر سگ‌باز', 'اون یارو که همیشه داد می‌زنه']
@@ -249,9 +260,12 @@ const BASE_MEMBERS = Array.from({ length: 56 }, (_, i) => {
   const r = (k) => hash('m' + i + k)
   const level = LEVELS[Math.min(8, Math.floor(r('lv') * r('lv2') * 9 + r('l3') * 3))].id
   const games = 3 + Math.floor(r('g') * 160)
+  const first = CLUB_NAMES[i] ? null : FIRST[Math.floor(r('f') * FIRST.length)]
   return {
     id: 'm' + i,
-    name: CLUB_NAMES[i] || FIRST[Math.floor(r('f') * FIRST.length)] + ' ' + LAST[Math.floor(r('l') * LAST.length)],
+    name: CLUB_NAMES[i] || first + ' ' + LAST[Math.floor(r('l') * LAST.length)],
+    gender: first && FEMALE.has(first) ? 'f' : 'm',
+    birth: 1345 + Math.floor(r('by') * 45), // سال تولد شمسی (۱۵ تا ۶۰ ساله)
     side: ['right', 'left', 'both'][Math.floor(r('sd') * 3)],
     phone: '0912' + String(1000000 + Math.floor(r('p') * 8999999)),
     level, games, wins: Math.floor(games * (0.3 + r('w') * 0.45)),
@@ -281,7 +295,7 @@ export const EVENT_KIND = {
 }
 export const FRIDAY = [
   { title: 'آدینه‌ی دوستانه', format: 'هر بازی با یار جدید' },
-  { title: 'میکس بانوان آدینه', format: 'ویژه‌ی بانوان، هر بازی با یار جدید' },
+  { title: 'میکس بانوان آدینه', format: 'ویژه‌ی بانوان، هر بازی با یار جدید', gender: 'f' },
   { title: 'کینگ آف کورت آدینه', format: 'برنده روی زمین می‌مونه' },
   { title: 'میکس دبل آدینه', format: 'تیم‌های مختلط، هر بازی با یار جدید' },
 ]
@@ -446,7 +460,8 @@ export function seedClub() {
     { id: 'CR-demo1', coach: 'k1', date: t1, court: 2, start: 8, dur: 1, student: null, note: 'جلسه‌ی آزمایشی شاگرد جدید', status: 'pending', at: Date.now() - 2 * 36e5 },
     { id: 'CR-demo2', coach: 'k1', date: t2, court: 3, start: 7, dur: 2, student: null, note: 'کلاس گروهی صبح', status: 'pending', at: Date.now() - 36e5 },
   ]
-  return { v: 18, pricing, off: {}, bookings, orders, sales, expenses: [], reviews, coachReqs }
+  const logins = { aryan: { phone: '09120000000', h: passHash('aryan', '123456') } }
+  return { v: 19, pricing, off: {}, bookings, orders, sales, expenses: [], reviews, coachReqs, logins }
 }
 
 // ---------- گیمیفیکیشن ----------

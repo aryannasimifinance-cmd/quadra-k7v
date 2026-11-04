@@ -1,7 +1,7 @@
 // مسابقات آدینه و تورنمنت‌ها: ثبت‌نام، تیم‌بندی متعادل، گروه‌ها، مرحله‌ی حذفی، برنده‌ها و فروش کافه‌ی همان روز
 // همه‌ی داده در club.events ذخیره می‌شود تا مدیر تعریف و ویرایش کند و اپ همان را نشان دهد.
 import { EV_IMG, VIBORA_IMG, FRIDAY, LEVELS, MEMBERS, OFFICIAL, addDays, dayKey, fromKey, hash, levelById, nextDays, todayKey } from './data'
-import { dk } from './jalali'
+import { dk, jParts } from './jalali'
 
 export const EV_STATUS = { draft: ['پیش‌نویس', 'mute'], open: ['ثبت‌نام باز', 'ok'], closed: ['ثبت‌نام بسته', 'warn'], done: ['برگزار شد', 'mute'], cancelled: ['لغو شد', 'bad'] }
 export const EV_FORMAT = { groups: 'گروهی + حذفی', knockout: 'فقط حذفی' }
@@ -24,6 +24,22 @@ export const SCORING = {
 export const scoringOf = (ev) => SCORING[ev.scoring] || SCORING.set6
 // سطح مجاز: در اپ فقط اعضای همین سطح‌ها (یا مهمان با سطح مجاز) ثبت‌نام می‌کنند
 export const levelOk = (ev, lv) => !ev.levels?.length || (!!lv && ev.levels.includes(lv))
+// جنسیت و سن: هر رویداد می‌تواند ویژه‌ی بانوان/آقایان باشد و بازه‌ی سنی داشته باشد
+export const GENDER = { f: 'خانم', m: 'آقا' }
+export const AUDIENCE = { all: 'همه', f: 'ویژه‌ی بانوان', m: 'ویژه‌ی آقایان' }
+export const ageOf = (p) => (p?.birth ? jParts(todayKey()).y - p.birth : null)
+const ageRule = (ev) => (ev.ageMin || ev.ageMax ? (ev.ageMin && ev.ageMax ? `${ev.ageMin} تا ${ev.ageMax} سال` : ev.ageMin ? `${ev.ageMin} سال به بالا` : `تا ${ev.ageMax} سال`) : '')
+// متن «چه کسانی»: سطح، جنسیت و سن در یک خط (اعداد را صفحه‌ها فارسی می‌کنند)
+export const audienceText = (ev) => [ev.gender && ev.gender !== 'all' && AUDIENCE[ev.gender], ageRule(ev)].filter(Boolean).join('، ')
+// چرا این نفر نمی‌تواند شرکت کند؟ null یعنی مجاز است. p: { level, gender, birth }
+export function whyNot(ev, p) {
+  if (!levelOk(ev, p?.level)) return 'level'
+  if (ev.gender && ev.gender !== 'all' && p?.gender !== ev.gender) return 'gender'
+  const a = ageOf(p)
+  if ((ev.ageMin || ev.ageMax) && (a == null || (ev.ageMin && a < ev.ageMin) || (ev.ageMax && a > ev.ageMax))) return 'age'
+  return null
+}
+export const whyText = (ev, why) => ({ level: `فقط سطح ${(ev.levels || []).join(' / ')}`, gender: AUDIENCE[ev.gender], age: `فقط ${ageRule(ev)}` }[why] || '')
 // آیا نتیجه‌ی یک ست درست است؟
 export function setOk(a, b, sc, stb) {
   const hi = Math.max(a, b), lo = Math.min(a, b), g = sc.games
@@ -260,8 +276,8 @@ export const clashes = (bookings, ev) => bookings.filter((b) => b.event !== ev.i
 
 // ---------- داده‌ی نمونه ----------
 const rh = (x) => hash(x + '#ev')
-function fakeRegs(id, n, fee, date) {
-  const pool = [...MEMBERS].sort((a, b) => rh(id + a.id) - rh(id + b.id)).slice(0, n)
+function fakeRegs(id, n, fee, date, ev) {
+  const pool = [...MEMBERS].filter((m) => !ev || ev.gender === 'all' || !ev.gender || m.gender === ev.gender).sort((a, b) => rh(id + a.id) - rh(id + b.id)).slice(0, n)
   const at0 = fromKey(date).getTime() - 6 * 864e5
   return pool.map((m, i) => {
     const j = i - (i % 2)
@@ -296,8 +312,8 @@ export function seedEvents() {
   for (let d = -1; d >= -50 && pastF.length < 6; d--) { const k = addDays(today, d); if (fromKey(k).getDay() === 5) pastF.push(k) }
   pastF.forEach((k, i) => {
     const f = FRIDAY[i % FRIDAY.length]
-    let ev = base({ id: 'fr-' + k, kind: 'friday', title: i === 0 ? 'آدینه‌ی کوادرا' : f.title, desc: f.format, format: 'groups', date: k, start: 9, dur: 3, levels: LEVELS.slice(2, 6).map((l) => l.id), cap: 16, fee: 750000, prize: 'راکت Volt + توپ', img: EV_IMG[1 + (i % (EV_IMG.length - 1))], status: 'done' })
-    ev.regs = fakeRegs(ev.id, 12 + 2 * Math.floor(rh(k) * 3), ev.fee, k)
+    let ev = base({ id: 'fr-' + k, kind: 'friday', title: i === 0 ? 'آدینه‌ی کوادرا' : f.title, desc: f.format, gender: i === 0 ? 'all' : f.gender || 'all', format: 'groups', date: k, start: 9, dur: 3, levels: LEVELS.slice(2, 6).map((l) => l.id), cap: 16, fee: 750000, prize: 'راکت Wilson + توپ', img: EV_IMG[1 + (i % (EV_IMG.length - 1))], status: 'done' })
+    ev.regs = fakeRegs(ev.id, 12 + 2 * Math.floor(rh(k) * 3), ev.fee, k, ev)
     out.push(runAll(makeGroups(makeTeams(ev))))
   })
   const off = (() => { for (let d = -9; d >= -20; d--) { const k = addDays(today, d); if (fromKey(k).getDay() === 4) return k } return addDays(today, -12) })()
@@ -308,8 +324,8 @@ export function seedEvents() {
   nextDays(28, 1).filter((d) => d.getDay() === 5).slice(0, 4).forEach((d, i) => {
     const k = dayKey(d), lv = Math.floor(rh('lv' + k) * 5)
     const f = i === 0 ? { ...FRIDAY[0], title: 'آدینه‌ی این هفته‌ی کوادرا' } : FRIDAY[i % FRIDAY.length]
-    const ev = base({ id: 'fr-' + k, kind: 'friday', title: f.title, desc: f.format, format: 'groups', date: k, start: 9, dur: 3, levels: LEVELS.slice(lv, lv + 3).map((l) => l.id), cap: 16, fee: 750000, prize: 'راکت Volt + توپ', img: EV_IMG[1 + (i % (EV_IMG.length - 1))], status: 'open' })
-    ev.regs = fakeRegs(ev.id, Math.floor(16 * (0.35 + rh('tk' + i) * 0.45)), ev.fee, k).map((r) => ({ ...r, at: Math.min(r.at, Date.now() - (i + 1) * 36e5) }))
+    const ev = base({ id: 'fr-' + k, kind: 'friday', title: f.title, desc: f.format, gender: f.gender || 'all', format: 'groups', date: k, start: 9, dur: 3, levels: LEVELS.slice(lv, lv + 3).map((l) => l.id), cap: 16, fee: 750000, prize: 'راکت Wilson + توپ', img: EV_IMG[1 + (i % (EV_IMG.length - 1))], status: 'open' })
+    ev.regs = fakeRegs(ev.id, Math.floor(16 * (0.35 + rh('tk' + i) * 0.45)), ev.fee, k, ev).map((r) => ({ ...r, at: Math.min(r.at, Date.now() - (i + 1) * 36e5) }))
     out.push(ev)
   })
   OFFICIAL.forEach((o, i) => {

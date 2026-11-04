@@ -5,7 +5,7 @@ import {
 } from '../../data'
 import { chime } from '../../fx'
 import { ME, payState, useStore } from '../../store'
-import { podium } from '../../events'
+import { podium, ageOf, GENDER } from '../../events'
 import { CHANNEL, TodayIn, channelOf } from './Payins'
 import { Icon, LevelPill } from '../../components/ui'
 import { Badge, Card, Empty, Field, Guide, ImageUpload, Kpi, Money, More, Pager, Search, Seg, Side, Status, Tabs, XlsxBtn, usePage, useSlice } from './kit'
@@ -188,7 +188,7 @@ function MemberFile({ m, onEdit }) {
     <div className="mf">
       <div className="mf-head">
         <span className="adm-av">{m.name[0]}</span>
-        <div className="grow"><b>{m.name}</b><small dir="ltr">{m.phone}</small><div className="row-gap"><LevelPill id={m.level} /><span className={`seg-pill s-${m.seg}`}>{SEGMENTS[m.seg]}</span>{m.member && <span className="vip">{m.member === 'black' ? 'BLACK' : 'GOLD'}</span>}{coach && <Badge tone="ok">مربی: {coach.title}</Badge>}{m.inactive && <Badge tone="bad">غیرفعال</Badge>}</div></div>
+        <div className="grow"><b>{m.name}</b><small dir="ltr">{m.phone}</small>{(m.gender || m.birth) && <small>{[m.gender && GENDER[m.gender], m.birth && `${fa(ageOf(m))} ساله`].filter(Boolean).join('، ')}</small>}<div className="row-gap"><LevelPill id={m.level} /><span className={`seg-pill s-${m.seg}`}>{SEGMENTS[m.seg]}</span>{m.member && <span className="vip">{m.member === 'black' ? 'BLACK' : 'GOLD'}</span>}{coach && <Badge tone="ok">مربی: {coach.title}</Badge>}{m.inactive && <Badge tone="bad">غیرفعال</Badge>}</div></div>
       </div>
       <div className="row-btns">
         {m.id !== ME && <button className="adm-btn ghost sm" onClick={onEdit}><Icon name="cog" size={15} />ویرایش اطلاعات</button>}
@@ -218,13 +218,13 @@ const MiniTable = ({ head, rows, empty }) => (rows.length
 
 function MemberForm({ m, onClose }) {
   const { adminMember, adminMemberEdit, toast } = useStore()
-  const [f, setF] = useState(() => (m ? { name: m.name, phone: m.phone || '09', level: m.level, side: m.side || 'both', member: m.member || '', note: m.note || '', inactive: !!m.inactive } : { name: '', phone: '09', level: 'C', side: 'both', member: '', note: '' }))
+  const [f, setF] = useState(() => (m ? { name: m.name, phone: m.phone || '09', level: m.level, side: m.side || 'both', gender: m.gender || '', birth: m.birth || '', member: m.member || '', note: m.note || '', inactive: !!m.inactive } : { name: '', phone: '09', level: 'C', side: 'both', gender: '', birth: '', member: '', note: '' }))
   const set = (x) => setF((o) => ({ ...o, ...x }))
   const phone = toPhone(f.phone)
   const dup = MEMBERS.some((x) => x.phone === phone && x.id !== m?.id)
   const ok = f.name.trim().length > 2 && /^09\d{9}$/.test(phone) && !dup
   const save = () => {
-    const p = { name: f.name.trim(), phone, level: f.level, side: f.side, member: f.member || null, note: f.note.trim(), ...(m ? { inactive: !!f.inactive } : {}) }
+    const p = { name: f.name.trim(), phone, level: f.level, side: f.side, gender: f.gender || null, birth: +f.birth || null, member: f.member || null, note: f.note.trim(), ...(m ? { inactive: !!f.inactive } : {}) }
     if (m) adminMemberEdit(m.id, p); else adminMember(p)
     chime('success'); toast({ icon: '👤', title: m ? 'اطلاعات عضو ذخیره شد' : 'عضو اضافه شد', body: p.name }); onClose()
   }
@@ -234,6 +234,10 @@ function MemberForm({ m, onClose }) {
       <Field label="موبایل" hint={dup ? 'این شماره برای عضو دیگری ثبت شده است' : 'با همین شماره در اپ وارد می‌شود'}><input dir="ltr" inputMode="numeric" value={f.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
       <Field label="سطح بازی" tip="در تیم‌بندی آدینه‌ها و پیدا کردن بازی هم‌سطح استفاده می‌شود"><select value={f.level} onChange={(e) => set({ level: e.target.value })}>{LEVELS.map((l) => <option key={l.id} value={l.id}>{l.id}، {l.title}</option>)}</select></Field>
       <Field label="سمت بازی"><Seg value={f.side} onChange={(side) => set({ side })} options={{ right: 'راست', left: 'چپ', both: 'هر دو' }} /></Field>
+      <div className="form-2">
+        <Field label="جنسیت" hint="برای رویدادهای ویژه‌ی بانوان / آقایان"><Seg value={f.gender} onChange={(gender) => set({ gender })} options={{ '': 'نامشخص', f: 'خانم', m: 'آقا' }} /></Field>
+        <Field label="سال تولد (شمسی)" hint={f.birth && ageOf({ birth: +f.birth }) != null ? `${fa(ageOf({ birth: +f.birth }))} ساله` : 'برای رده‌های سنی'}><input dir="ltr" inputMode="numeric" maxLength={4} value={f.birth} placeholder="1375" onChange={(e) => set({ birth: toPhone(e.target.value).slice(0, 4) })} /></Field>
+      </div>
       <Field label="عضویت ویژه"><Seg value={f.member} onChange={(member) => set({ member })} options={{ '': 'ندارد', gold: 'طلایی', black: 'مشکی' }} /></Field>
       <Field label="یادداشت مدیر" hint="فقط در پنل دیده می‌شود"><textarea rows={2} value={f.note} onChange={(e) => set({ note: e.target.value })} /></Field>
       {m && <Field label="وضعیت عضو" hint={f.inactive ? 'در فهرست‌های انتخاب دیده نمی‌شود؛ سابقه‌اش می‌ماند' : 'در همه‌ی فهرست‌ها قابل انتخاب است'}><Seg value={f.inactive ? 'off' : 'on'} onChange={(v) => set({ inactive: v === 'off' })} options={{ on: 'فعال', off: 'غیرفعال' }} /></Field>}

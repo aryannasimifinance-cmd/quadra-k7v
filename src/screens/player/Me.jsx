@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
+import { jParts } from '../../jalali'
 import { useState } from 'react'
-import { BADGES, COACHES, CREDITS, RANKS, XP_GUIDE, fa, levelById, productById, rankOf, sideById, toman } from '../../data'
+import { BADGES, COACHES, CREDITS, RANKS, XP_GUIDE, fa, levelById, productById, rankOf, sideById, toman, USER_RE, todayKey } from '../../data'
 import { celebrate, chime, haptic } from '../../fx'
 import { ME, myPoints, useStore } from '../../store'
 import { activeMembership, myBookings, isUpcoming } from '../../select'
@@ -10,6 +11,7 @@ import { leaderboard } from './Home'
 export default function Me({ nav }) {
   const s = useStore()
   const { user, xp, badges, wallet, club, logout, topUp, toast } = s
+  const [acc, setAcc] = useState(false)
   const upcoming = myBookings(club).filter(isUpcoming)
   const rank = rankOf(xp)
   const pts = myPoints(s)
@@ -88,6 +90,7 @@ export default function Me({ nav }) {
           {[['sparkle', 'مسیر باشگاه: رتبه‌ها و نشان‌ها', 'journey'], ['trophy', 'رنکینگ باشگاه', 'ranking'], ['ticket', 'پکیج‌ها و عضویت', 'packages'], ['coach', 'مربی‌ها و کلاس‌ها', 'coaches'], ['star', 'مسابقه‌ها و تورنمنت‌ها', 'events'], ['bell', 'اعلان‌ها', 'notifs']].map(([ic, n, pg]) => (
             <button key={pg} onClick={() => nav.open(pg)}><Icon name={ic} /><span>{n}</span><Icon name="fwd" size={16} /></button>
           ))}
+          <button onClick={() => setAcc(true)}><Icon name="lock" /><span>مشخصات و ورود با رمز</span>{!user?.username && <em className="menu-dot">تنظیم نشده</em>}<Icon name="fwd" size={16} /></button>
           <button className="danger" onClick={() => { haptic(10); logout() }}><Icon name="logout" /><span>خروج از حساب</span></button>
         </div>
         <details className="credits"><summary>منابع تصاویر</summary>{CREDITS.map((c) => <small key={c}>{c}</small>)}</details>
@@ -102,12 +105,51 @@ export default function Me({ nav }) {
           </div>
         )}
       </Sheet>
+      <Sheet open={acc} onClose={() => setAcc(false)} title="مشخصات و ورود با رمز">{acc && <Account onDone={() => setAcc(false)} />}</Sheet>
       <Sheet open={top} onClose={() => setTop(false)} title="شارژ کیف پول">
         <div className="topup">
           {[500000, 1000000, 2000000, 5000000].map((n) => <Button key={n} variant="ghost" onClick={() => doTop(n)}>{toman(n)}</Button>)}
           <p className="hint">در نسخه‌ی نمایشی، پرداخت شبیه‌سازی می‌شود.</p>
         </div>
       </Sheet>
+    </div>
+  )
+}
+
+// جنسیت و سال تولد (برای رویدادهای ویژه) و نام کاربری/رمز برای ورود بدون پیامک
+function Account({ onDone }) {
+  const { user, updateProfile, setLogin, loginTaken, toast } = useStore()
+  const J = jParts(todayKey()).y
+  const [g, setG] = useState(user?.gender || null)
+  const [b, setB] = useState(user?.birth ? String(user.birth) : '')
+  const [u, setU] = useState(user?.username || '')
+  const [p, setP] = useState('')
+  const y = +b, okY = !b || (y >= J - 90 && y <= J - 7)
+  const uChanged = u !== (user?.username || '')
+  const badU = u && !USER_RE.test(u), dup = USER_RE.test(u) && loginTaken(u, user?.phone)
+  const wantsLogin = uChanged || p
+  const okLogin = !wantsLogin || (USER_RE.test(u) && !dup && (p.length >= 6 || (!p && user?.username)))
+  const ok = okY && okLogin && (g !== (user?.gender || null) || y !== (user?.birth || 0) || wantsLogin)
+  const save = () => {
+    updateProfile({ gender: g, birth: y || null })
+    if (wantsLogin) { const r = setLogin(u, p); if (r.error) { toast({ icon: '⛔', title: r.error === 'taken' ? 'این نام کاربری گرفته شده' : 'نام کاربری یا رمز درست نیست' }); return } }
+    chime('success'); toast({ icon: '✅', title: 'ذخیره شد', body: wantsLogin ? `از این به بعد با «${u}» هم وارد می‌شوید` : 'مشخصات به‌روز شد' }); onDone()
+  }
+  return (
+    <div className="acc-form">
+      <p className="label">جنسیت</p>
+      <div className="gender-pick">{[['f', 'خانم', '👩'], ['m', 'آقا', '👨']].map(([id, n, e]) => <button key={id} type="button" className={g === id ? 'on' : ''} onClick={() => setG(id)}><i>{e}</i><b>{n}</b></button>)}</div>
+      <p className="label">سال تولد (شمسی){y && okY ? ` — ${fa(J - y)} ساله` : ''}</p>
+      <input className="acc-in" inputMode="numeric" dir="ltr" maxLength={4} placeholder="مثلاً ۱۳۷۵" value={b} onChange={(e) => setB(e.target.value.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '').slice(0, 4))} />
+      {!okY && <p className="acc-bad">سال تولد شمسی را درست وارد کنید.</p>}
+      <p className="label">ورود بدون پیامک</p>
+      <p className="muted small">اگر پیامک نرسید، در صفحه‌ی ورود «ورود با نام کاربری و رمز» را بزنید.</p>
+      <input className="acc-in" dir="ltr" autoCapitalize="none" placeholder="username" value={u} onChange={(e) => setU(e.target.value.replace(/\s/g, '').toLowerCase().slice(0, 20))} />
+      {badU && <p className="acc-bad">فقط حروف انگلیسی کوچک، عدد، نقطه و زیرخط؛ حداقل ۳ حرف.</p>}
+      {dup && <p className="acc-bad">این نام کاربری گرفته شده.</p>}
+      <input className="acc-in" dir="ltr" type="password" autoComplete="new-password" placeholder={user?.username ? 'رمز تازه (اگر می‌خواهید عوض کنید)' : 'رمز، حداقل ۶ کاراکتر'} value={p} onChange={(e) => setP(e.target.value)} />
+      {p && p.length < 6 && <p className="acc-bad">رمز حداقل ۶ کاراکتر.</p>}
+      <Button full variant="q" disabled={!ok} onClick={save}>ذخیره</Button>
     </div>
   )
 }

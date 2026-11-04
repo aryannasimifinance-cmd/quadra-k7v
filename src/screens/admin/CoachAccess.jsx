@@ -86,7 +86,7 @@ function Access({ c }) {
   const [f, setF] = useState(base)
   const set = (x) => setF((o) => ({ ...o, ...x }))
   const user = f.user.trim().toLowerCase()
-  const dup = user && (user === 'admin' || club.coaches.some((x) => x.id !== c.id && x.login?.user?.toLowerCase() === user))
+  const dup = user && (user === 'admin' || !!club.logins?.[user] || club.coaches.some((x) => x.id !== c.id && x.login?.user?.toLowerCase() === user))
   const valid = /^[a-z0-9._-]{3,}$/.test(user) && f.pass.length >= 4 && !dup
   const changed = JSON.stringify({ ...f, user }) !== JSON.stringify(base())
   const save = () => {

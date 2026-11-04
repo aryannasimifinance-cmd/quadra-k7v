@@ -69,10 +69,15 @@ export function ledger(club) {
 
   // رزرو و کلاس
   club.bookings.forEach((b) => {
-    if (b.type === 'block' || b.method === 'package' || b.method === 'coach-pack') return
+    if (b.type === 'block') return
     const S = b.date
     const settled = b.settled || []
-    const first = Math.max(0, b.paid - settled.reduce((s, x) => s + x.amt, 0))
+    // پکیج: سهم پکیج در فروش پکیج ثبت شده؛ فقط مانده‌ی نقدی این رزرو درآمد همین رزرو است
+    const pkg = b.method === 'package' || b.method === 'coach-pack'
+    const covered = pkg ? Math.max(0, b.paid - settled.reduce((s, x) => s + x.amt, 0)) : 0
+    const price = b.price - covered
+    if (pkg && price <= 0) return
+    const first = pkg ? 0 : Math.max(0, b.paid - settled.reduce((s, x) => s + x.amt, 0))
     const pays = [{ amt: first, day: dk(b.at || Date.now()), method: b.method }, ...settled.map((x) => ({ amt: x.amt, day: dk(x.at), method: x.method }))].filter((x) => x.amt > 0)
     if (b.status === 'cancelled') {
       if (b.refunded) return
@@ -90,8 +95,8 @@ export function ledger(club) {
     if (ord(S) <= T) {
       const v = day(S, 'booking')
       v.add('3301', pre, 0)
-      v.add('1201', b.price - pre, 0, b.by)
-      v.add(b.type === 'coach' ? '6102' : '6101', 0, b.price)
+      v.add('1201', price - pre, 0, b.by)
+      v.add(b.type === 'coach' ? '6102' : '6101', 0, price)
     }
   })
 

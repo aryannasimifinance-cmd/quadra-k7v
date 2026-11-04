@@ -2,7 +2,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { courtById, EVENT_KIND, EV_IMG, VIBORA_IMG, LEVELS, MEMBERS, METHOD_NAME, addDays, hoursOf, levelById, dayLabel, fa, fromKey, hourLabel, short, toman, todayKey } from '../../data'
 import {
-  EV_FORMAT, EV_STATUS, GROUP_IDS, ROUND, SCORING, addGroup, dropGroup, emptyGroups, fillGroups, scored, scoringOf, setsOf, cafeOf, clashes, entryTotal, eventAt, fillTeams, finished, groupsDone, isLive, loosePairs, withPairs, koRounds, makeGroups, makeKnockout, makeTeams, moveTeam, pairUp, plan, podium, regPower, setScore, showsResults, singles, standings, teamName, unpair, upcoming,
+  EV_FORMAT, EV_STATUS, GROUP_IDS, ROUND, SCORING, addGroup, dropGroup, emptyGroups, fillGroups, scored, scoringOf, setsOf, cafeOf, clashes, entryTotal, eventAt, fillTeams, finished, groupsDone, isLive, loosePairs, withPairs, koRounds, makeGroups, makeKnockout, makeTeams, moveTeam, pairUp, plan, podium, regPower, setScore, showsResults, singles, standings, teamName, unpair, upcoming, audienceText,
 } from '../../events'
 import { dk, jDate, jDateFa, jMonthDays, jMonthKey, jMonthLabel, jParts } from '../../jalali'
 import { downloadXlsx, table } from '../../xlsx'
@@ -105,7 +105,7 @@ function List({ tab, setTab, onOpen, onNew }) {
             <div className="evs-main">
               <span className="evs-tag">مسابقه‌ی بعدی، {EVENT_KIND[e.kind].name}</span>
               <h3>{e.title}</h3>
-              <small>{hourLabel(e.start)} تا {hourLabel(e.start + e.dur)}، {courtsText(e.courts)}، سطح {e.levels.join(' / ')}</small>
+              <small>{hourLabel(e.start)} تا {hourLabel(e.start + e.dur)}، {courtsText(e.courts)}، سطح {e.levels.join(' / ')}{audienceText(e) && `، ${audienceText(e)}`}</small>
               <div className="evs-cap"><i style={{ width: `${Math.min(100, (e.regs.length / e.cap) * 100)}%` }} /></div>
               <div className="evs-meta"><span><b>{fa(e.regs.length)}</b> از {fa(e.cap)} نفر</span><span><b>{fa(pairsOf(e))}</b> تیم دونفره</span>{wt > 0 && <span className="warn"><b>{fa(wt)}</b> نفر منتظر یار</span>}</div>
             </div>
@@ -179,7 +179,7 @@ function Detail({ ev, onBack, onEdit }) {
         <DateBox e={ev} big />
         <div className="grow">
           <div className="evh-t"><h2>{ev.title}</h2><Stage e={ev} /></div>
-          <small>{hourLabel(ev.start)} تا {hourLabel(ev.start + ev.dur)}، {courtsText(ev.courts)}، سطح {ev.levels.join(' / ')}، {toman(ev.fee)} هر نفر، {scoringOf(ev).name}</small>
+          <small>{hourLabel(ev.start)} تا {hourLabel(ev.start + ev.dur)}، {courtsText(ev.courts)}، سطح {ev.levels.join(' / ')}{audienceText(ev) && `، ${audienceText(ev)}`}، {toman(ev.fee)} هر نفر، {scoringOf(ev).name}</small>
           <div className="evh-nums">
             <span>ثبت‌نام <b>{fa(ev.regs.length)}/{fa(ev.cap)}</b></span>
             <span>ورودی‌ها <b>{short(entryTotal(ev))}</b></span>
@@ -652,7 +652,7 @@ function EventForm({ ev, onClose }) {
   const same = eventAt(club.events.filter((e) => e.id !== ev?.id), fromKey(f.date).getTime() + f.start * 36e5)
   const busy = clashes(club.bookings, { ...f, id: ev?.id }).filter((b) => !b.event)
   const custom = f.img && !EV_IMG.includes(f.img)
-  const ok = f.title.trim() && f.date && f.cap > 1 && f.courts.length && f.levels.length
+  const ok = f.title.trim() && f.date && f.cap > 1 && f.courts.length && f.levels.length && !(f.ageMin && f.ageMax && f.ageMax < f.ageMin)
   const save = () => {
     const s = adminEventSave({ ...f, title: f.title.trim(), id: ev?.id })
     chime('success'); toast({ icon: '🏆', title: ev ? 'مسابقه به‌روز شد' : 'مسابقه ساخته شد', body: f.status === 'draft' ? 'پیش‌نویس؛ هنوز در اپ دیده نمی‌شود' : `در اپ دیده می‌شود؛ ${courtsText(f.courts)} در تقویم رزرو شد` })
@@ -690,6 +690,11 @@ function EventForm({ ev, onClose }) {
 
       <Sec n={3} title="چه کسانی؟">
         <Field label="سطح‌های مجاز" hint="در اپ فقط اعضای همین سطح‌ها ثبت‌نام می‌کنند؛ یارِ مهمان هم باید یکی از همین سطح‌ها باشد"><div className="pick-chips sm">{LEVELS.map((l) => <button key={l.id} type="button" className={f.levels.includes(l.id) ? 'on' : ''} onClick={() => tog('levels', l.id)}>{l.id}</button>)}</div></Field>
+        <div className="form-3 ef-3">
+          <Field label="جنسیت" hint={f.gender === 'f' ? 'فقط بانوان (و یار مهمان خانم)' : f.gender === 'm' ? 'فقط آقایان' : 'برای همه'}><Seg value={f.gender || 'all'} onChange={(gender) => set({ gender })} options={{ all: 'همه', f: 'بانوان', m: 'آقایان' }} /></Field>
+          <Field label="حداقل سن" hint="خالی یعنی بدون محدودیت"><input inputMode="numeric" value={f.ageMin || ''} placeholder="مثلاً ۱۸" onChange={(e) => set({ ageMin: +e.target.value.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '').slice(0, 2) || null })} /></Field>
+          <Field label="حداکثر سن" hint={f.ageMin && f.ageMax && f.ageMax < f.ageMin ? 'از حداقل کمتر است' : 'مثلاً ۱۷ برای نوجوانان'}><input inputMode="numeric" value={f.ageMax || ''} placeholder="مثلاً ۴۰" onChange={(e) => set({ ageMax: +e.target.value.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '').slice(0, 2) || null })} /></Field>
+        </div>
         <div className="form-3 ef-3">
           <Field label="ظرفیت" hint={`${fa(Math.floor(f.cap / 2))} تیم دونفره`}><div className="num-step wide"><button type="button" onClick={() => set({ cap: Math.max(4, f.cap - 2) })}><Icon name="minus" size={14} /></button><b>{fa(f.cap)} نفر</b><button type="button" onClick={() => set({ cap: Math.min(64, f.cap + 2) })}><Icon name="plus" size={14} /></button></div></Field>
           <Field label="ورودی هر نفر" hint={`هر تیم ${toman(f.fee * 2)}`}><Money value={f.fee} onChange={(fee) => set({ fee })} /></Field>

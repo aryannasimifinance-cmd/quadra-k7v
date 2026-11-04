@@ -2,12 +2,12 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import {
   BADGES, COACHES, COACH_PACKS, COURTS, DAYPARTS, DURATIONS, EVENT_KIND, LEVELS, MEMBERS, SERIES, coachById, coachPackPrice, coachPacks, courtById, dayKey, dayLabel, dayMonth, dayNum,
-  SIDES, limitsOf, coachesRanked, fa, fromKey, hourLabel, isPeak, isWeekend, levelById, levelIndex, nearLevels, nextDays, priceFor, range, short, sideById, toman, weekday,
+  SIDES, limitsOf, coachesRanked, fa, fromKey, hourLabel, isPeak, isWeekend, levelById, levelIndex, nearLevels, nextDays, priceFor, range, short, sideById, toman, weekday, memberById,
 } from '../../data'
 import { celebrate, chime, haptic } from '../../fx'
 import { playerRun, ME, freeStarts, isFree, memberOff, useStore } from '../../store'
 import { openGames, planSeries } from '../../select'
-import { appEvents, levelOk } from '../../events'
+import { appEvents, levelOk, whyNot, whyText, audienceText, AUDIENCE, GENDER } from '../../events'
 import { Avatar, Button, Chips, CountUp, CtaBar, Icon, LevelPill, Photo, Sheet, TopBar, rise, stagger } from '../../components/ui'
 import { Loading } from '../../components/Logo'
 
@@ -412,7 +412,7 @@ function StepPeople({ w, set, onNext }) {
   )
 }
 
-function AddPlayer({ onAdd, exclude, noPhone, levels }) {
+function AddPlayer({ onAdd, exclude, noPhone, levels, allow }) {
   const { toast } = useStore()
   const [tab, setTab] = useState('member')
   const [q, setQ] = useState('')
@@ -420,7 +420,7 @@ function AddPlayer({ onAdd, exclude, noPhone, levels }) {
   const [gName, setGName] = useState('')
   const [invite, setInvite] = useState(false)
   const [phone, setPhone] = useState('')
-  const list = MEMBERS.filter((m) => !m.inactive && !exclude.includes(m.id) && (!levels || levels.includes(m.level)) && (!q || m.name.includes(q.trim())) && (side === 'all' || m.side === side || m.side === 'both')).slice(0, 40)
+  const list = MEMBERS.filter((m) => !m.inactive && !exclude.includes(m.id) && (!levels || levels.includes(m.level)) && (!allow || allow(m)) && (!q || m.name.includes(q.trim())) && (side === 'all' || m.side === side || m.side === 'both')).slice(0, 40)
   const digits = phone.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '')
   const okPhone = /^09\d{9}$/.test(digits)
   const faD = (x) => x.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d])
@@ -451,10 +451,10 @@ function AddPlayer({ onAdd, exclude, noPhone, levels }) {
           <label className="search"><Icon name="search" size={18} /><input placeholder="جستجوی اعضا" value={q} onChange={(e) => setQ(e.target.value)} /></label>
           <Chips id="sd" small value={side} onChange={setSide} options={[{ id: 'all', name: 'همه' }, { id: 'right', name: 'سمت راست' }, { id: 'left', name: 'سمت چپ' }]} />
           <div className="member-list">
-            {levels && <p className="muted small">فقط اعضای سطح {levels.join(' / ')} نشان داده می‌شوند.</p>}
+            {levels && <p className="muted small">فقط اعضایی که شرایط این رویداد را دارند نشان داده می‌شوند (سطح {levels.join(' / ')}).</p>}
             {list.length === 0 && <p className="muted">عضوی با این مشخصات پیدا نشد.</p>}
             {list.map((m) => (
-              <button key={m.id} className="member-row" onClick={() => onAdd({ id: m.id, name: m.name, level: m.level })}>
+              <button key={m.id} className="member-row" onClick={() => onAdd({ id: m.id, name: m.name, level: m.level, gender: m.gender, birth: m.birth })}>
                 <Avatar name={m.name} size={36} />
                 <div className="grow"><b>{m.name}</b><small>{sideById(m.side).name}</small></div>
                 <LevelPill id={m.level} />
@@ -573,7 +573,7 @@ function StepEvent({ w, set, onNext }) {
           <h2 className="wz-h">{k.name}</h2>
           <p className="muted ev-kind-sub">{k.sub}</p>
           {all.filter((e) => e.kind === kind).map((e) => {
-            const has = e.regs.some((r) => r.by === ME), full = e.taken + 2 > e.cap, lvl = !levelOk(e, user.level)
+            const has = e.regs.some((r) => r.by === ME), full = e.taken + 2 > e.cap, why = whyNot(e, user), lvl = !!why
             return (
               <motion.button key={e.id} className={`ev-card ${w.eventId === e.id ? 'on' : ''}`} disabled={has || full || lvl || e.status !== 'open'} whileTap={{ scale: 0.98 }} onClick={() => { haptic(8); set({ eventId: e.id }) }}>
                 <Photo src={e.img} />
@@ -581,10 +581,10 @@ function StepEvent({ w, set, onNext }) {
                 <div className="ev-txt">
                   <span className={`pill-q ${kind === 'official' ? 'gold' : ''}`}>{dayLabel(e.date)} {dayMonth(fromKey(e.date))}، {hourLabel(e.start)}</span>
                   <b>{e.title}</b>
-                  <small>{e.format}، سطح {e.levels.join(' / ')}</small>
+                  <small>{e.format}، سطح {e.levels.join(' / ')}{audienceText(e) && `، ${audienceText(e)}`}</small>
                   <div className="ev-cap"><div className="bar"><i style={{ width: `${(e.taken / e.cap) * 100}%` }} /></div><span>{fa(e.taken)}/{fa(e.cap)}</span></div>
                 </div>
-                <em>{has ? 'ثبت‌نام شدید' : full ? 'تکمیل' : e.status !== 'open' ? 'بسته' : lvl ? 'سطح شما نیست' : short(e.fee)}</em>
+                <em>{has ? 'ثبت‌نام شدید' : full ? 'تکمیل' : e.status !== 'open' ? 'بسته' : why === 'level' ? 'سطح شما نیست' : why ? whyText(e, why) : short(e.fee)}</em>
               </motion.button>
             )
           })}
@@ -605,7 +605,7 @@ function StepPartner({ w, set, onNext }) {
   return (
     <div className="partner-pick">
       <div className="pp-ev"><b>{ev.title}</b><small>{dayLabel(ev.date)}، {hourLabel(ev.start)}، سطح {ev.levels.join(' / ')}</small></div>
-      <p className="hint">🎾 مسابقه دونفره است و فقط سطح {ev.levels.join(' / ')} می‌توانند شرکت کنند (یار مهمان هم باید همین سطح‌ها باشد). یارتان را انتخاب کنید؛ ورودی هر دو نفر ({toman(ev.fee)} × ۲) را شما یک‌جا پرداخت می‌کنید و از اول هم‌تیمی هستید.</p>
+      <p className="hint">🎾 مسابقه دونفره است و فقط سطح {ev.levels.join(' / ')}{audienceText(ev) && ` (${audienceText(ev)})`} می‌توانند شرکت کنند (یار مهمان هم باید همین شرایط را داشته باشد). یارتان را انتخاب کنید؛ ورودی هر دو نفر ({toman(ev.fee)} × ۲) را شما یک‌جا پرداخت می‌کنید و از اول هم‌تیمی هستید.</p>
       {p ? (
         <motion.div className="pp-chosen" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <Avatar name={p.name} size={44} />
@@ -619,14 +619,20 @@ function StepPartner({ w, set, onNext }) {
           <Button small variant="ghost" onClick={() => set({ partner: null })}>تغییر</Button>
         </motion.div>
       ) : (<>
-        <AddPlayer exclude={exclude} noPhone={false} levels={ev.levels?.length ? ev.levels : null} onAdd={(x) => { haptic(8); set({ partner: x }) }} />
+        <AddPlayer exclude={exclude} noPhone={false} levels={ev.levels?.length ? ev.levels : null} allow={(m) => !whyNot(ev, m)} onAdd={(x) => { haptic(8); set({ partner: x }) }} />
         <button className="pp-solo" onClick={() => { haptic(6); set({ partner: { solo: true } }) }}>یار ندارم؛ منتظر یار می‌مانم <small>باشگاه یار هم‌سطح می‌گذارد</small></button>
       </>)}
       {p?.guest && (<>
         <p className="label">سطح تقریبی یارتان</p>
         <Chips id="pp-lv" small scroll value={p.level || ''} onChange={(level) => set({ partner: { ...p, level } })} options={LEVELS.filter((l) => levelOk(ev, l.id)).map((l) => ({ id: l.id, name: l.id }))} />
+        {ev.gender && ev.gender !== 'all' && <p className="hint">این رویداد {AUDIENCE[ev.gender]} است؛ یار مهمان هم باید {GENDER[ev.gender]} باشد.</p>}
+        {ev.gender && ev.gender !== 'all' && <Chips id="pp-g" small value={p.gender || ''} onChange={(gender) => set({ partner: { ...p, gender } })} options={[{ id: ev.gender, name: `یارم ${GENDER[ev.gender]} است` }]} />}
+        {(ev.ageMin || ev.ageMax) && (<>
+          <p className="label">سال تولد یارتان</p>
+          <input className="pp-birth" inputMode="numeric" dir="ltr" maxLength={4} placeholder="مثلاً ۱۳۷۵" value={p.birth ? fa(p.birth).replace(/٬/g, '') : ''} onChange={(e) => set({ partner: { ...p, birth: +e.target.value.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '').slice(0, 4) || null } })} />
+        </>)}
       </>)}
-      <CtaBar><Button full variant="dark" disabled={!w.partner || (p && !levelOk(ev, p.level))} onClick={onNext}>ادامه و پرداخت</Button></CtaBar>
+      <CtaBar><Button full variant="dark" disabled={!w.partner || (p && !!whyNot(ev, p.guest ? p : { ...memberById(p.id), ...p }))} onClick={onNext}>ادامه و پرداخت</Button></CtaBar>
     </div>
   )
 }
