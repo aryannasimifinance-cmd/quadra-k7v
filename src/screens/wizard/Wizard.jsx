@@ -7,7 +7,7 @@ import {
 import { celebrate, chime, haptic } from '../../fx'
 import { ME, freeStarts, isFree, memberOff, useStore } from '../../store'
 import { openGames, planSeries } from '../../select'
-import { appEvents } from '../../events'
+import { appEvents, levelOk } from '../../events'
 import { Avatar, Button, Chips, CountUp, CtaBar, Icon, LevelPill, Photo, Sheet, TopBar, rise, stagger } from '../../components/ui'
 import { Loading } from '../../components/Logo'
 
@@ -408,7 +408,7 @@ function StepPeople({ w, set, onNext }) {
   )
 }
 
-function AddPlayer({ onAdd, exclude, noPhone }) {
+function AddPlayer({ onAdd, exclude, noPhone, levels }) {
   const { toast } = useStore()
   const [tab, setTab] = useState('member')
   const [q, setQ] = useState('')
@@ -416,7 +416,7 @@ function AddPlayer({ onAdd, exclude, noPhone }) {
   const [gName, setGName] = useState('')
   const [invite, setInvite] = useState(false)
   const [phone, setPhone] = useState('')
-  const list = MEMBERS.filter((m) => !m.inactive && !exclude.includes(m.id) && (!q || m.name.includes(q.trim())) && (side === 'all' || m.side === side || m.side === 'both')).slice(0, 40)
+  const list = MEMBERS.filter((m) => !m.inactive && !exclude.includes(m.id) && (!levels || levels.includes(m.level)) && (!q || m.name.includes(q.trim())) && (side === 'all' || m.side === side || m.side === 'both')).slice(0, 40)
   const digits = phone.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '')
   const okPhone = /^09\d{9}$/.test(digits)
   const faD = (x) => x.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d])
@@ -447,6 +447,7 @@ function AddPlayer({ onAdd, exclude, noPhone }) {
           <label className="search"><Icon name="search" size={18} /><input placeholder="جستجوی اعضا" value={q} onChange={(e) => setQ(e.target.value)} /></label>
           <Chips id="sd" small value={side} onChange={setSide} options={[{ id: 'all', name: 'همه' }, { id: 'right', name: 'سمت راست' }, { id: 'left', name: 'سمت چپ' }]} />
           <div className="member-list">
+            {levels && <p className="muted small">فقط اعضای سطح {levels.join(' / ')} نشان داده می‌شوند.</p>}
             {list.length === 0 && <p className="muted">عضوی با این مشخصات پیدا نشد.</p>}
             {list.map((m) => (
               <button key={m.id} className="member-row" onClick={() => onAdd({ id: m.id, name: m.name, level: m.level })}>
@@ -559,7 +560,7 @@ function StepCoach({ w, set, onNext }) {
 }
 
 function StepEvent({ w, set, onNext }) {
-  const { club } = useStore()
+  const { club, user } = useStore()
   const all = appEvents(club)
   return (
     <div className="event-pick">
@@ -568,9 +569,9 @@ function StepEvent({ w, set, onNext }) {
           <h2 className="wz-h">{k.name}</h2>
           <p className="muted ev-kind-sub">{k.sub}</p>
           {all.filter((e) => e.kind === kind).map((e) => {
-            const has = e.regs.some((r) => r.by === ME), full = e.taken + 2 > e.cap
+            const has = e.regs.some((r) => r.by === ME), full = e.taken + 2 > e.cap, lvl = !levelOk(e, user.level)
             return (
-              <motion.button key={e.id} className={`ev-card ${w.eventId === e.id ? 'on' : ''}`} disabled={has || full || e.status !== 'open'} whileTap={{ scale: 0.98 }} onClick={() => { haptic(8); set({ eventId: e.id }) }}>
+              <motion.button key={e.id} className={`ev-card ${w.eventId === e.id ? 'on' : ''}`} disabled={has || full || lvl || e.status !== 'open'} whileTap={{ scale: 0.98 }} onClick={() => { haptic(8); set({ eventId: e.id }) }}>
                 <Photo src={e.img} />
                 <div className="ev-shade" />
                 <div className="ev-txt">
@@ -579,7 +580,7 @@ function StepEvent({ w, set, onNext }) {
                   <small>{e.format}، سطح {e.levels.join(' / ')}</small>
                   <div className="ev-cap"><div className="bar"><i style={{ width: `${(e.taken / e.cap) * 100}%` }} /></div><span>{fa(e.taken)}/{fa(e.cap)}</span></div>
                 </div>
-                <em>{has ? 'ثبت‌نام شدید' : full ? 'تکمیل' : e.status !== 'open' ? 'بسته' : short(e.fee)}</em>
+                <em>{has ? 'ثبت‌نام شدید' : full ? 'تکمیل' : e.status !== 'open' ? 'بسته' : lvl ? 'سطح شما نیست' : short(e.fee)}</em>
               </motion.button>
             )
           })}
@@ -600,7 +601,7 @@ function StepPartner({ w, set, onNext }) {
   return (
     <div className="partner-pick">
       <div className="pp-ev"><b>{ev.title}</b><small>{dayLabel(ev.date)}، {hourLabel(ev.start)}، سطح {ev.levels.join(' / ')}</small></div>
-      <p className="hint">🎾 مسابقه دونفره است. یارتان را انتخاب کنید؛ ورودی هر دو نفر ({toman(ev.fee)} × ۲) را شما یک‌جا پرداخت می‌کنید و از اول هم‌تیمی هستید.</p>
+      <p className="hint">🎾 مسابقه دونفره است و فقط سطح {ev.levels.join(' / ')} می‌توانند شرکت کنند (یار مهمان هم باید همین سطح‌ها باشد). یارتان را انتخاب کنید؛ ورودی هر دو نفر ({toman(ev.fee)} × ۲) را شما یک‌جا پرداخت می‌کنید و از اول هم‌تیمی هستید.</p>
       {p ? (
         <motion.div className="pp-chosen" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <Avatar name={p.name} size={44} />
@@ -614,14 +615,14 @@ function StepPartner({ w, set, onNext }) {
           <Button small variant="ghost" onClick={() => set({ partner: null })}>تغییر</Button>
         </motion.div>
       ) : (<>
-        <AddPlayer exclude={exclude} noPhone={false} onAdd={(x) => { haptic(8); set({ partner: x }) }} />
+        <AddPlayer exclude={exclude} noPhone={false} levels={ev.levels?.length ? ev.levels : null} onAdd={(x) => { haptic(8); set({ partner: x }) }} />
         <button className="pp-solo" onClick={() => { haptic(6); set({ partner: { solo: true } }) }}>یار ندارم؛ منتظر یار می‌مانم <small>باشگاه یار هم‌سطح می‌گذارد</small></button>
       </>)}
       {p?.guest && (<>
         <p className="label">سطح تقریبی یارتان</p>
-        <Chips id="pp-lv" small scroll value={p.level || ''} onChange={(level) => set({ partner: { ...p, level } })} options={LEVELS.map((l) => ({ id: l.id, name: l.id }))} />
+        <Chips id="pp-lv" small scroll value={p.level || ''} onChange={(level) => set({ partner: { ...p, level } })} options={LEVELS.filter((l) => levelOk(ev, l.id)).map((l) => ({ id: l.id, name: l.id }))} />
       </>)}
-      <CtaBar><Button full variant="dark" disabled={!w.partner || (p?.guest && !p.level)} onClick={onNext}>ادامه و پرداخت</Button></CtaBar>
+      <CtaBar><Button full variant="dark" disabled={!w.partner || (p && !levelOk(ev, p.level))} onClick={onNext}>ادامه و پرداخت</Button></CtaBar>
     </div>
   )
 }

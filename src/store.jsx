@@ -221,7 +221,7 @@ export function StoreProvider({ children }) {
           // partner.solo: بدون یار ثبت‌نام می‌کند و مدیر برایش یار هم‌سطح می‌گذارد
           const solo = !!partner?.solo, n = solo ? 1 : 2
           const ids = [ME, solo ? null : partner?.id].filter(Boolean)
-          if (!cur || !partner || cur.status !== 'open' || cur.regs.length + n > cur.cap || cur.regs.some((r) => ids.includes(r.by))) { out = { error: 'closed' }; return s }
+          if (!cur || !partner || cur.status !== 'open' || cur.regs.length + n > cur.cap || cur.regs.some((r) => ids.includes(r.by)) || (cur.levels?.length && (!cur.levels.includes(s.user?.level) || (!solo && !cur.levels.includes(partner.level))))) { out = { error: 'closed' }; return s }
           const total = cur.fee * n, now = Date.now(), pair = solo ? null : 'p' + now
           const me = s.user?.name || 'کاربر اپ'
           const sale = { id: 'S-' + now, kind: 'event', item: ev.id, name: solo ? `${cur.title}، ${me.split(' ')[0]} (منتظر یار)` : `${cur.title}، تیم ${me.split(' ')[0]} و ${partner.name.split(' ')[0]}`, by: ME, price: total, method, at: now }

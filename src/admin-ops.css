@@ -1374,3 +1374,59 @@ input.pb-cell.at:focus { background: var(--card); box-shadow: 0 0 0 1.5px var(--
 .ef-foot .adm-btn.primary { background: var(--q); color: var(--ink); height: 42px; padding: 0 20px; }
 .ef-foot .adm-btn.primary:disabled { opacity: .4; }
 @media (max-width: 560px) { .ef-kinds, .ef-courts { grid-template-columns: 1fr 1fr; } }
+
+/* رزروها: نوار روزها در بازه‌ی ۷ روزه + تاریخ روی هر زمین */
+.bk-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.bk-strip button { display: grid; justify-items: center; gap: 1px; padding: 8px 4px; border-radius: 14px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); line-height: 1.35; transition: box-shadow .12s, background .12s; }
+.bk-strip button:hover { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.bk-strip small { font-size: 11px; color: var(--muted); }
+.bk-strip b { font-size: 14px; white-space: nowrap; }
+.bk-strip em { font-style: normal; font-size: 10.5px; padding: 0 7px; border-radius: 99px; background: var(--paper2); color: var(--ink2); }
+.bk-strip em.none { background: transparent; color: var(--muted); }
+.bk-strip button.today small { color: var(--q-ink); font-weight: 700; }
+.bk-strip button.on { background: var(--ink); color: #fff; box-shadow: none; }
+.bk-strip button.on small { color: rgba(255,255,255,.65); }
+.bk-strip button.on em { background: var(--q); color: #141413; }
+.bk-strip button.on em.none { background: rgba(255,255,255,.12); color: rgba(255,255,255,.7); }
+@media (max-width: 760px) { .bk-strip { display: flex; overflow-x: auto; } .bk-strip button { flex: 0 0 92px; } }
+.bk-day > header h3 svg { align-self: center; }
+.bk-day > header h3 small { padding: 1px 8px; border-radius: 99px; background: var(--q); color: #141413 !important; font-weight: 700; font-size: 11px; }
+.bk-lane-d { display: flex; align-items: center; gap: 5px; margin-top: -2px; font-size: 11.5px; font-weight: 700; color: var(--ink2); }
+.bk-lane-d svg { color: var(--muted); }
+.bk-lanes.one .bk-lane-d { grid-column: 1 / -1; }
+
+/* فرم آدینه: تقویم شمسی */
+.ef-when { display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 680px) { .ef-when { grid-template-columns: 1fr; } }
+.ef-when-side { display: grid; gap: 12px; }
+.ef-picked { display: grid; gap: 1px; padding: 12px 14px; border-radius: 14px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); }
+.ef-picked small { font-size: 11px; color: var(--muted); }
+.ef-picked b { font-size: 18px; }
+.ef-picked span { font-size: 13px; color: var(--ink2); }
+.jcal { padding: 10px; border-radius: 16px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); }
+.jcal header { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 8px; }
+.jcal header b { font-size: 15px; }
+.jcal header button { width: 30px; height: 30px; border-radius: 9px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); display: grid; place-items: center; }
+.jcal header button:disabled { opacity: .35; }
+.jcal-g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.jcal-g > small { text-align: center; font-size: 11px; color: var(--muted); padding-bottom: 4px; }
+.jcal-g > small.fri { color: #B43A2E; font-weight: 700; }
+.jcal-g button { position: relative; aspect-ratio: 1; border-radius: 10px; font-size: 13px; font-weight: 600; background: var(--card); transition: box-shadow .1s; }
+.jcal-g button:hover:not(:disabled) { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.jcal-g button:disabled { background: transparent; color: var(--muted); opacity: .45; }
+.jcal-g button.fri { color: #B43A2E; }
+.jcal-g button.today { box-shadow: inset 0 0 0 1.5px var(--q-ink); }
+.jcal-g button.has::after { content: ''; position: absolute; bottom: 4px; left: 50%; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: #A8650F; }
+.jcal-g button.on { background: var(--ink); color: #fff; box-shadow: none; }
+.jcal-g button.on.has::after { background: var(--q); }
+
+/* ظرفیت، ورودی و جایزه در یک ردیف هم‌قد */
+.ef-3 { align-items: start; }
+.ef-3 > .fld { grid-template-rows: auto 42px auto; align-content: start; }
+.ef-3 > .fld input { height: 42px; min-height: 42px; }
+.ef-3 .num-step.wide { height: 42px; box-sizing: border-box; }
+
+/* آدینه‌ها: عنوان ماه بزرگ‌تر */
+.ev-month { font-size: 17px; color: var(--ink); font-weight: 800; margin: 16px 4px 2px; }
+.ev-dbox small:last-child { font-size: 13px; font-weight: 700; color: var(--ink2); }
+.ev-dbox.big small:last-child { font-size: 14.5px; color: #fff; }

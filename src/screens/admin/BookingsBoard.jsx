@@ -1,7 +1,7 @@
 // رزروها: «برنامه» (هر رزرو یک ردیف) و «زمین‌ها» (هر زمین یک ستون، با ساعت‌های آزاد بین رزروها)
 import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
-import { COURTS, MEMBERS, TYPE_NAME, hoursOf, addDays, coachById, courtById, dayLabel, dayMonth, fa, fromKey, hourLabel, range, short, toman, todayKey } from '../../data'
+import { COURTS, MEMBERS, TYPE_NAME, hoursOf, addDays, coachById, courtById, dayMonth, fa, fromKey, hourLabel, range, short, toman, todayKey, weekday } from '../../data'
 import { payState, useStore } from '../../store'
 import { Icon } from '../../components/ui'
 import { jDate } from '../../jalali'
@@ -33,13 +33,17 @@ export function Bookings({ ctx }) {
   const [src, setSrc] = useState('all')
   const [q, setQ] = useState('')
   const [more, setMore] = useState(false)
+  const [pick, setPick] = useState(null)
   const t = todayKey()
   const days = useMemo(() => {
     if (rng === 'today') return [t]
     if (rng === 'tomorrow') return [addDays(t, 1)]
     if (rng === 'next') return Array.from({ length: 7 }, (_, i) => addDays(t, i))
-    return Array.from({ length: 7 }, (_, i) => addDays(t, -1 - i))
+    return Array.from({ length: 7 }, (_, i) => addDays(t, i - 7))
   }, [rng, t])
+  // در بازه‌ی ۷ روزه هر بار فقط یک روز نشان داده می‌شود تا زمین‌های روزهای مختلف قاطی نشوند
+  const day = days.length > 1 ? (days.includes(pick) ? pick : rng === 'past' ? days[days.length - 1] : days[0]) : days[0]
+  const pickRange = (k) => { setRng(k); setPick(null) }
   const list = useMemo(() => club.bookings.filter((b) => {
     if (!days.includes(b.date)) return false
     const st = payState(b)
@@ -62,7 +66,7 @@ export function Bookings({ ctx }) {
     <div className="stack">
       <div className="bk-filters">
         <div className="bk-row">
-          <div className="bk-range">{RANGES.map(([k, n, tip]) => <button key={k} className={rng === k ? 'on' : ''} onClick={() => setRng(k)} data-tip={tip}>{rng === k && <motion.i layoutId="bk-rng" className="bk-rng-bg" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}<span>{n}</span></button>)}</div>
+          <div className="bk-range">{RANGES.map(([k, n, tip]) => <button key={k} className={rng === k ? 'on' : ''} onClick={() => pickRange(k)} data-tip={tip}>{rng === k && <motion.i layoutId="bk-rng" className="bk-rng-bg" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}<span>{n}</span></button>)}</div>
           <select className="bk-court-sel" value={court} onChange={(e) => setCourt(e.target.value)} data-tip="فقط رزروهای یک زمین">{[['all', 'همه‌ی زمین‌ها'], ...COURTS.map((c) => [String(c.id), c.name])].map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>
           <div className="bk-q"><Search value={q} onChange={setQ} ph="جستجوی نام یا موبایل اعضا" /></div>
           <button className={`adm-btn ghost sm bk-more ${more || extra ? 'on' : ''}`} onClick={() => setMore(!more)} data-tip="فیلتر بر اساس نوع رزرو، پرداخت و منبع">
@@ -93,13 +97,26 @@ export function Bookings({ ctx }) {
       </div>
 
 
-      {days.map((k) => {
+      {days.length > 1 && (
+        <div className="bk-strip" role="tablist" aria-label="روز">
+          {days.map((k) => {
+            const n = list.filter((b) => b.date === k && b.status !== 'cancelled').length
+            return (
+              <button key={k} role="tab" aria-selected={day === k} className={`${day === k ? 'on' : ''} ${k === t ? 'today' : ''}`} onClick={() => setPick(k)}>
+                <small>{k === t ? 'امروز' : weekday(fromKey(k))}</small><b>{dayMonth(fromKey(k))}</b><em className={n ? '' : 'none'}>{n ? `${fa(n)} رزرو` : 'بدون رزرو'}</em>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {[day].map((k) => {
         const dayList = list.filter((b) => b.date === k)
-        if (!dayList.length && days.length > 2) return null
+        const dateTxt = `${k === t ? 'امروز، ' : ''}${weekday(fromKey(k))} ${dayMonth(fromKey(k))}`
         return (
           <section key={k} className="bk-day">
             <header>
-              <h3>{dayLabel(k)}<small>{dayMonth(fromKey(k))}</small></h3>
+              <h3><Icon name="cal" size={17} />{weekday(fromKey(k))} {dayMonth(fromKey(k))}{k === t && <small>امروز</small>}</h3>
               <span>{fa(dayList.length)} رزرو، {toman(dayList.filter((b) => b.status !== 'cancelled').reduce((s, b) => s + b.price, 0))}</span>
               <button className="adm-btn ghost sm" onClick={() => ctx.open({ kind: 'new', date: k })} data-tip="رزرو دستی برای این روز"><Icon name="plus" size={14} />رزرو</button>
             </header>
@@ -110,6 +127,7 @@ export function Bookings({ ctx }) {
                 return (
                   <div key={c.id} className="bk-lane">
                     <div className="bk-lane-h"><b>{c.name}</b><small>{club.off[c.id] ? 'غیرفعال' : c.kind}</small><em>{fa(lane.filter((b) => b.status !== 'cancelled').length)} رزرو</em></div>
+                    <div className="bk-lane-d"><Icon name="cal" size={12} />{dateTxt}</div>
                     {items.map((x) => (x.b
                       ? <Ticket key={x.b.id} b={x.b} today={k === t} onClick={() => ctx.open({ kind: 'booking', id: x.b.id })} />
                       : <button key={'g' + x.at} className="bk-gap" onClick={() => ctx.open({ kind: 'new', date: k, court: c.id, start: x.gap[0] })} data-tip="رزرو دستی در این ساعت">
@@ -122,7 +140,7 @@ export function Bookings({ ctx }) {
           </section>
         )
       })}
-      {!list.length && days.length > 2 && <Empty>با این فیلترها رزروی نیست. {active > 0 && <button className="link" onClick={reset}>پاک کردن فیلترها</button>}</Empty>}
+      {!list.length && active > 0 && <Empty>با این فیلترها رزروی نیست. <button className="link" onClick={reset}>پاک کردن فیلترها</button></Empty>}
     </div>
   )
 }

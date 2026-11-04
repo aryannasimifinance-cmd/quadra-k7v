@@ -7,7 +7,7 @@ import { activeMembership, quests } from '../../select'
 import { Avatar, Button, Chips, Icon, LevelPill, Photo, Sheet, Stars, TopBar, rise, stagger } from '../../components/ui'
 import { leaderboard } from './Home'
 import { Loading } from '../../components/Logo'
-import { EV_FORMAT, appEvents, champOn, finished, isLive, showsResults } from '../../events'
+import { EV_FORMAT, appEvents, champOn, finished, isLive, levelOk, showsResults } from '../../events'
 import { Bracket, Groups, Podium, Teams, champion } from '../../components/Tournament'
 
 // برگه‌ی امتیاز ناشناس
@@ -227,11 +227,13 @@ export function Events({ nav, onBack, kind: initial = 'friday' }) {
 
 // جزئیات یک مسابقه در اپ: شرکت‌کننده‌ها، تیم‌ها، گروه‌ها، جدول حذفی و برنده‌ها
 function EventInfo({ ev, onJoin }) {
+  const { user } = useStore()
+  const lvl = !levelOk(ev, user?.level)
   const mine = ev.regs.some((r) => r.by === ME)
   const show = showsResults(ev)
   const tabs = [['people', `شرکت‌کننده‌ها ${fa(ev.regs.length)}`], show && ev.teams.length && ['teams', 'تیم‌ها'], show && ev.groups.length && ['groups', 'گروه‌ها'], show && ev.matches.some((m) => m.stage === 'ko') && ['ko', 'حذفی']].filter(Boolean)
   const [tab, setTab] = useState(() => (!showsResults(ev) ? 'people' : ev.matches.some((m) => m.stage === 'ko') ? 'ko' : ev.groups.length ? 'groups' : ev.teams.length ? 'teams' : 'people'))
-  const can = ev.status === 'open' && !mine && ev.regs.length + 2 <= ev.cap
+  const can = ev.status === 'open' && !mine && !lvl && ev.regs.length + 2 <= ev.cap
   return (
     <div className="ev-info">
       <div className="ev-meta">
@@ -252,7 +254,7 @@ function EventInfo({ ev, onJoin }) {
       {tab === 'teams' && <Teams ev={ev} />}
       {tab === 'groups' && <Groups ev={ev} />}
       {tab === 'ko' && <Bracket ev={ev} />}
-      {isLive(ev) && <div className="ev-cta"><Button full variant="q" disabled={!can} onClick={onJoin}>{mine ? '✓ ثبت‌نام کرده‌اید' : ev.status !== 'open' ? 'ثبت‌نام بسته شد' : ev.regs.length + 2 > ev.cap ? 'ظرفیت تکمیل است' : `ثبت‌نام تیم دونفره، ${toman(ev.fee * 2)}`}</Button></div>}
+      {isLive(ev) && <div className="ev-cta"><Button full variant="q" disabled={!can} onClick={onJoin}>{mine ? '✓ ثبت‌نام کرده‌اید' : ev.status !== 'open' ? 'ثبت‌نام بسته شد' : ev.regs.length + 2 > ev.cap ? 'ظرفیت تکمیل است' : lvl ? `فقط سطح ${ev.levels.join(' / ')}؛ سطح شما ${user?.level}` : `ثبت‌نام تیم دونفره، ${toman(ev.fee * 2)}`}</Button></div>}
     </div>
   )
 }
