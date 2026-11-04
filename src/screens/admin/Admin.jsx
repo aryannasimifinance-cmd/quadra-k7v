@@ -6,7 +6,7 @@ import {
 } from '../../data'
 import { chime } from '../../fx'
 import { isFree, payState, useStore } from '../../store'
-import { balanceOf, dailyPL, ledger, segments } from '../../accounting'
+import { dailyPL, ledger, segments } from '../../accounting'
 import { period } from '../../jalali'
 import { contractAlert } from '../../hr'
 import { Icon, LevelPill } from '../../components/ui'
@@ -140,7 +140,6 @@ function Overview({ ctx }) {
   const segMonth = segments(V, period('month', today))
   const week = dailyPL(V, { from: addDays(today, -7), to: addDays(today, -1) })
   const avg7 = [...week.values()].reduce((s, d) => s + d.rev, 0) / 7
-  const cash = ['1101', '1102', '1103'].reduce((s, c) => s + balanceOf(V, c), 0)
   const todays = club.bookings.filter((b) => b.date === today && b.status === 'ok' && b.type !== 'block')
   const occ = occupancy(club, today)
   const shopOpen = club.orders.filter((o) => o.status !== 'delivered')
@@ -174,7 +173,7 @@ function Overview({ ctx }) {
         <Kpi secret="value" icon="cash" label="درآمد امروز" value={mil(segDay.R)} delta={avg7 ? ((segDay.R - avg7) / avg7) * 100 : null} sub="زمین، کلاس، فروشگاه، کافه و…" tip="مقایسه با میانگین ۷ روز گذشته؛ کلیک برای حسابداری" onClick={() => ctx.go('accounting')} />
         <Kpi icon="court" label="پر بودن زمین‌ها امروز" value={`${fa(Math.round(occ * 100))}٪`} sub={`${fa(todays.length)} رزرو`} tip="درصد ساعت‌های رزروشده‌ی ۴ زمین از ۷ صبح تا ۱۲ شب" onClick={() => ctx.go('calendar')} />
         <Kpi icon="bag" label="سفارش‌های باز" tone={shopOpen.length + cafeOpen.length ? 'warn' : ''} value={fa(shopOpen.length + cafeOpen.length)} sub={`کافه ${fa(cafeOpen.length)}، فروشگاه ${fa(shopOpen.length)}`} tip="سفارش‌هایی که هنوز به مشتری تحویل نشده‌اند" onClick={() => ctx.go(cafeOpen.length ? 'cafe' : 'shop')} />
-        <Kpi secret icon="chart" label="سود این ماه" tone={segMonth.net < 0 ? 'warn' : 'good'} value={mil(segMonth.net)} sub={`نقد و بانک ${short(cash)}`} tip="درآمد ماه شمسی جاری منهای همه‌ی هزینه‌ها" onClick={() => ctx.go('accounting')} />
+        <Kpi secret icon="chart" label="سود این ماه" tone={segMonth.net < 0 ? 'warn' : 'good'} value={mil(segMonth.net)} tip="درآمد ماه شمسی جاری منهای همه‌ی هزینه‌ها" onClick={() => ctx.go('accounting')} />
       </div>
 
       <TodayIn compact />

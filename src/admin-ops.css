@@ -1469,3 +1469,19 @@ input.pb-cell.at:focus { background: var(--card); box-shadow: 0 0 0 1.5px var(--
 .lim-row label { display: grid; gap: 5px; }
 .lim-row label > small { font-size: 12px; color: var(--muted); }
 .lim-row .num-step b { font-size: 13px; min-width: 60px; }
+
+/* ویرایش نام و عکس زمین */
+.court-edit { display: grid; gap: 12px; padding: 12px; border-radius: 14px; background: var(--paper); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.court-edit .fld { display: grid; gap: 6px; }
+.court-edit .fld > span { font-size: 12px; font-weight: 700; color: var(--muted); }
+.court-edit input { height: 40px; }
+.ce-pics { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; }
+.ce-pics button { aspect-ratio: 4 / 3; border-radius: 10px; background-size: cover; background-position: center; box-shadow: inset 0 0 0 1px var(--line); opacity: .8; transition: opacity .12s, box-shadow .12s; }
+.ce-pics button:hover { opacity: 1; }
+.ce-pics button.on { opacity: 1; box-shadow: 0 0 0 2.5px var(--ink); }
+.court-edit .row-btns { display: flex; gap: 8px; align-items: center; }
+.court-edit .row-btns .grow { flex: 1; }
+
+/* تقویم آدینه: عدد دقیقاً وسط خانه */
+.jcal-g button { display: grid; place-items: center; padding: 0; line-height: 1; }
+.jcal-g > i { aspect-ratio: 1; }

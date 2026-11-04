@@ -16,6 +16,15 @@ export const COURTS = [
   { id: 4, name: 'زمین ۴', kind: 'روباز', indoor: false, img: img('court-outdoor') },
 ]
 export const courtById = (id) => COURTS.find((c) => c.id === id)
+const COURT_BASE = COURTS.map((c) => ({ ...c }))
+export const COURT_IMGS = ['court-pano', 'court-indoor', 'court-blue', 'court-outdoor', 'court-aerial', 'welcome-courts', 'welcome-night', 'tiles'].map(img)
+let liveCourtEdits
+// تغییرات مدیر روی همان آرایه اعمال می‌شود تا نام و عکس تازه در کل اپ دیده شود
+export function setCourts(edits) {
+  if (edits === liveCourtEdits) return
+  liveCourtEdits = edits
+  COURTS.forEach((c, i) => Object.assign(c, COURT_BASE[i], edits?.[c.id] || {}))
+}
 
 // سقف رزرو پشت‌سرهم: مربی ۵ ساعت، بازیکن‌ها ۳ ساعت (مدیر در تنظیمات عوض می‌کند)
 export const limitsOf = (club) => ({ coachRun: 5, playerRun: 3, ...(club?.limits || {}) })
@@ -125,26 +134,27 @@ export const CATEGORIES = [
 const S = ['S', 'M', 'L', 'XL']
 const SHOE = ['۳۹', '۴۰', '۴۱', '۴۲', '۴۳', '۴۴', '۴۵']
 export const BASE_PRODUCTS = [
-  { id: 'r1', cat: 'racket', brand: 'Volt', name: 'راکت Volt Carbon 18K', price: 14900000, was: 16900000, img: img('racket-orange'), rating: 4.9, reviews: 64, tag: 'پرفروش', stock: 6, gender: 'unisex', level: 'پیشرفته', desc: 'قاب کربن ۱۸K با تعادل بالا برای ضربه‌های قدرتی؛ مناسب اسمش و ویبورا.', specs: [['وزن', '۳۶۵ گرم'], ['شکل', 'الماسی'], ['هسته', 'EVA سخت'], ['تعادل', 'بالا']] },
-  { id: 'r2', cat: 'racket', brand: 'Nordic', name: 'راکت Nordic Control', price: 9800000, img: img('racket-ball'), rating: 4.7, reviews: 41, stock: 9, gender: 'unisex', level: 'متوسط', desc: 'سر گرد و نقطه‌ی شیرین بزرگ؛ کنترل و دقت برای بازیکن‌های متوسط.', specs: [['وزن', '۳۵۵ گرم'], ['شکل', 'گرد'], ['هسته', 'EVA نرم'], ['تعادل', 'پایین']] },
-  { id: 'r3', cat: 'racket', brand: 'Atlas', name: 'راکت Atlas Hybrid', price: 7400000, was: 8200000, img: img('rackets'), rating: 4.6, reviews: 28, tag: 'تخفیف', stock: 4, gender: 'unisex', level: 'مبتدی', desc: 'سبک و بخشنده؛ بهترین شروع برای سال اول پدل.', specs: [['وزن', '۳۴۵ گرم'], ['شکل', 'قطره‌ای'], ['هسته', 'فوم'], ['تعادل', 'متوسط']] },
-  { id: 'r4', cat: 'racket', brand: 'Volt', name: 'راکت Volt Shadow', price: 12600000, img: img('hit'), rating: 4.8, reviews: 19, tag: 'جدید', stock: 3, gender: 'unisex', level: 'پیشرفته', desc: 'نسخه‌ی مشکی محدود؛ سطح زبر سه‌بعدی برای اسپین بیشتر.', specs: [['وزن', '۳۶۰ گرم'], ['شکل', 'قطره‌ای'], ['هسته', 'EVA'], ['سطح', 'زبر 3D']] },
-  { id: 'r5', cat: 'racket', brand: 'Atlas', name: 'راکت Atlas Red Pro', price: 8900000, img: img('racket-red'), rating: 4.5, reviews: 22, stock: 7, gender: 'unisex', level: 'متوسط', desc: 'تعادل همه‌کاره بین قدرت و کنترل.', specs: [['وزن', '۳۵۸ گرم'], ['شکل', 'قطره‌ای'], ['هسته', 'EVA'], ['تعادل', 'متوسط']] },
-  { id: 's1', cat: 'shoes', brand: 'Wilson', name: 'کفش Wilson Rush Pro', price: 8600000, img: img('shoe-wilson'), rating: 4.8, reviews: 37, tag: 'پرفروش', stock: 12, gender: 'unisex', sizes: SHOE, desc: 'زیره‌ی هرینگ‌بون برای چمن مصنوعی و شن؛ ثبات در حرکات جانبی.', specs: [['زیره', 'هرینگ‌بون'], ['کاربرد', 'چمن / شن'], ['وزن', '۳۶۰ گرم']] },
-  { id: 's2', cat: 'shoes', brand: 'Asics', name: 'کفش Asics Gel-Court', price: 7900000, was: 8900000, img: img('shoe-asics'), rating: 4.7, reviews: 52, tag: 'تخفیف', stock: 8, gender: 'women', sizes: SHOE.slice(0, 5), desc: 'ژل ضربه‌گیر پاشنه و رویه‌ی تنفسی؛ سبک برای بازی‌های طولانی.', specs: [['زیره', 'Omni'], ['ضربه‌گیر', 'GEL'], ['وزن', '۳۱۰ گرم']] },
-  { id: 's3', cat: 'shoes', brand: 'Atlas', name: 'کفش Atlas Clay Grip', price: 6400000, img: img('shoe-black'), rating: 4.5, reviews: 18, stock: 5, gender: 'men', sizes: SHOE.slice(2), desc: 'چسبندگی بالا روی کورت شنی؛ پنجه‌ی تقویت‌شده.', specs: [['زیره', 'Clay'], ['کاربرد', 'شن'], ['وزن', '۳۸۰ گرم']] },
+  { id: 'r1', cat: 'racket', brand: 'Wilson', name: 'راکت Wilson Bela Pro', price: 14900000, was: 16900000, img: img('shop-wilson-racket'), rating: 4.9, reviews: 64, tag: 'پرفروش', stock: 6, gender: 'unisex', level: 'پیشرفته', desc: 'راکت امضای فرناندو بلاستگین؛ قاب کربن و تعادل بالا برای ضربه‌های قدرتی، اسمش و ویبورا.', specs: [['وزن', '۳۶۵ گرم'], ['شکل', 'الماسی'], ['هسته', 'EVA سخت'], ['تعادل', 'بالا']] },
+  { id: 'r2', cat: 'racket', brand: 'Nox', name: 'راکت Nox ML10 Pro Cup', price: 9800000, img: img('shop-nox-racket'), rating: 4.7, reviews: 41, stock: 9, gender: 'unisex', level: 'متوسط', desc: 'سر گرد و نقطه‌ی شیرین بزرگ؛ کنترل و دقت، محبوب‌ترین راکت Nox.', specs: [['وزن', '۳۵۵ گرم'], ['شکل', 'گرد'], ['هسته', 'EVA نرم'], ['تعادل', 'پایین']] },
+  { id: 'r3', cat: 'racket', brand: 'Adidas', name: 'راکت Adidas Match', price: 7400000, was: 8200000, img: img('shop-adidas-racket'), rating: 4.6, reviews: 28, tag: 'تخفیف', stock: 4, gender: 'unisex', level: 'مبتدی', desc: 'سبک و بخشنده؛ بهترین شروع برای سال اول پدل.', specs: [['وزن', '۳۴۵ گرم'], ['شکل', 'قطره‌ای'], ['هسته', 'فوم'], ['تعادل', 'متوسط']] },
+  { id: 'r4', cat: 'racket', brand: 'Nox', name: 'راکت Nox SET', price: 12600000, img: img('shop-nox-racket-white'), rating: 4.8, reviews: 19, tag: 'جدید', stock: 3, gender: 'unisex', level: 'پیشرفته', desc: 'نسخه‌ی سفید و طلایی؛ سطح زبر برای اسپین بیشتر.', specs: [['وزن', '۳۶۰ گرم'], ['شکل', 'قطره‌ای'], ['هسته', 'EVA'], ['سطح', 'زبر 3D']] },
+  { id: 'r5', cat: 'racket', brand: 'Head', name: 'راکت Head Delta Pro', price: 8900000, img: img('racket-orange'), rating: 4.5, reviews: 22, stock: 7, gender: 'unisex', level: 'متوسط', desc: 'تعادل همه‌کاره بین قدرت و کنترل؛ انتخاب حرفه‌ای‌های Head.', specs: [['وزن', '۳۵۸ گرم'], ['شکل', 'قطره‌ای'], ['هسته', 'EVA'], ['تعادل', 'متوسط']] },
+  { id: 's1', cat: 'shoes', brand: 'Wilson', name: 'کفش Wilson Rush Pro', price: 8600000, img: img('shop-wilson-shoes'), rating: 4.8, reviews: 37, tag: 'پرفروش', stock: 12, gender: 'unisex', sizes: SHOE, desc: 'زیره‌ی هرینگ‌بون برای چمن مصنوعی و شن؛ ثبات در حرکات جانبی.', specs: [['زیره', 'هرینگ‌بون'], ['کاربرد', 'چمن / شن'], ['وزن', '۳۶۰ گرم']] },
+  { id: 's2', cat: 'shoes', brand: 'Asics', name: 'کفش Asics Gel-Court Bella', price: 7900000, was: 8900000, img: img('shop-asics-shoes'), rating: 4.7, reviews: 52, tag: 'تخفیف', stock: 8, gender: 'women', sizes: SHOE.slice(0, 5), desc: 'ژل ضربه‌گیر پاشنه و رویه‌ی تنفسی؛ سبک برای بازی‌های طولانی.', specs: [['زیره', 'Omni'], ['ضربه‌گیر', 'GEL'], ['وزن', '۳۱۰ گرم']] },
+  { id: 's3', cat: 'shoes', brand: 'Bullpadel', name: 'کفش Bullpadel Vertex Grip', price: 6400000, img: img('shoe-black'), rating: 4.5, reviews: 18, stock: 5, gender: 'men', sizes: SHOE.slice(2), desc: 'چسبندگی بالا روی کورت شنی؛ پنجه‌ی تقویت‌شده.', specs: [['زیره', 'Clay'], ['کاربرد', 'شن'], ['وزن', '۳۸۰ گرم']] },
   { id: 'a1', cat: 'apparel', brand: 'Quadra', name: 'تی‌شرت کوادرا Club', price: 1900000, art: { type: 'tee', color: '#141413' }, colors: [{ n: 'مشکی', c: '#141413' }, { n: 'سفید', c: '#F4F2EC' }, { n: 'فیروزه‌ای', c: '#19C9C1' }], rating: 4.9, reviews: 88, tag: 'جدید', stock: 40, gender: 'unisex', sizes: S, desc: 'پارچه‌ی دری‌فیت سبک با لوگوی کوادرا؛ لباس رسمی باشگاه.', specs: [['جنس', 'پلی‌استر دری‌فیت'], ['فرم', 'Regular']] },
   { id: 'a2', cat: 'apparel', brand: 'Quadra', name: 'پولو کوادرا Pro', price: 2400000, art: { type: 'polo', color: '#F4F2EC' }, colors: [{ n: 'سفید', c: '#F4F2EC' }, { n: 'مشکی', c: '#141413' }], rating: 4.7, reviews: 31, stock: 22, gender: 'men', sizes: S, desc: 'یقه‌دار، خنک و رسمی برای تورنمنت‌ها.', specs: [['جنس', 'پنبه + الاستان'], ['فرم', 'Slim']] },
   { id: 'a3', cat: 'apparel', brand: 'Quadra', name: 'شلوارک کوادرا Court', price: 1600000, art: { type: 'shorts', color: '#24344F' }, colors: [{ n: 'سرمه‌ای', c: '#24344F' }, { n: 'مشکی', c: '#141413' }], rating: 4.6, reviews: 26, stock: 18, gender: 'men', sizes: S, desc: 'جیب توپ کناری و کش راحت.', specs: [['جنس', 'پلی‌استر'], ['جیب', 'دو جیب توپ']] },
   { id: 'a4', cat: 'apparel', brand: 'Quadra', name: 'دامن‌شلوارک کوادرا', price: 1750000, art: { type: 'skirt', color: '#19C9C1' }, colors: [{ n: 'فیروزه‌ای', c: '#19C9C1' }, { n: 'سفید', c: '#F4F2EC' }, { n: 'مشکی', c: '#141413' }], rating: 4.8, reviews: 34, stock: 14, gender: 'women', sizes: S.slice(0, 3), desc: 'شلوارک داخلی با جیب توپ؛ حرکت آزاد.', specs: [['جنس', 'پلی‌استر + اسپندکس']] },
   { id: 'a5', cat: 'apparel', brand: 'Quadra', name: 'هودی کوادرا Night', price: 3200000, was: 3600000, art: { type: 'hoodie', color: '#141413' }, colors: [{ n: 'مشکی', c: '#141413' }, { n: 'طوسی', c: '#9A988F' }], rating: 4.9, reviews: 47, tag: 'تخفیف', stock: 9, gender: 'unisex', sizes: S, desc: 'هودی گرم برای بعد از بازی‌های شبانه‌ی زمین ۴.', specs: [['جنس', 'پنبه ۸۰٪'], ['فرم', 'Oversize']] },
   { id: 'a6', cat: 'apparel', brand: 'Quadra', name: 'کلاه کوادرا Cap', price: 900000, art: { type: 'cap', color: '#F4F2EC' }, colors: [{ n: 'سفید', c: '#F4F2EC' }, { n: 'مشکی', c: '#141413' }, { n: 'فیروزه‌ای', c: '#19C9C1' }], rating: 4.6, reviews: 52, stock: 30, gender: 'unisex', desc: 'نقاب سبک و تنفسی، بند قابل تنظیم.', specs: [['جنس', 'پلی‌استر سوراخ‌دار']] },
-  { id: 'b1', cat: 'balls', brand: 'Volt', name: 'توپ پدل Volt Pro — قوطی ۳تایی', price: 650000, img: img('ball-tubes'), rating: 4.8, reviews: 120, tag: 'پرفروش', stock: 80, gender: 'unisex', desc: 'توپ رسمی تورنمنت‌های کوادرا؛ فشار پایدار.', specs: [['تعداد', '۳ عدد'], ['فشار', 'استاندارد']] },
-  { id: 'b2', cat: 'balls', brand: 'Nordic', name: 'توپ Nordic Speed', price: 520000, img: img('ball-one'), rating: 4.5, reviews: 44, stock: 50, gender: 'unisex', desc: 'سرعت بیشتر برای زمین‌های سرپوشیده.', specs: [['تعداد', '۳ عدد'], ['کاربرد', 'سرپوشیده']] },
-  { id: 'b3', cat: 'balls', brand: 'Volt', name: 'کارتن توپ Volt — ۲۴ قوطی', price: 13900000, was: 15600000, img: img('ball-close'), rating: 4.9, reviews: 12, tag: 'تخفیف', stock: 6, gender: 'unisex', desc: 'برای تیم‌ها و مربی‌ها؛ ۷۲ توپ.', specs: [['تعداد', '۷۲ عدد']] },
+  { id: 'b1', cat: 'balls', brand: 'Babolat', name: 'توپ Babolat Padel+ — قوطی ۳تایی', price: 650000, img: img('shop-babolat-balls'), rating: 4.8, reviews: 120, tag: 'پرفروش', stock: 80, gender: 'unisex', desc: 'توپ رسمی تورنمنت‌های کوادرا؛ فشار پایدار و دوام بالا.', specs: [['تعداد', '۳ عدد'], ['فشار', 'استاندارد']] },
+  { id: 'b2', cat: 'balls', brand: 'Head', name: 'توپ Head Padel Pro', price: 520000, img: img('shop-head-balls'), rating: 4.5, reviews: 44, stock: 50, gender: 'unisex', desc: 'سرعت بیشتر برای زمین‌های سرپوشیده.', specs: [['تعداد', '۳ عدد'], ['کاربرد', 'سرپوشیده']] },
+  { id: 'b3', cat: 'balls', brand: 'Wilson', name: 'کارتن توپ Wilson — ۲۴ قوطی', price: 13900000, was: 15600000, img: img('shop-wilson-ball'), rating: 4.9, reviews: 12, tag: 'تخفیف', stock: 6, gender: 'unisex', desc: 'برای تیم‌ها و مربی‌ها؛ ۷۲ توپ.', specs: [['تعداد', '۷۲ عدد']] },
   { id: 'g1', cat: 'bags', brand: 'Quadra', name: 'ساک راکت کوادرا Tour', price: 4200000, art: { type: 'bag', color: '#141413' }, colors: [{ n: 'مشکی', c: '#141413' }, { n: 'فیروزه‌ای', c: '#19C9C1' }], rating: 4.8, reviews: 29, tag: 'جدید', stock: 7, gender: 'unisex', desc: 'جای ۳ راکت، جیب حرارتی و جای کفش جدا.', specs: [['ظرفیت', '۳ راکت'], ['جیب کفش', 'دارد']] },
   { id: 'g2', cat: 'bags', brand: 'Quadra', name: 'کوله کوادرا Daily', price: 2600000, art: { type: 'backpack', color: '#9A988F' }, colors: [{ n: 'طوسی', c: '#9A988F' }, { n: 'مشکی', c: '#141413' }], rating: 4.6, reviews: 15, stock: 11, gender: 'unisex', desc: 'کوله‌ی روزمره با جای یک راکت.', specs: [['ظرفیت', '۲۵ لیتر']] },
-  { id: 'x1', cat: 'acc', brand: 'Volt', name: 'اورگریپ Volt — بسته ۳تایی', price: 380000, art: { type: 'grip', color: '#19C9C1' }, colors: [{ n: 'فیروزه‌ای', c: '#19C9C1' }, { n: 'سفید', c: '#F4F2EC' }, { n: 'مشکی', c: '#141413' }], rating: 4.7, reviews: 96, stock: 60, gender: 'unisex', desc: 'جذب عرق و چسبندگی بالا.', specs: [['تعداد', '۳ عدد']] },
+  { id: 'g3', cat: 'bags', brand: 'Wilson', name: 'ساک Wilson Super Tour', price: 5600000, img: img('shop-wilson-bag'), rating: 4.8, reviews: 21, tag: 'جدید', stock: 5, gender: 'unisex', desc: 'ساک دو جیب بزرگ برای ۶ راکت، جیب حرارتی و جای کفش جدا.', specs: [['ظرفیت', '۶ راکت'], ['جیب کفش', 'دارد']] },
+  { id: 'x1', cat: 'acc', brand: 'Head', name: 'اورگریپ Head Prime — بسته ۳تایی', price: 380000, art: { type: 'grip', color: '#19C9C1' }, colors: [{ n: 'فیروزه‌ای', c: '#19C9C1' }, { n: 'سفید', c: '#F4F2EC' }, { n: 'مشکی', c: '#141413' }], rating: 4.7, reviews: 96, stock: 60, gender: 'unisex', desc: 'جذب عرق و چسبندگی بالا.', specs: [['تعداد', '۳ عدد']] },
   { id: 'x2', cat: 'acc', brand: 'Quadra', name: 'مچ‌بند کوادرا — جفت', price: 290000, art: { type: 'band', color: '#141413' }, colors: [{ n: 'مشکی', c: '#141413' }, { n: 'فیروزه‌ای', c: '#19C9C1' }], rating: 4.5, reviews: 40, stock: 45, gender: 'unisex', desc: 'حوله‌ای نرم با لوگوی بافته‌شده.', specs: [['تعداد', '۲ عدد']] },
   { id: 'x3', cat: 'acc', brand: 'Quadra', name: 'قمقمه‌ی حرارتی کوادرا', price: 850000, art: { type: 'bottle', color: '#19C9C1' }, colors: [{ n: 'فیروزه‌ای', c: '#19C9C1' }, { n: 'مشکی', c: '#141413' }, { n: 'سفید', c: '#F4F2EC' }], rating: 4.9, reviews: 58, tag: 'پرفروش', stock: 25, gender: 'unisex', desc: '۷۵۰ میلی‌لیتر؛ ۱۲ ساعت سرد.', specs: [['حجم', '۷۵۰ml'], ['جنس', 'استیل']] },
   { id: 'x4', cat: 'acc', brand: 'Quadra', name: 'حوله‌ی ورزشی کوادرا', price: 690000, art: { type: 'towel', color: '#F4F2EC' }, colors: [{ n: 'سفید', c: '#F4F2EC' }, { n: 'مشکی', c: '#141413' }], rating: 4.6, reviews: 21, stock: 2, gender: 'unisex', desc: 'میکروفایبر، سریع‌خشک.', specs: [['ابعاد', '۴۰×۸۰']] },
@@ -313,7 +323,7 @@ export function events() {
     return {
       id: 'fr-' + dayKey(d), kind: 'friday', title: f.title, format: f.format, date: dayKey(d), start: 9, dur: 3,
       levels: LEVELS.slice(lv, lv + 3).map((l) => l.id), cap: 16, taken: Math.floor(16 * (0.4 + hash('tk' + i) * 0.5)),
-      fee: 750000, prize: 'راکت Volt + توپ', img: EV_IMG[1 + (i % (EV_IMG.length - 1))],
+      fee: 750000, prize: 'راکت Wilson + توپ', img: EV_IMG[1 + (i % (EV_IMG.length - 1))],
     }
   })
   const official = OFFICIAL.map((o, i) => {
@@ -436,7 +446,7 @@ export function seedClub() {
     { id: 'CR-demo1', coach: 'k1', date: t1, court: 2, start: 8, dur: 1, student: null, note: 'جلسه‌ی آزمایشی شاگرد جدید', status: 'pending', at: Date.now() - 2 * 36e5 },
     { id: 'CR-demo2', coach: 'k1', date: t2, court: 3, start: 7, dur: 2, student: null, note: 'کلاس گروهی صبح', status: 'pending', at: Date.now() - 36e5 },
   ]
-  return { v: 17, pricing, off: {}, bookings, orders, sales, expenses: [], reviews, coachReqs }
+  return { v: 18, pricing, off: {}, bookings, orders, sales, expenses: [], reviews, coachReqs }
 }
 
 // ---------- گیمیفیکیشن ----------
@@ -477,6 +487,13 @@ export const BADGES = [
 ]
 
 export const CREDITS = [
+  'Jjanhone — Wilson padel rackets and Wilson Rush Pro shoes (CC BY-SA 4.0, Wikimedia Commons)',
+  'Jennifer Nel — Nox rackets and Babolat Padel+ balls (CC BY-SA 4.0, Wikimedia Commons)',
+  'consiliumonline — Adidas padel racket (CC BY 2.0, Flickr)',
+  'R. Henrik Nilsson — Head Tour balls (CC BY 4.0, Wikimedia Commons)',
+  'Muhammad Taslim Razin — Wilson ball (CC BY-SA 2.0, Wikimedia Commons)',
+  'Warinhari — Asics Gel Court Bella shoes (CC BY-SA 4.0, Wikimedia Commons)',
+  'Valenzuela400 — Wilson racket bag (CC BY-SA 4.0, Wikimedia Commons)',
   'Karl Schlich / TC Rheinbach e.V. — Vibora event group photo, Wikimedia Commons (copyrighted free use)',
   'Gianluca Guidi — aerial view of padel court, welcome video (Pexels License)',
   'Vincenzo Morelli — padel rackets on court (Unsplash License)',

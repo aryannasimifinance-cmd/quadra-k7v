@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
-  COACHES, COACH_PACKS, COURTS, LEVELS, MEMBERS, METHOD_NAME, PACKAGES, TYPE_NAME, coachById, coachPackPrice, courtById, dayLabel, dayMonth, fa, fromKey,
+  COACHES, COACH_PACKS, COURTS, COURT_IMGS, LEVELS, MEMBERS, METHOD_NAME, PACKAGES, TYPE_NAME, coachById, coachPackPrice, courtById, dayLabel, dayMonth, fa, fromKey,
   hourLabel, hoursOf, levelById, memberById, priceFor, productById, range, short, toman, todayKey,
 } from '../../data'
 import { chime } from '../../fx'
@@ -11,7 +11,7 @@ import { Icon, LevelPill } from '../../components/ui'
 import { Badge, Card, Empty, Field, Guide, ImageUpload, Kpi, Money, More, Pager, Search, Seg, Side, Status, Tabs, XlsxBtn, usePage, useSlice } from './kit'
 import { HBars } from './Charts'
 import { SEGMENTS, SPANS, coachFile, coachStats, memberStats, payments, who } from './derive'
-import { dk, jDate, jDateFa } from '../../jalali'
+import { dk, inPeriod, jDate, jDateFa, jMonthKey, jMonthLabel, period } from '../../jalali'
 import { downloadXlsx, table } from '../../xlsx'
 
 const fmt = new Intl.DateTimeFormat('fa-IR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -36,6 +36,9 @@ export function Payments({ ctx }) {
   const since = now - { today: 0, week: 7, month: 30 }[when] * 864e5
   const hist = pays.filter((p) => p.paid > 0 && p.at <= now && (when === 'today' ? isToday(p.at) : p.at >= since) && (kind === 'all' || p.kind === kind) && (ch === 'all' || channelOf(p.method) === ch) && (!q || (p.who + p.title + p.sub).includes(q)))
   const [rows, more] = usePage(hist, 30)
+  const month = period('month', todayKey())
+  const appMonth = pays.filter((p) => p.paid > 0 && p.at <= now && channelOf(p.method) === 'app' && inPeriod(dk(p.at), month))
+  const appCourt = appMonth.filter((p) => p.kind === 'court')
   const settle = (p, m) => { adminSettle(p.id, m); chime('success'); toast({ icon: '✅', title: `${toman(p.due)} دریافت شد`, body: `${p.who}، ${METHOD_NAME[m]}` }) }
   const exp = () => downloadXlsx('quadra-payments', [{ name: 'دریافت‌ها', rows: table(`دریافت‌های باشگاه کوادرا — ${WHEN[when]}`, ['تاریخ', 'ساعت', 'شرح', 'جزئیات', 'مشتری', 'روش', 'مبلغ'],
     hist.map((p) => { const d = new Date(p.at); return [jDate(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`), d.toTimeString().slice(0, 5), p.title, p.sub, p.who, METHOD_NAME[p.method] || '', p.paid] }), ['جمع', '', '', '', '', '', hist.reduce((s, p) => s + p.paid, 0)]) }])
@@ -54,7 +57,9 @@ export function Payments({ ctx }) {
   return (
     <div className="stack">
       <TodayIn />
-      <div className="kpis two-k">
+      <div className="kpis four">
+        <Kpi icon="court" label="رزرو زمین از اپ" tone="good" value={toman(appCourt.reduce((s, p) => s + p.paid, 0))} sub={`${fa(appCourt.length)} رزرو، ${jMonthLabel(jMonthKey(todayKey()))}`} tip="پولی که این ماه بابت رزرو زمین از درگاه و کیف پول اپ رسیده" onClick={() => { setTab('got'); setCh('app'); setKind('court'); setWhen('month') }} />
+        <Kpi icon="phone" label="کل درآمد از اپ" tone="good" value={toman(appMonth.reduce((s, p) => s + p.paid, 0))} sub={`${fa(appMonth.length)} پرداخت، زمین، کلاس، فروشگاه، کافه…`} tip="همه‌ی پرداخت‌های این ماه که از داخل اپ انجام شده" onClick={() => { setTab('got'); setCh('app'); setKind('all'); setWhen('month') }} />
         <Kpi icon="clock" label="باید همین حالا گرفته شود" tone={dueNow.length ? 'warn' : ''} value={toman(dueNow.reduce((s, p) => s + p.due, 0))} sub={`${fa(dueNow.length)} رزرو امروز یا گذشته`} onClick={() => setTab('due')} tip="بازی انجام شده یا امروز است و هنوز کامل پرداخت نشده" />
         <Kpi icon="cal" label="در پذیرش گرفته می‌شود" value={toman(dueLater.reduce((s, p) => s + p.due, 0))} sub={`${fa(dueLater.length)} رزرو آینده`} tip="رزروهای آینده‌ای که موقع بازی پرداخت می‌شوند" />
       </div>
@@ -451,8 +456,56 @@ function HoursCard() {
   )
 }
 
+// زمین‌ها: نام، عکس و فعال/تعمیرات؛ تغییر در کل اپ و پنل دیده می‌شود
+function CourtsCard() {
+  const { club, adminCourt } = useStore()
+  const [edit, setEdit] = useState(null)
+  return (
+    <Card title="زمین‌ها" sub="نام و عکس هر زمین را عوض کنید؛ زمین غیرفعال در اپ قابل رزرو نیست">
+      <div className="courts-set">
+        {COURTS.map((c) => edit === c.id ? <CourtEdit key={c.id} c={c} onDone={() => setEdit(null)} /> : (
+          <div key={c.id} className="court-set">
+            <div className="cs-photo" style={{ backgroundImage: `url(${c.img})` }} />
+            <div className="grow"><b>{c.name}</b><small>{c.kind}، {c.indoor ? 'سرپوشیده' : 'روباز'}</small></div>
+            <button className="adm-btn ghost sm" onClick={() => setEdit(c.id)} data-tip="تغییر نام و عکس"><Icon name="cog" size={14} />ویرایش</button>
+            <button className={`tgl-adm ${club.off[c.id] ? '' : 'on'}`} onClick={() => { adminCourt(c.id, !club.off[c.id]); chime('tap') }}><i /><span>{club.off[c.id] ? 'تعمیرات' : 'فعال'}</span></button>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+function CourtEdit({ c, onDone }) {
+  const { club, adminCourtEdit, toast } = useStore()
+  const [name, setName] = useState(c.name)
+  const [pic, setPic] = useState(c.img)
+  const ok = name.trim().length >= 2 && !COURTS.some((x) => x.id !== c.id && x.name === name.trim())
+  const save = () => {
+    adminCourtEdit(c.id, { ...club.courtEdits?.[c.id], name: name.trim(), img: pic })
+    chime('success'); toast({ icon: '🏟', title: 'زمین به‌روز شد', body: `«${name.trim()}» در اپ و همه‌ی بخش‌ها` }); onDone()
+  }
+  const reset = () => { adminCourtEdit(c.id, undefined); chime('tap'); onDone() }
+  return (
+    <div className="court-edit">
+      <label className="fld"><span>نام زمین</span><input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="مثلاً زمین مرکزی" autoFocus /></label>
+      <div className="fld"><span>عکس</span>
+        <div className="ce-pics">
+          {[...new Set([pic, ...COURT_IMGS])].map((u) => <button key={u.slice(-40)} type="button" className={pic === u ? 'on' : ''} style={{ backgroundImage: `url(${u})` }} onClick={() => setPic(u)} aria-label="انتخاب عکس" />)}
+        </div>
+        <ImageUpload value={null} onChange={(v) => v && setPic(v)} hint="یا عکس واقعی زمین را آپلود کنید (افقی)" />
+      </div>
+      <div className="row-btns">
+        {club.courtEdits?.[c.id] && <button className="adm-btn ghost sm" onClick={reset}>برگشت به پیش‌فرض</button>}
+        <span className="grow" />
+        <button className="adm-btn ghost sm" onClick={onDone}>انصراف</button>
+        <button className="adm-btn primary sm" disabled={!ok} onClick={save}>ذخیره</button>
+      </div>
+    </div>
+  )
+}
+
 export function Settings() {
-  const { club, adminPricing, adminCourt, resetDemo, toast } = useStore()
+  const { club, adminPricing, resetDemo, toast } = useStore()
   const [p, setP] = useState(club.pricing)
   const ex = (h) => priceFor(todayKey(), h, 1, p)
   const save = () => { adminPricing({ offpeak: +p.offpeak, peak: +p.peak, peakFrom: +p.peakFrom }); chime('success'); toast({ icon: '💾', title: 'نرخ‌ها ذخیره شد', body: 'در اپ بازیکن‌ها هم اعمال شد' }) }
@@ -474,17 +527,7 @@ export function Settings() {
       <div className="stack">
         <HoursCard />
       <LimitsCard />
-        <Card title="وضعیت زمین‌ها" sub="زمین غیرفعال در اپ قابل رزرو نیست">
-          <div className="courts-set">
-            {COURTS.map((c) => (
-              <div key={c.id} className="court-set">
-                <div className="cs-photo" style={{ backgroundImage: `url(${c.img})` }} />
-                <div className="grow"><b>{c.name}</b><small>{c.kind}، {c.indoor ? 'سرپوشیده' : 'روباز'}</small></div>
-                <button className={`tgl-adm ${club.off[c.id] ? '' : 'on'}`} onClick={() => { adminCourt(c.id, !club.off[c.id]); chime('tap') }}><i /><span>{club.off[c.id] ? 'تعمیرات' : 'فعال'}</span></button>
-              </div>
-            ))}
-          </div>
-        </Card>
+        <CourtsCard />
         <Card title="داده‌های نمایشی">
           <p className="muted small">همه‌ی داده‌ها در مرورگر ذخیره می‌شوند و بین اپ بازیکن و پنل مدیر (حتی در دو تب) مشترک‌اند.</p>
           <button className="adm-btn danger" onClick={() => confirm('همه‌ی داده‌ها به حالت اولیه برگردد؟') && resetDemo()}><Icon name="refresh" size={16} />بازنشانی داده‌ها</button>

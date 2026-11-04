@@ -10,7 +10,7 @@ import { Icon, LevelPill, Sheet } from '../../components/ui'
 import { coachFile, who } from '../admin/derive'
 import '../../coach.css'
 
-const TABS = [['home', 'خانه', 'home'], ['plan', 'برنامه', 'cal'], ['book', 'رزرو', 'plus'], ['students', 'شاگردها', 'users'], ['income', 'درآمد', 'wallet']]
+const TABS = [['home', 'خانه', 'home'], ['plan', 'برنامه', 'cal'], ['book', 'رزرو زمین', 'court'], ['students', 'شاگردها', 'users'], ['income', 'درآمد', 'wallet']]
 const startOf = (b) => fromKey(b.date).getTime() + b.start * 36e5
 const done = (b) => startOf(b) + b.dur * 36e5 <= Date.now()
 const fromPack = (b) => b.method === 'package' || b.method === 'coach-pack'
@@ -46,8 +46,8 @@ export default function Coach() {
       </main>
       <nav className="co-tabs">
         {TABS.map(([k, n, ic]) => (
-          <button key={k} className={`${tab === k ? 'on' : ''} ${k === 'book' ? 'fab' : ''}`} onClick={() => go(k)}>
-            <span><Icon name={ic} size={k === 'book' ? 24 : 20} /></span><small>{n}</small>
+          <button key={k} className={tab === k ? 'on' : ''} onClick={() => go(k)} aria-current={tab === k ? 'page' : undefined}>
+            <span><Icon name={ic} size={20} />{k === 'home' && d.todo.length > 0 && <i>{fa(d.todo.length)}</i>}</span><small>{n}</small>
           </button>
         ))}
       </nav>
@@ -74,7 +74,16 @@ function build(club, c, user) {
   }
   const reqs = (club.coachReqs || []).filter((r) => r.coach === c.id)
   const open = openHours(club, c.id)
+  const pend = reqs.filter((r) => r.status === 'pending')
+  const recent = Date.now() - 3 * 864e5
+  const todo = [
+    open.length && { ic: 'users', tone: 'warn', title: `${fa(open.length)} ساعت تأییدشده بدون شاگرد`, sub: 'برای هر ساعت ۱ یا ۲ شاگرد اضافه کنید', act: 'assign', block: open[0].block, btn: 'افزودن شاگرد' },
+    ...pend.map((r) => ({ ic: 'clock', tone: 'wait', title: 'درخواست رزرو منتظر تأیید مدیر', sub: `${dayTxt(r.date)}، ${hourLabel(r.start)} تا ${hourLabel(r.start + r.dur)}، ${courtById(r.court).name}`, act: 'book' })),
+    ...reqs.filter((r) => r.status === 'ok' && (r.done || r.at) > recent && !open.some((b) => b.block === r.id)).map((r) => ({ ic: 'check', tone: 'ok', title: 'رزرو شما تأیید شد', sub: `${dayTxt(r.date)}، ${hourLabel(r.start)} تا ${hourLabel(r.start + r.dur)}، ${courtById(r.court).name}`, act: 'plan' })),
+    ...reqs.filter((r) => r.status === 'rejected' && (r.done || r.at) > recent).map((r) => ({ ic: 'close', tone: 'bad', title: 'درخواست رزرو رد شد', sub: `${dayTxt(r.date)}، ${hourLabel(r.start)}؛ ساعت دیگری بگیرید`, act: 'book', btn: 'رزرو دوباره' })),
+  ].filter(Boolean)
   return {
+    todo,
     f, bk, nth, share, income, reqs, open,
     pending: reqs.filter((r) => r.status === 'pending').length,
     today: bk.filter((b) => b.date === t),
@@ -88,10 +97,9 @@ function build(club, c, user) {
 function Ses({ b, d, showDay }) {
   const { user } = useStore()
   const n = d.nth.get(b.id)
-  const now = Date.now(), live = now >= startOf(b) && now < startOf(b) + b.dur * 36e5
-  const st = live ? ['الان', 'live'] : done(b) ? ['برگزار شد', 'mute'] : fromPack(b) || b.paid >= b.price ? ['پرداخت‌شده', 'ok'] : ['پرداخت در پذیرش', 'due']
+  const st = done(b) ? ['برگزار شد', 'mute'] : fromPack(b) || b.paid >= b.price ? ['پرداخت‌شده', 'ok'] : ['پرداخت در پذیرش', 'due']
   return (
-    <div className={`co-ses ${done(b) && !live ? 'past' : ''} ${live ? 'live' : ''}`}>
+    <div className={`co-ses ${done(b) ? 'past' : ''}`}>
       <div className="co-ses-t"><b>{hourLabel(b.start)}</b><small>{fa(b.dur)} ساعت</small></div>
       <div className="co-ses-m">
         <b>{b.players.length ? b.players.map((p) => who(p, user)).join('، ') : 'بدون شاگرد مشخص'}</b>
@@ -117,12 +125,11 @@ function OpenAlert({ d }) {
 }
 
 function Home({ c, d, go }) {
-  const m = d.income(period('month', todayKey()))
+  const wk = d.income(period('week', todayKey()))
   const nx = d.next[0]
   const lim = coachLimits(useStore().club, c, todayKey())
   return (
     <>
-      <OpenAlert d={d} />
       {nx ? (
         <div className="co-next">
           <small>کلاس بعدی</small>
@@ -132,14 +139,24 @@ function Home({ c, d, go }) {
       ) : <div className="co-next empty"><b>کلاس رزروشده‌ای ندارید</b><span>از دکمه‌ی «رزرو» زمین بگیرید.</span></div>}
       <div className="co-stats">
         <button onClick={() => go('plan')}><b>{fa(d.today.length)}</b><small>کلاس امروز</small></button>
-        <button onClick={() => go('plan')}><b>{fa(d.week.length)}</b><small>۷ روز آینده</small></button>
-        <button onClick={() => go('income')}><b>{toman(m.mine).replace(' تومان', '')}</b><small>سهم این ماه (تومان)</small></button>
+        <button onClick={() => go('plan')}><b>{fa(d.week.length)}</b><small>کلاس ۷ روز آینده</small></button>
+        <button onClick={() => go('income')}><b>{toman(wk.mine).replace(' تومان', '')}</b><small>درآمد این هفته (تومان)</small></button>
       </div>
       <button className="co-quota" onClick={() => go('book')}>
         <Icon name="court" size={18} /><span className="grow">رزرو زمین: امروز <b>{fa(lim.day)}</b> و این هفته <b>{fa(lim.week)}</b> ساعت مانده</span><Icon name="back" size={16} />
       </button>
-      <h3 className="co-h">امروز</h3>
-      {d.today.length ? <div className="co-list">{d.today.map((b) => <Ses key={b.id} b={b} d={d} />)}</div> : <p className="co-empty">امروز کلاسی ندارید.</p>}
+      <h3 className="co-h todo-h">کارهای من{d.todo.length > 0 && <em className="co-count">{fa(d.todo.length)}</em>}<small>درخواست‌ها، تأییدها و کارهایی که باید انجام دهید</small></h3>
+      {d.todo.length ? (
+        <div className="co-list">
+          {d.todo.map((t, i) => (
+            <button key={i} className={`co-todo ${t.tone}`} onClick={() => (t.act === 'assign' ? d.assign(t.block) : go(t.act))}>
+              <span className="co-todo-ic"><Icon name={t.ic} size={18} /></span>
+              <span className="grow"><b>{t.title}</b><small>{t.sub}</small></span>
+              {t.btn ? <em>{t.btn}</em> : <Icon name="back" size={15} />}
+            </button>
+          ))}
+        </div>
+      ) : <div className="co-empty co-done"><Icon name="check" size={20} /><b>کاری نمانده</b><span>درخواست منتظر یا ساعت بی‌شاگردی ندارید.</span></div>}
     </>
   )
 }
@@ -398,7 +415,7 @@ function Assign({ c, d, block, onDone }) {
   }
   return (
     <div className="co-asg">
-      <p className="co-note">آموزش با بازی فرق دارد: برای هر ساعت حداقل یک شاگرد بگذارید (کلاس گروهی تا ۴ نفر). تا همه‌ی ساعت‌ها کامل نشود، درخواست تازه نمی‌توانید بدهید.</p>
+      <p className="co-note">آموزش با بازی فرق دارد: برای هر ساعت ۱ یا ۲ شاگرد بگذارید. تا همه‌ی ساعت‌ها کامل نشود، درخواست تازه نمی‌توانید بدهید.</p>
       <div className="co-asg-head"><b>{dayTxt(first.date)}، {courtById(first.court).name}</b><span>{fa(hours.length - empty.length)} از {fa(hours.length)} ساعت کامل</span><i><em style={{ width: `${((hours.length - empty.length) / hours.length) * 100}%` }} /></i></div>
       {empty.length > 1 && <button className="co-all" onClick={() => setPick('all')}><Icon name="users" size={16} />یک شاگرد برای همه‌ی ساعت‌های خالی</button>}
       <div className="co-list">
@@ -407,7 +424,7 @@ function Assign({ c, d, block, onDone }) {
             <div className="co-asg-t"><b>{hourLabel(b.start)}</b><small>تا {hourLabel(b.start + b.dur)}</small></div>
             <div className="co-asg-p">
               {b.players.map((p) => <span key={p} className="co-chip">{who(p, user)}<button onClick={() => drop(b, p)} aria-label="حذف"><Icon name="close" size={11} /></button></span>)}
-              {b.players.length < 4 && <button className="co-chip add" onClick={() => setPick(b.id)}><Icon name="plus" size={12} />{b.players.length ? 'نفر دیگر' : 'شاگرد'}</button>}
+              {b.players.length < 2 && <button className="co-chip add" onClick={() => setPick(b.id)}><Icon name="plus" size={12} />{b.players.length ? 'نفر دیگر' : 'شاگرد'}</button>}
             </div>
           </div>
         ))}

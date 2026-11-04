@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { addDays, fromKey, limitsOf, hoursOf, COURTS, PACKAGES, levelById, productById, seedClub, setCatalog, setCoaches, setMembers, todayKey, variantOf, withCoaches } from './data'
+import { addDays, fromKey, limitsOf, hoursOf, COURTS, PACKAGES, levelById, productById, seedClub, setCatalog, setCoaches, setCourts, setMembers, todayKey, variantOf, withCoaches } from './data'
 import { makeVariants, nextCode } from './catalog'
 import { fits, nextIngCode, nextItemCode, placeCafe, receiveInto } from './cafe'
 import { jMonthLabel } from './jalali'
@@ -11,7 +11,7 @@ import { syncBlocks, withEvents } from './events'
 const KEY = 'quadra-v1'
 const CLUB_KEY = 'quadra-club-v1'
 const SESSION_KEY = 'quadra-session'
-const SEED_V = 17
+const SEED_V = 18
 const blankPlayer = { user: null, xp: 0, badges: [], wallet: 0, rated: [], membership: null, cart: [], wish: [], notifications: [], quests: {}, events: [], cafeCart: [] }
 
 // حساب نمونه برای «ورود سریع نمایشی»
@@ -63,6 +63,7 @@ export function StoreProvider({ children }) {
   setCatalog(state.club.products)
   setMembers(state.club.members, state.club.memberEdits)
   setCoaches(state.club.coaches)
+  setCourts(state.club.courtEdits)
 
   const mine = personalOf(state)
   // اگر حافظه‌ی مرورگر پر شود (مثلاً عکس‌های زیاد) به مدیر هشدار داده می‌شود
@@ -374,7 +375,7 @@ export function StoreProvider({ children }) {
         return out
       },
       coachSetPlayers(coach, id, players) {
-        club((c) => ({ ...c, bookings: c.bookings.map((b) => (b.id === id && b.coach === coach ? { ...b, players: players.slice(0, 4), by: players[0] || null } : b)) }))
+        club((c) => ({ ...c, bookings: c.bookings.map((b) => (b.id === id && b.coach === coach ? { ...b, players: players.slice(0, 2), by: players[0] || null } : b)) }))
       },
       coachReqCancel(id) { club((c) => ({ ...c, coachReqs: (c.coachReqs || []).map((x) => (x.id === id && x.status === 'pending' ? { ...x, status: 'cancelled' } : x)) })) },
       adminCoachReq(id, ok) {
@@ -546,6 +547,7 @@ export function StoreProvider({ children }) {
       },
       adminHours(h) { club((c) => ({ ...c, hours: h })) },
       adminPricing(p) { club((c) => ({ ...c, pricing: { ...c.pricing, ...p } })) },
+      adminCourtEdit(id, edit) { club((c) => ({ ...c, courtEdits: { ...c.courtEdits, [id]: edit } })) },
       adminCourt(id, off) { club((c) => ({ ...c, off: { ...c.off, [id]: off } })) },
       // ---------- حسابداری ----------
       adminExpense(e) { club((c) => ({ ...c, expenses: [{ id: 'e' + Date.now(), at: Date.now(), ...e }, ...c.expenses] })) },
