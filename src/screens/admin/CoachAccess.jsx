@@ -106,7 +106,7 @@ function Access({ c }) {
       <label><small>سقف روزانه</small><Step value={f.day} set={(v) => set({ day: v })} max={12} /></label>
       <label><small>سقف هفتگی</small><Step value={f.week} set={(v) => set({ week: v })} max={60} /></label>
       <label><small>ورود</small><Seg value={f.on ? 'on' : 'off'} onChange={(v) => set({ on: v === 'on' })} options={{ off: 'بسته', on: 'تأیید' }} /></label>
-      <button className="adm-btn primary sm ca-save" disabled={!changed || (f.on && !valid)} onClick={save} data-tip={dup ? 'این نام کاربری گرفته شده' : f.on && !valid ? 'نام کاربری انگلیسی (۳ حرف) و رمز ۴ کاراکتری لازم است' : ''}>ذخیره</button>
+      <button className="adm-btn primary sm ca-save" disabled={!changed || dup || (f.on && !valid) || (!!user && !/^[a-z0-9._-]{3,}$/.test(user))} onClick={save} data-tip={dup ? 'این نام کاربری گرفته شده' : f.on && !valid ? 'نام کاربری انگلیسی (۳ حرف) و رمز ۴ کاراکتری لازم است' : ''}>ذخیره</button>
     </div>
   )
 }

@@ -1204,3 +1204,10 @@ button.trn-pl:hover { background: var(--paper2); }
 .staff-links { display: flex; align-items: center; justify-content: center; gap: 4px; }
 .staff-links i { width: 1px; height: 14px; background: currentColor; opacity: .3; }
 .login-why { margin: -2px 0 0; font-size: 12.5px; color: #FF8A7A; text-align: center; }
+
+/* حالت افقی گوشی: صفحه‌ی اول ویزارد اسکرول بخورد */
+@media (max-height: 520px) {
+  .app-scroll.locked { overflow-y: auto; display: block; padding-bottom: 120px; }
+  .app-scroll.locked > div { display: block; }
+  .intent-card { min-height: 110px; }
+}

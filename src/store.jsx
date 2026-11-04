@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { addDays, fromKey, limitsOf, hoursOf, COURTS, PACKAGES, levelById, productById, seedClub, setCatalog, setCoaches, setCourts, setMembers, todayKey, variantOf, withCoaches } from './data'
+import { addDays, fromKey, limitsOf, hoursOf, COURTS, PACKAGES, levelById, productById, seedClub, stockOf, setCatalog, setCoaches, setCourts, setMembers, todayKey, variantOf, withCoaches } from './data'
 import { makeVariants, nextCode } from './catalog'
 import { fits, nextIngCode, nextItemCode, placeCafe, receiveInto } from './cafe'
 import { jMonthLabel } from './jalali'
@@ -152,6 +152,9 @@ export function StoreProvider({ children }) {
       book(b, method, share) {
         let out
         commit((s) => {
+          const coachClash = b.coach && s.club.bookings.some((x) => x.coach === b.coach && x.date === b.date && x.status !== 'cancelled' && b.start < x.start + x.dur && x.start < b.start + b.dur)
+          if (!isFree(s.club, b.date, b.court, b.start, b.dur) || coachClash) { out = { error: 'busy' }; return s }
+          if (b.type !== 'coach' && playerRun(s.club, b.date, b.start, b.dur) > limitsOf(s.club).playerRun) { out = { error: 'run', run: limitsOf(s.club).playerRun }; return s }
           const amount = share ?? b.price
           const rec = { id: 'u' + Date.now(), by: ME, status: 'ok', source: 'app', at: Date.now(), method, paid: method === 'package' || method === 'coach-pack' ? b.price : amount, ...b }
           const bookings = [...s.club.bookings, rec]
@@ -170,8 +173,9 @@ export function StoreProvider({ children }) {
         let out
         commit((s) => {
           const b = s.club.bookings.find((x) => x.id === id)
+          if (!b || b.status === 'cancelled' || b.players.includes(ME) || b.players.filter(Boolean).length >= 4) { out = { error: 'full' }; return s }
           const players = [...b.players, ME]
-          const bookings = s.club.bookings.map((x) => (x.id === id ? { ...x, players, paid: x.paid + share, invited: (x.invited || []).filter((p) => p !== ME) } : x))
+          const bookings = s.club.bookings.map((x) => (x.id === id ? { ...x, players, paid: x.paid + share, shares: { ...x.shares, [ME]: share }, invited: (x.invited || []).filter((p) => p !== ME) } : x))
           const r = reward(pay(s, share, method), 40, ['first', 'social', players.length === 4 && 'squad', myCourts(bookings).size >= 4 && 'quad'])
           out = { ...r.result, id }
           return { ...r.next, club: { ...s.club, bookings } }
@@ -196,8 +200,10 @@ export function StoreProvider({ children }) {
       cancelMine(id) {
         commit((s) => {
           const b = s.club.bookings.find((x) => x.id === id)
+          // لغو تکراری یا کمتر از ۶ ساعت مانده پذیرفته نمی‌شود
+          if (!b || b.status === 'cancelled' || (b.by !== ME && !b.players.includes(ME)) || fromKey(b.date).getTime() + b.start * 36e5 - Date.now() < 6 * 36e5) return s
           const mine = b.by === ME
-          const share = mine ? (b.type === 'open' ? Math.round(b.price / 4) : b.paid) : Math.round(b.price / 4)
+          const share = mine ? (b.type === 'open' ? Math.round(b.price / 4) : b.paid) : (b.shares?.[ME] ?? Math.round(b.price / 4))
           const bookings = s.club.bookings.map((x) => x.id !== id ? x : mine
             ? { ...x, status: 'cancelled', refunded: true }
             : { ...x, players: x.players.filter((p) => p !== ME), paid: x.paid - share })
@@ -278,7 +284,8 @@ export function StoreProvider({ children }) {
       addToCart(item) {
         commit((s) => {
           const k = s.cart.findIndex((x) => x.pid === item.pid && x.size === item.size && x.color === item.color)
-          const cart = k < 0 ? [...s.cart, item] : s.cart.map((x, i) => (i === k ? { ...x, qty: x.qty + item.qty } : x))
+          const p = productById(item.pid), max = variantOf(p, item.size, item.color)?.stock ?? stockOf(p)
+          const cart = k < 0 ? [...s.cart, { ...item, qty: Math.min(item.qty, max) }] : s.cart.map((x, i) => (i === k ? { ...x, qty: Math.min(max, x.qty + item.qty) } : x))
           return { ...s, cart }
         })
       },
@@ -288,6 +295,8 @@ export function StoreProvider({ children }) {
         let out
         commit((s) => {
           const items = s.cart.map((x) => { const p = productById(x.pid); return { ...x, price: p.price, cost: p.cost, sku: variantOf(p, x.size, x.color)?.sku } })
+          const lack = items.find((x) => { const p = productById(x.pid); return x.qty > (variantOf(p, x.size, x.color)?.stock ?? stockOf(p)) })
+          if (lack) { out = { error: 'stock', name: productById(lack.pid).name }; return s }
           const total = items.reduce((a, x) => a + x.qty * x.price, 0)
           const order = { id: 'Q-' + String(Date.now()).slice(-5), by: ME, items, total, method, status: 'new', source: 'app', at: Date.now() }
           const r = reward(pay({ ...s, cart: [] }, total, method), Math.max(10, Math.round(total / 200000)), ['shopper'])
@@ -370,6 +379,9 @@ export function StoreProvider({ children }) {
           if (r.dur > lim.day || r.dur > lim.week) { out = { error: 'quota', left: Math.min(lim.day, lim.week) }; return c }
           if (coachRun(c, co, r.date, r.start, r.dur) > lim.run) { out = { error: 'run', run: lim.run }; return c }
           if (!isFree(c, r.date, r.court, r.start, r.dur)) { out = { error: 'busy' }; return c }
+          const hit = (x) => x.date === r.date && r.start < x.start + x.dur && x.start < r.start + r.dur
+          // مربی هم‌زمان دو جا نمی‌تواند باشد؛ ساعتی که مربی دیگری درخواست داده هم نگه داشته می‌شود
+          if (c.bookings.some((b) => b.coach === co.id && b.status !== 'cancelled' && hit(b)) || (c.coachReqs || []).some((x) => x.status === 'pending' && hit(x) && (x.coach === co.id || x.court === r.court))) { out = { error: 'busy' }; return c }
           return { ...c, coachReqs: [{ id: 'CR' + Date.now(), status: 'pending', at: Date.now(), ...r }, ...(c.coachReqs || [])] }
         })
         return out
@@ -394,7 +406,7 @@ export function StoreProvider({ children }) {
       },
       adminLimits(l) { club((c) => ({ ...c, limits: { ...limitsOf(c), ...l } })) },
       adminCoachLogin(id, login) { club((c) => ({ ...c, coaches: c.coaches.map((x) => (x.id === id ? { ...x, login } : x)) })) },
-      adminAddBooking(b) { club((c) => ({ ...c, bookings: [...c.bookings, { id: 'd' + Date.now(), status: 'ok', source: 'desk', at: Date.now(), ...b }] })) },
+      adminAddBooking(b) { club((c) => ({ ...c, bookings: [...c.bookings, { id: 'd' + Date.now() + Math.random().toString(36).slice(2, 6), status: 'ok', source: 'desk', at: Date.now(), ...b }] })) },
       // تسویه: مبلغ و زمان پرداخت جدا ثبت می‌شود تا سند حسابداری در همان روز بخورد
       // دریافت دستی در پذیرش (نقدی یا کارتخوان)؛ در دریافت‌ها، داشبورد و حسابداری دیده می‌شود
       adminReview(id, patch) { club((c) => ({ ...c, reviews: (c.reviews || []).map((r) => (r.id === id ? { ...r, ...patch } : r)) })) },
@@ -629,6 +641,13 @@ export function coachRun(club, co, date, start, dur) {
 }
 // ساعت‌های تأییدشده‌ی مربی که هنوز شاگرد ندارند (کلاس آموزشی نباید بی‌شاگرد بماند)
 export const openHours = (club, coachId) => club.bookings.filter((b) => b.coach === coachId && b.block && b.status !== 'cancelled' && !b.players.length && fromKey(b.date).getTime() + (b.start + b.dur) * 36e5 > Date.now())
+// طول بلوک پشت‌سرهمِ رزروهای خود بازیکن در آن روز (روی هر زمینی) اگر این بازه اضافه شود
+export function playerRun(club, date, start, dur) {
+  const spans = club.bookings.filter((b) => b.date === date && b.status !== 'cancelled' && b.type !== 'coach' && (b.by === ME || b.players?.includes(ME))).map((b) => [b.start, b.start + b.dur])
+  let a = start, z = start + dur, grew = true
+  while (grew) { grew = false; spans.forEach(([s, e]) => { if (s <= z && e >= a && (s < a || e > z)) { a = Math.min(a, s); z = Math.max(z, e); grew = true } }) }
+  return z - a
+}
 export function busyOn(club, date, court) {
   return club.bookings.filter((b) => b.date === date && b.court === court && b.status !== 'cancelled')
 }

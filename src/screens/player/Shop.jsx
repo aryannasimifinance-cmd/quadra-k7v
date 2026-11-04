@@ -168,7 +168,9 @@ function Product({ p, onClose }) {
   const [color, setColor] = useState(p.colors?.[0] || null)
   const [qty, setQty] = useState(1)
   const [added, setAdded] = useState(false)
-  const stock = variantOf(p, size, color?.n)?.stock ?? stockOf(p)
+  const { cart } = useStore()
+  const inCart = cart.filter((x) => x.pid === p.id && x.size === size && x.color === (color?.n || null)).reduce((s, x) => s + x.qty, 0)
+  const stock = Math.max(0, (variantOf(p, size, color?.n)?.stock ?? stockOf(p)) - inCart)
   const add = () => {
     addToCart({ pid: p.id, size, color: color?.n || null, colorHex: color?.c || null, qty })
     setAdded(true); chime('success'); haptic([10, 30, 10])
@@ -198,7 +200,7 @@ function Product({ p, onClose }) {
       <div className="pd-cta">
         <Stepper value={qty} onChange={setQty} min={1} max={Math.max(1, stock)} />
         <Button full variant="q" disabled={!stock || added} onClick={add}>
-          {!stock ? 'ناموجود' : added ? '✓ اضافه شد' : `افزودن، ${toman(p.price * qty)}`}
+          {!stock ? (inCart ? 'همه‌ی موجودی در سبد شماست' : 'ناموجود') : added ? '✓ اضافه شد' : `افزودن، ${toman(p.price * qty)}`}
         </Button>
       </div>
     </div>
@@ -208,7 +210,7 @@ function Product({ p, onClose }) {
 function Cart({ onClose }) {
   const s = useStore()
   const { cart, setQty, wallet, checkout, toast } = s
-  const [method, setMethod] = useState('wallet')
+  const [method, setMethod] = useState(() => (wallet >= cart.reduce((a, x) => a + x.qty * productById(x.pid).price, 0) ? 'wallet' : 'card'))
   const [busy, setBusy] = useState(false)
   const total = cart.reduce((a, x) => a + x.qty * productById(x.pid).price, 0)
   const save = cart.reduce((a, x) => a + x.qty * ((productById(x.pid).was || productById(x.pid).price) - productById(x.pid).price), 0)
@@ -217,6 +219,7 @@ function Cart({ onClose }) {
     setBusy(true)
     setTimeout(() => {
       const r = checkout(method)
+      if (r?.error) { setBusy(false); chime('alarm'); toast({ icon: '⛔', title: 'موجودی کافی نیست', body: `از «${r.name}» به این تعداد نمانده؛ تعداد را کم کنید` }); return }
       celebrate(); chime('level')
       toast({ icon: '📦', title: `سفارش ${r.order.id} ثبت شد`, body: `+${fa(r.xp)} XP، آماده‌ی تحویل در پذیرش`, duration: 4500 })
       setBusy(false); onClose()
@@ -231,7 +234,7 @@ function Cart({ onClose }) {
           <motion.div key={i} layout className="cart-item" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
             <ProductImage p={p} color={x.colorHex} />
             <div className="grow"><b>{p.name}</b><small>{[x.size && `سایز ${x.size}`, x.color].filter(Boolean).join('، ')}</small><span>{toman(p.price * x.qty)}</span></div>
-            <Stepper value={x.qty} onChange={(n) => setQty(i, n)} />
+            <Stepper value={x.qty} onChange={(n) => setQty(i, n)} max={variantOf(p, x.size, x.color)?.stock ?? stockOf(p)} />
           </motion.div>
         )
       })}

@@ -44,7 +44,7 @@ export function Payments({ ctx }) {
     hist.map((p) => { const d = new Date(p.at); return [jDate(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`), d.toTimeString().slice(0, 5), p.title, p.sub, p.who, METHOD_NAME[p.method] || '', p.paid] }), ['جمع', '', '', '', '', '', hist.reduce((s, p) => s + p.paid, 0)]) }])
   const Due = ({ p }) => (
     <div className="pay-due">
-      <div className="grow" onClick={() => p.ref && ctx.open({ kind: 'booking', id: p.id })}>
+      <div className="grow" onClick={() => p.ref && ctx.open({ kind: 'booking', id: p.bid || p.id })}>
         <b>{p.who}</b><small>{p.title}، {p.sub}</small>
       </div>
       <b className="num">{toman(p.due)}</b>
@@ -86,7 +86,7 @@ export function Payments({ ctx }) {
           <div className="tbl-wrap"><table className="tbl">
             <thead><tr><th>زمان</th><th>شرح</th><th>مشتری</th><th>روش</th><th>مبلغ</th></tr></thead>
             <tbody>{rows.map((p) => (
-              <tr key={p.id} className={p.ref ? 'click' : ''} onClick={() => p.ref && ctx.open({ kind: 'booking', id: p.id })}>
+              <tr key={p.id} className={p.ref ? 'click' : ''} onClick={() => p.ref && ctx.open({ kind: 'booking', id: p.bid || p.id })}>
                 <td className="nowrap">{fmt.format(p.at)}</td><td><b>{p.title}</b><small>{p.sub}</small></td><td>{p.who}</td>
                 <td><span className={`ch-pill ch-${channelOf(p.method)}`}>{CHANNEL[channelOf(p.method)][0]}</span>{p.manual && <small>ثبت دستی</small>}</td><td className="num">{toman(p.paid)}</td>
               </tr>))}</tbody>
@@ -490,7 +490,7 @@ function CourtEdit({ c, onDone }) {
       <label className="fld"><span>نام زمین</span><input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="مثلاً زمین مرکزی" autoFocus /></label>
       <div className="fld"><span>عکس</span>
         <div className="ce-pics">
-          {[...new Set([pic, ...COURT_IMGS])].map((u) => <button key={u.slice(-40)} type="button" className={pic === u ? 'on' : ''} style={{ backgroundImage: `url(${u})` }} onClick={() => setPic(u)} aria-label="انتخاب عکس" />)}
+          {(COURT_IMGS.includes(pic) ? COURT_IMGS : [...COURT_IMGS, pic]).map((u) => <button key={u.slice(-40)} type="button" className={pic === u ? 'on' : ''} style={{ backgroundImage: `url(${u})` }} onClick={() => setPic(u)} aria-label="انتخاب عکس" />)}
         </div>
         <ImageUpload value={null} onChange={(v) => v && setPic(v)} hint="یا عکس واقعی زمین را آپلود کنید (افقی)" />
       </div>

@@ -11,8 +11,8 @@ const Coach = lazy(() => import('./screens/coach/Coach'))
 
 export default function App() {
   const { session } = useStore()
-  const [sting, setSting] = useState(true)
-  useEffect(() => { const t = setTimeout(() => setSting(false), 3400); return () => clearTimeout(t) }, [])
+  const [sting, setSting] = useState(() => { try { return !sessionStorage.getItem('quadra-sting') } catch { return true } })
+  useEffect(() => { if (!sting) return; try { sessionStorage.setItem('quadra-sting', '1') } catch { /* */ } const t = setTimeout(() => setSting(false), 3400); return () => clearTimeout(t) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const admin = session?.role === 'admin'
   const coach = session?.role === 'coach'
 

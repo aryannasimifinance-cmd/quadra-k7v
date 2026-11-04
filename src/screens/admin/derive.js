@@ -27,12 +27,18 @@ export function payments(club, user) {
   club.bookings.forEach((b) => {
     if (b.type === 'block' || b.method === 'package' || b.method === 'coach-pack') return
     const st = payState(b)
-    out.push({
-      id: b.id, ref: b, at: fromKey(b.date).getTime() + b.start * 36e5, kind: b.type === 'coach' ? 'coach' : 'court',
+    // پرداخت اول با روش خود رزرو؛ هر تسویه‌ی بعدی (پذیرش) با روش و زمان خودش جدا می‌آید
+    const settled = b.settled || [], later = settled.reduce((s, x) => s + x.amt, 0)
+    const row = {
+      ref: b, bid: b.id, kind: b.type === 'coach' ? 'coach' : 'court',
       title: b.type === 'coach' ? `کلاس ${coachById(b.coach)?.name}` : `${courtById(b.court).name}، ${b.type === 'open' ? 'بازی باز' : 'رزرو زمین'}`,
-      sub: `${dayMonth(fromKey(b.date))}، ${range(b.start, b.dur)}`, who: who(b.by, user), amount: b.price, paid: st === 'refunded' ? 0 : b.paid,
-      due: st === 'paid' || st === 'void' || st === 'refunded' ? 0 : b.price - b.paid, method: b.method, status: st,
+      sub: `${dayMonth(fromKey(b.date))}، ${range(b.start, b.dur)}`, who: who(b.by, user), status: st,
+    }
+    out.push({
+      ...row, id: b.id, at: fromKey(b.date).getTime() + b.start * 36e5, amount: b.price, paid: st === 'refunded' ? 0 : Math.max(0, b.paid - later),
+      due: st === 'paid' || st === 'void' || st === 'refunded' ? 0 : b.price - b.paid, method: b.method,
     })
+    if (st !== 'refunded') settled.forEach((x, i) => out.push({ ...row, id: `${b.id}~s${i}`, at: x.at, amount: x.amt, paid: x.amt, due: 0, method: x.method }))
   })
   club.orders.forEach((o) => out.push({ id: o.id, at: o.at, kind: 'shop', title: `سفارش ${o.id}`, sub: o.items.map((x) => productById(x.pid)?.name).join('، '), who: who(o.by, user), amount: o.total, paid: o.total, due: 0, method: o.method, status: 'paid' }))
   ;(club.cafeOrders || []).forEach((o) => out.push({ id: o.id, at: o.at, kind: 'cafe', title: `کافه ${o.id}`, sub: o.items.map((x) => x.name).join('، '), who: who(o.by, user), amount: o.total, paid: o.total, due: 0, method: o.method, status: 'paid' }))

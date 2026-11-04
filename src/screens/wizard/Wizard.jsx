@@ -5,7 +5,7 @@ import {
   SIDES, limitsOf, coachesRanked, fa, fromKey, hourLabel, isPeak, isWeekend, levelById, levelIndex, nearLevels, nextDays, priceFor, range, short, sideById, toman, weekday,
 } from '../../data'
 import { celebrate, chime, haptic } from '../../fx'
-import { ME, freeStarts, isFree, memberOff, useStore } from '../../store'
+import { playerRun, ME, freeStarts, isFree, memberOff, useStore } from '../../store'
 import { openGames, planSeries } from '../../select'
 import { appEvents, levelOk } from '../../events'
 import { Avatar, Button, Chips, CountUp, CtaBar, Icon, LevelPill, Photo, Sheet, TopBar, rise, stagger } from '../../components/ui'
@@ -242,7 +242,9 @@ function StepSlot({ w, set, onNext }) {
 
   const tap = (c, h) => {
     haptic(8)
-    if (isCoach || w.start == null || w.court !== c) return set({ court: c, start: h, dur: 1 })
+    const runWarn = () => toast({ icon: '⏱', title: `حداکثر ${fa(maxRun)} ساعت پشت هم`, body: 'با رزروهای قبلی خودتان در همین روز' })
+    const fresh = () => (!isCoach && playerRun(club, w.date, h, 1) > maxRun ? runWarn() : set({ court: c, start: h, dur: 1 }))
+    if (isCoach || w.start == null || w.court !== c) return fresh()
     const s0 = w.start, e0 = w.start + w.dur
     if (h >= s0 && h < e0) { // روی انتخاب زدن = برداشتن همان ساعت
       if (w.dur === 1) return set({ start: null })
@@ -252,9 +254,10 @@ function StepSlot({ w, set, onNext }) {
     }
     if (h === e0 || h === s0 - 1) {
       if (w.dur >= maxRun) { toast({ icon: '⏱', title: `حداکثر ${fa(maxRun)} ساعت پشت هم` }); return }
+      if (playerRun(club, w.date, Math.min(h, s0), w.dur + 1) > maxRun) return runWarn()
       return h === e0 ? set({ dur: w.dur + 1 }) : set({ start: h, dur: w.dur + 1 })
     }
-    set({ court: c, start: h, dur: 1 })
+    fresh()
   }
   const total = w.start != null ? (isCoach ? coachById(w.coachId).price : priceFor(w.date, w.start, w.dur, club.pricing)) : 0
 
@@ -736,7 +739,10 @@ function StepPay({ w, set, onDone }) {
       }
       if (r?.error) {
         setBusy(false); chime('alarm')
-        s.toast(kind === 'event' ? { icon: '⛔', title: 'ثبت‌نام این مسابقه دیگر ممکن نیست', body: 'ظرفیت همین الان پر شد یا ثبت‌نام بسته شد' } : { icon: '⛔', title: 'یکی از ساعت‌ها همین الان پر شد', body: 'برنامه به‌روز شد؛ دوباره بررسی و پرداخت کنید' })
+        s.toast(kind === 'event' ? { icon: '⛔', title: 'ثبت‌نام این مسابقه دیگر ممکن نیست', body: 'ظرفیت همین الان پر شد یا ثبت‌نام بسته شد' }
+          : r.error === 'run' ? { icon: '⏱', title: `حداکثر ${fa(r.run)} ساعت پشت هم`, body: 'با رزروهای قبلی خودتان در همین روز از سقف بیشتر می‌شود' }
+          : r.error === 'full' ? { icon: '⛔', title: 'این بازی همین الان پر شد', body: 'یک بازی دیگر انتخاب کنید' }
+          : { icon: '⛔', title: 'یکی از ساعت‌ها همین الان پر شد', body: 'برنامه به‌روز شد؛ دوباره بررسی و پرداخت کنید' })
         return
       }
       chime('success'); celebrate(); haptic([20, 40, 20, 40, 80])

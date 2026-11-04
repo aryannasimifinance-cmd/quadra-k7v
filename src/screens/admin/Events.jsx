@@ -1,6 +1,6 @@
 // آدینه‌ها و تورنمنت‌ها: تعریف مسابقه، ثبت‌نام‌های دونفره، تیم‌بندی، طراحی گروه‌ها، مرحله‌ی حذفی، برنده‌ها، ورودی‌ها و فروش کافه‌ی روز مسابقه
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { EVENT_KIND, EV_IMG, VIBORA_IMG, LEVELS, MEMBERS, METHOD_NAME, addDays, hoursOf, levelById, dayLabel, fa, fromKey, hourLabel, short, toman, todayKey } from '../../data'
+import { courtById, EVENT_KIND, EV_IMG, VIBORA_IMG, LEVELS, MEMBERS, METHOD_NAME, addDays, hoursOf, levelById, dayLabel, fa, fromKey, hourLabel, short, toman, todayKey } from '../../data'
 import {
   EV_FORMAT, EV_STATUS, GROUP_IDS, ROUND, SCORING, addGroup, dropGroup, emptyGroups, fillGroups, scored, scoringOf, setsOf, cafeOf, clashes, entryTotal, eventAt, fillTeams, finished, groupsDone, isLive, loosePairs, withPairs, koRounds, makeGroups, makeKnockout, makeTeams, moveTeam, pairUp, plan, podium, regPower, setScore, showsResults, singles, standings, teamName, unpair, upcoming,
 } from '../../events'
@@ -18,7 +18,7 @@ const time = new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digi
 const when = (e) => `${dayLabel(e.date)} ${jDateFa(e.date)}، ${hourLabel(e.start)} تا ${hourLabel(e.start + e.dur)}`
 const St = ({ s }) => <Badge tone={EV_STATUS[s][1]}>{EV_STATUS[s][0]}</Badge>
 const sum = (l, f) => l.reduce((s, x) => s + f(x), 0)
-const courtsText = (cs) => (cs.length === 4 ? 'همه‌ی زمین‌ها' : `زمین ${cs.map((c) => fa(c)).join('، ')}`)
+const courtsText = (cs) => (cs.length === 4 ? 'همه‌ی زمین‌ها' : cs.map((c) => courtById(c).name).join('، '))
 // وضعیت به زبان ساده: هر گزینه یعنی بازیکن‌ها در اپ چه می‌بینند
 const STATUS_HELP = {
   draft: ['پیش‌نویس', 'فقط شما می‌بینید؛ در اپ نشان داده نمی‌شود و زمین‌ها هنوز رزرو نمی‌شوند.'],
@@ -56,7 +56,7 @@ export function Events() {
     <div className="stack">
       {ev ? (ev.status === 'done' && unlock !== ev.id ? <DoneDetail ev={ev} onBack={back} onUnlock={() => setUnlock(ev.id)} /> : <Detail ev={ev} onBack={back} onEdit={() => setForm(ev)} />)
         : <List tab={tab} setTab={setTab} onOpen={setSel} onNew={() => setForm('new')} />}
-      <Side open={!!form} onClose={() => setForm(null)} title={form === 'new' ? 'آدینه‌ی جدید' : 'ویرایش مسابقه'} wide>
+      <Side open={!!form} onClose={() => setForm(null)} title={form === 'new' ? 'آدینه یا ایونت جدید' : 'ویرایش مسابقه'} wide>
         {form && <EventForm key={form.id || 'new'} ev={form === 'new' ? null : club.events.find((e) => e.id === form.id)} onClose={(id) => { setForm(null); if (id) setSel(id) }} />}
       </Side>
     </div>
@@ -680,11 +680,11 @@ function EventForm({ ev, onClose }) {
           </div>
         </div>
         <div className="ef-courts">
-          {[1, 2, 3, 4].map((c) => <button key={c} type="button" className={f.courts.includes(c) ? 'on' : ''} onClick={() => tog('courts', c)}><i />زمین {fa(c)}</button>)}
+          {[1, 2, 3, 4].map((c) => <button key={c} type="button" className={f.courts.includes(c) ? 'on' : ''} onClick={() => tog('courts', c)}><i />{courtById(c).name}</button>)}
           <button type="button" className="ef-all" onClick={() => set({ courts: f.courts.length === 4 ? [] : [1, 2, 3, 4] })}>{f.courts.length === 4 ? 'هیچ‌کدام' : 'همه'}</button>
         </div>
         <p className="ef-sum"><Icon name="cal" size={15} />{f.courts.length ? `${dayLabel(f.date)} ${jDateFa(f.date)}، ${hourLabel(f.start)} تا ${hourLabel(f.start + f.dur)}، ${courtsText(f.courts)}` : 'حداقل یک زمین انتخاب کنید.'}</p>
-        {busy.length > 0 && <p className="pt-warn">{fa(busy.length)} رزرو در همین ساعت هست ({busy.slice(0, 3).map((b) => `زمین ${fa(b.court)} ${hourLabel(b.start)}`).join('، ')}{busy.length > 3 ? '، …' : ''})؛ بعد از ذخیره در تقویم جابه‌جا یا لغوشان کنید.</p>}
+        {busy.length > 0 && <p className="pt-warn">{fa(busy.length)} رزرو در همین ساعت هست ({busy.slice(0, 3).map((b) => `${courtById(b.court).name} ${hourLabel(b.start)}`).join('، ')}{busy.length > 3 ? '، …' : ''})؛ بعد از ذخیره در تقویم جابه‌جا یا لغوشان کنید.</p>}
         {same && <p className="pt-warn">در همین روز «{same.title}» هم هست.</p>}
       </Sec>
 

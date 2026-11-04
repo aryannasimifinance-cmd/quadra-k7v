@@ -115,7 +115,7 @@ export default function Admin() {
       <main className="adm-main">
         <header className="adm-top">
           <button className="adm-burger" onClick={() => setMenu(true)} aria-label="منو"><Icon name="menu" /></button>
-          <div className="grow"><h1>{ITEMS.find((n) => n.id === sec).name}</h1><small>{new Intl.DateTimeFormat('fa-IR', { dateStyle: 'full' }).format(new Date())}</small></div>
+          <div className="grow"><h1>{ITEMS.find((n) => n.id === sec).name}</h1><small>{new Intl.DateTimeFormat('fa-IR', { dateStyle: 'full' }).format(new Date()).replace(/,/g, '،')}</small></div>
           {BOOKING_SECS.includes(sec) && <button className="adm-btn primary" onClick={() => setDrawer({ kind: 'new', date: todayKey() })} data-tip="ثبت رزرو تلفنی یا حضوری در پذیرش"><Icon name="plus" size={18} />رزرو دستی</button>}
         </header>
         <AnimatePresence mode="wait">
@@ -137,10 +137,11 @@ function Overview({ ctx }) {
   const { club, user } = useStore()
   const V = useMemo(() => ledger(club), [club])
   const today = todayKey()
-  const segDay = segments(V, period('day', today))
-  const segMonth = segments(V, period('month', today))
-  const week = dailyPL(V, { from: addDays(today, -7), to: addDays(today, -1) })
-  const avg7 = [...week.values()].reduce((s, d) => s + d.rev, 0) / 7
+  // محاسبه‌های سنگین فقط وقتی داده‌ی باشگاه عوض شود
+  const { segDay, segMonth, avg7 } = useMemo(() => {
+    const week = dailyPL(V, { from: addDays(today, -7), to: addDays(today, -1) })
+    return { segDay: segments(V, period('day', today)), segMonth: segments(V, period('month', today)), avg7: [...week.values()].reduce((s, d) => s + d.rev, 0) / 7 }
+  }, [V, today])
   const todays = club.bookings.filter((b) => b.date === today && b.status === 'ok' && b.type !== 'block')
   const occ = occupancy(club, today)
   // درآمد این ماه به تفکیک: رزرو زمین از اپ، کافه، فروشگاه
@@ -170,7 +171,7 @@ function Overview({ ctx }) {
     contracts.length && { ic: 'shield', tone: 'b', title: `${fa(contracts.length)} قرارداد نزدیک پایان`, sub: contracts.map((s) => s.name).join('، '), go: 'hr', tip: 'تمدید یا تسویه‌ی قرارداد' },
     ...upcoming(club).filter((e) => fromKey(e.date) <= fromKey(addDays(today, 7))).map((e) => ({
       ic: 'trophy', tone: 'q', title: `🏆 ${e.title}، ${dayLabel(e.date)}`, go: 'events', tip: 'این ساعت‌ها در تقویم برای مسابقه بسته است',
-      sub: `${e.courts.length === 4 ? 'همه‌ی زمین‌ها' : 'زمین ' + e.courts.map((c) => fa(c)).join('، ')} از ${fa(e.start)} تا ${fa(e.start + e.dur)} رزرو مسابقه، ${fa(e.regs.length)} از ${fa(e.cap)} نفر`,
+      sub: `${e.courts.length === 4 ? 'همه‌ی زمین‌ها' : e.courts.map((c) => courtById(c).name).join('، ')} از ${fa(e.start)} تا ${fa(e.start + e.dur)} رزرو مسابقه، ${fa(e.regs.length)} از ${fa(e.cap)} نفر`,
     })),
     ...off.map(([id]) => ({ ic: 'wrench', tone: 'b', title: `${courtById(+id).name} غیرفعال است`, sub: 'از تنظیمات فعال کنید', go: 'settings' })),
   ].filter(Boolean)
@@ -405,6 +406,7 @@ function NewBooking({ d, onClose }) {
       </div>
       <div className="dr-total"><span>{where || 'زمینی انتخاب نشده'}، {range(S, D)}</span><b>{f.type === 'friday' ? 'ورودی با ثبت‌نام' : toman(price)}</b></div>
       {!free && <p className="cancelled">{coachClash ? `${coachById(f.coach).name} در این ساعت کلاس دیگری دارد.` : !courts.length ? 'حداقل یک زمین انتخاب کنید.' : !fresh.length ? 'این زمین‌ها از قبل مال همین آدینه‌اند.' : S < open || S + D > close ? `خارج از ساعت کاری مجموعه است (${hourLabel(open)} تا ${hourLabel(close)}).` : `این بازه روی ${taken.map((c) => courtById(c).name).join('، ')} آزاد نیست.`}</p>}
+      {free && f.date === todayKey() && S + D <= new Date().getHours() && <p className="pt-warn">این ساعت امروز گذشته است؛ فقط برای ثبت بازی‌ای که انجام شده استفاده کنید.</p>}
       <button className="adm-btn primary full" disabled={!free} onClick={save}>{f.type === 'friday' ? (target ? 'افزودن زمین به آدینه' : 'ساخت آدینه') : f.type === 'event' ? 'ثبت ایونت' : 'ثبت رزرو'}</button>
     </div>
   )

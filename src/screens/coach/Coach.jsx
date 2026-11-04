@@ -38,8 +38,8 @@ export default function Coach() {
         {d.pending > 0 && <button className="co-pend" onClick={() => go('book')}>{fa(d.pending)} منتظر تأیید</button>}
       </header>
       <main className="co-scroll">
-        <AnimatePresence mode="wait">
-          <motion.div key={tab} className="co-page" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
+        <AnimatePresence initial={false}>
+          <motion.div key={tab} className="co-page" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0 } }} transition={{ duration: 0.12 }}>
             <P c={c} d={d} go={go} />
           </motion.div>
         </AnimatePresence>
@@ -206,7 +206,7 @@ function Book({ c, d }) {
   const nowH = new Date().getHours() + new Date().getMinutes() / 60
   // درخواست منتظر هر مربی جا را نگه می‌دارد تا دو نفر یک ساعت را نخواهند
   const held = (ct, h) => (club.coachReqs || []).some((r) => r.status === 'pending' && r.date === date && r.court === ct && h >= r.start && h < r.start + r.dur)
-  const mineAt = (h) => d.bk.some((b) => b.date === date && h >= b.start && h < b.start + b.dur)
+  const mineAt = (h) => d.bk.some((b) => b.date === date && h >= b.start && h < b.start + b.dur) || d.reqs.some((r) => r.status === 'pending' && r.date === date && h >= r.start && h < r.start + r.dur)
   const free = (ct, h) => isFree(club, date, ct, h, 1) && !held(ct, h) && !mineAt(h)
   const inSel = (ct, h) => sel && sel.court === ct && h >= sel.start && h < sel.start + sel.dur
   const hours = Array.from({ length: close - open }, (_, i) => open + i).filter((h) => date !== t || h > nowH)
@@ -214,7 +214,8 @@ function Book({ c, d }) {
   const warn = (title) => { haptic([20, 20]); toast({ icon: '⏱', title }) }
   const tap = (ct, h) => {
     haptic(6)
-    if (!sel || sel.court !== ct) return cap < 1 ? warn('سقف رزرو این روز یا هفته پر است') : setSel({ court: ct, start: h, dur: 1 })
+    const fresh = () => (cap < 1 ? warn('سقف رزرو این روز یا هفته پر است') : coachRun(club, c, date, h, 1) > lim.run ? warn(`حداکثر ${fa(lim.run)} ساعت پشت هم`) : setSel({ court: ct, start: h, dur: 1 }))
+    if (!sel || sel.court !== ct) return fresh()
     const s0 = sel.start, e0 = sel.start + sel.dur
     if (h >= s0 && h < e0) { // دوباره زدن = برداشتن
       if (sel.dur === 1) return setSel(null)
@@ -227,7 +228,7 @@ function Book({ c, d }) {
       if (next.dur > cap) return warn(`فقط ${fa(cap)} ساعت از سقف شما مانده`)
       return setSel(next)
     }
-    setSel({ court: ct, start: h, dur: 1 })
+    fresh()
   }
   const send = () => {
     const r = coachReq({ coach: c.id, date, court: sel.court, start: sel.start, dur: sel.dur, student: null, note: '' })
@@ -237,7 +238,7 @@ function Book({ c, d }) {
   }
   const mine = d.reqs.filter((r) => r.status !== 'cancelled' && fromKey(r.date) >= fromKey(t)).sort((a, b) => fromKey(a.date) - fromKey(b.date) || a.start - b.start)
   return (
-    <>
+    <div className={`co-book ${sel ? 'co-has-send' : ''}`}>
       <div className="co-caps">
         <div><b>{fa(lim.day)}</b><small>ساعت مانده در این روز</small></div>
         <div><b>{fa(lim.week)}</b><small>ساعت مانده این هفته</small></div>
@@ -283,7 +284,7 @@ function Book({ c, d }) {
           </motion.div>
         )}
       </AnimatePresence>
-    </>
+    </div>
   )
 }
 
@@ -338,7 +339,7 @@ function Income({ d }) {
       <div className="co-month">
         <button onClick={() => setP(period('month', shiftPeriod(p, -1)))} aria-label="ماه قبل"><Icon name="back" size={18} /></button>
         <b>{p.label}</b>
-        <button onClick={() => setP(period('month', shiftPeriod(p, 1)))} aria-label="ماه بعد"><Icon name="fwd" size={18} /></button>
+        <button disabled={p.from === period('month', todayKey()).from} onClick={() => setP(period('month', shiftPeriod(p, 1)))} aria-label="ماه بعد"><Icon name="fwd" size={18} /></button>
       </div>
       <div className="co-earn">
         <small>سهم شما</small><b>{toman(m.mine)}</b>
@@ -393,9 +394,10 @@ function Assign({ c, d, block, onDone }) {
   }
   const drop = (b, pid) => coachSetPlayers(c.id, b.id, b.players.filter((x) => x !== pid))
   const mine = d.f.students.map((s) => s.id)
-  const found = q.trim()
-    ? MEMBERS.filter((m) => !m.inactive && (m.name.includes(q.trim()) || m.phone?.includes(q.trim()))).slice(0, 12)
-    : MEMBERS.filter((m) => mine.includes(m.id)).slice(0, 12)
+  const inHour = pick && pick !== 'all' ? hours.find((b) => b.id === pick)?.players || [] : []
+  const found = (q.trim()
+    ? MEMBERS.filter((m) => !m.inactive && (m.name.includes(q.trim()) || m.phone?.includes(q.trim())))
+    : MEMBERS.filter((m) => mine.includes(m.id))).filter((m) => !inHour.includes(m.id)).slice(0, 12)
   const first = hours[0]
   if (!hours.length) return <p className="co-empty">ساعتی برای تکمیل نمانده.</p>
   if (pick) {

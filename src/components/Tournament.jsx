@@ -1,7 +1,7 @@
 // نمایش مسابقه برای اپ و پنل مدیر: سکوی قهرمانی، جدول گروه‌ها، جدول حذفی و تیم‌ها
 // اگر onScore داده شود (پنل مدیر)، نتیجه‌ی هر بازی قابل ثبت است.
 import { useState } from 'react'
-import { fa, levelById } from '../data'
+import { courtById, fa, levelById } from '../data'
 import { ROUND, judge, koRounds, podium, scored, scoringOf, setsOf, standings, teamName, teamOf, winnerOf } from '../events'
 
 export function Podium({ ev }) {
@@ -68,7 +68,7 @@ export function Match({ ev, m, onScore }) {
   if (m.b == null) return <div className="trn-match bye"><div className="trn-side"><span>{teamName(ev, m.a)}</span></div><small>استراحت؛ مستقیم به دور بعد</small></div>
   return (
     <div className={`trn-match ${scored(m) ? 'done' : ''} ${onScore ? 'edit' : ''}`}>
-      {m.court && <small className="trn-court">زمین {fa(m.court)}</small>}
+      {m.court && <small className="trn-court">{courtById(m.court)?.name}</small>}
       {onScore && sc.sets > 1 && <div className="trn-sh">{Array.from({ length: n }, (_, i) => <small key={i}>{sc.stb && i === 2 ? 'تای‌بریک' : `ست ${fa(i + 1)}`}</small>)}</div>}
       <div className="trn-pair">{side(0)}{side(1)}</div>
       {onScore && r.why && <small className="trn-tie">{r.why}</small>}
@@ -86,7 +86,7 @@ function MatchLine({ ev, m, final }) {
       <div className="ml-s">{sets.length ? sets.map((s, i) => <b key={i} className={s[t] > s[1 - t] ? 'w' : ''}>{fa(s[t])}</b>) : <b className="none">–</b>}</div>
     </div>
   )
-  return <div className={`ml ${scored(m) ? 'done' : ''} ${final ? 'final' : ''}`}>{side(m.a, 0)}{side(m.b, 1)}{m.court && <small className="ml-c">زمین {fa(m.court)}</small>}</div>
+  return <div className={`ml ${scored(m) ? 'done' : ''} ${final ? 'final' : ''}`}>{side(m.a, 0)}{side(m.b, 1)}{m.court && <small className="ml-c">{courtById(m.court)?.name}</small>}</div>
 }
 
 // گروه‌ها در اپ: جدول ساده و بازی‌های هر گروه

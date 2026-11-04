@@ -1485,3 +1485,13 @@ input.pb-cell.at:focus { background: var(--card); box-shadow: 0 0 0 1.5px var(--
 /* تقویم آدینه: عدد دقیقاً وسط خانه */
 .jcal-g button { display: grid; place-items: center; padding: 0; line-height: 1; }
 .jcal-g > i { aspect-ratio: 1; }
+
+/* QA موبایل */
+.dr > .adm-btn.full { width: auto; }
+@media (hover: none) { .kpi.link:hover { box-shadow: none; } }
+@media (max-width: 640px) { .kpis.three { grid-template-columns: 1fr 1fr; } .kpis.three > :first-child { grid-column: 1 / -1; } }
+@media (pointer: coarse) {
+  .num-step button { min-width: 40px; min-height: 40px; }
+  .tgl-adm { min-height: 40px; }
+  .seg-adm button { min-height: 40px; }
+}

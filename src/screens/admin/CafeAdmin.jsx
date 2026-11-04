@@ -1,7 +1,7 @@
 // کافه: سفارش‌ها (اپ، حضوری، سر زمین)، منو با دستور تهیه، انبار مواد اولیه، خریدها و گزارش فروش
 import { motion } from 'framer-motion'
 import { Fragment, useMemo, useState } from 'react'
-import { METHOD_NAME, addDays, dayLabel, fa, fromKey, hourLabel, short, toman, todayKey } from '../../data'
+import { METHOD_NAME, addDays, courtById, dayLabel, fa, fromKey, hourLabel, short, toman, todayKey } from '../../data'
 import {
   BIG_K, CAFE_CATS, DRINKS, ING_CATS, NOTES, UNITS, bigCost, cafeCat, fits, fmtQty, ingAcc, itemAcc, itemCost, moreOf, nextIngCode, nextItemCode, portions, priceOf, shortage,
 } from '../../cafe'
@@ -21,7 +21,7 @@ import { cafeOf, eventAt } from '../../events'
 
 const fmt = new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' })
 const NEXT = { new: ['prep', 'شروع آماده‌سازی'], prep: ['ready', 'آماده شد'], ready: ['delivered', 'تحویل داده شد'] }
-const dest = (o) => (o.to ? `سر زمین ${fa(o.to)}` : 'تحویل در کافه')
+const dest = (o) => (o.to ? `سر ${courtById(o.to)?.name || 'زمین ' + fa(o.to)}` : 'تحویل در کافه')
 const ingTone = (g) => (g.stock <= 0 ? ['bad', 'تمام شده'] : g.stock <= g.min ? ['warn', 'زیر حداقل'] : ['ok', 'کافی'])
 const fileDate = () => jDate(todayKey()).replace(/\//g, '-')
 

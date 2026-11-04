@@ -201,3 +201,17 @@
 .co-done { display: grid; justify-items: center; gap: 4px; color: var(--ink); }
 .co-done svg { color: #1E7A45; } .co-done span { font-size: 12px; color: var(--muted); }
 .co-h.todo-h { flex-wrap: wrap; } .co-h.todo-h small { flex-basis: 100%; }
+
+/* QA موبایل */
+.co-book { display: grid; gap: 12px; min-width: 0; }
+.co-book > * { min-width: 0; }
+.co-has-send { padding-bottom: 150px; }
+.sheet .co-guest input, .sheet .co-asg-head, .sheet .co-rate, .sheet .co-revs p, .sheet .co-prices div { background: var(--card); box-shadow: 0 0 0 1px var(--line); }
+.co-chip button { position: relative; width: 22px; height: 22px; }
+.co-chip button::after, .co-x::after, .co-link::after { content: ''; position: absolute; inset: -10px; }
+.co-x, .co-link { position: relative; }
+.co-x { width: 36px; height: 36px; }
+.co-pend { min-height: 36px; }
+.co-month button { width: 42px; height: 42px; } .co-month button:disabled { opacity: .3; }
+.co-seg button { min-height: 42px; }
+.co-tabs .co-ti i { left: -4px; top: -5px; }

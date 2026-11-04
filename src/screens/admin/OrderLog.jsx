@@ -1,6 +1,6 @@
 // تاریخچه‌ی سفارش‌های فروشگاه و کافه: جستجو با نام، شماره، کد سفارش یا نام کالا، و صفحه‌بندی به جای اسکرول بی‌پایان
 import { Fragment, useMemo, useState } from 'react'
-import { METHOD_NAME, fa, memberById, short, toman } from '../../data'
+import { METHOD_NAME, courtById, fa, memberById, short, toman } from '../../data'
 import { dk, jDate, jDateFa } from '../../jalali'
 import { downloadXlsx, table } from '../../xlsx'
 import { useStore } from '../../store'
@@ -74,7 +74,7 @@ export function OrderLog({ orders, lines, status, title, file, initialRange = 'm
                   {open === o.id && (
                     <tr className="log-more"><td colSpan={6}>
                       {ls.map(([n, qty, x, price], i) => <div key={i}><span>{fa(qty)}× {n}{x && <em>{x}</em>}</span>{price != null && <b className="num">{toman(qty * price)}</b>}</div>)}
-                      {o.to ? <div><span>تحویل</span><b>سر زمین {fa(o.to)}</b></div> : null}
+                      {o.to ? <div><span>تحویل</span><b>سر {courtById(o.to)?.name}</b></div> : null}
                     </td></tr>
                   )}
                 </Fragment>

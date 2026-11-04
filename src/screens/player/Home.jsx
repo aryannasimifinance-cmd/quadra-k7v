@@ -81,7 +81,7 @@ export default function Home({ nav }) {
                 onClick={() => nav.start({ intent: 'court', court: x.court, date: x.date, start: x.start, dur: 1 })}>
                 <small className={x.peak ? 'peak' : ''}>{dayLabel(x.date)}{x.peak ? '، پیک' : ''}</small>
                 <b>{hourLabel(x.start)}</b>
-                <span className="qs-court"><CourtGlyph n={x.court} />زمین {fa(x.court)}</span>
+                <span className="qs-court"><CourtGlyph n={x.court} />{courtById(x.court).name}</span>
                 <em>{fa(x.price)} <small>تومان</small></em>
               </motion.button>
             ))}
