@@ -7,11 +7,12 @@ import {
 import { chime } from '../../fx'
 import { isFree, payState, useStore } from '../../store'
 import { dailyPL, ledger, segments } from '../../accounting'
-import { period } from '../../jalali'
+import { dk, inPeriod, jMonthKey, jMonthLabel, period } from '../../jalali'
+import { channelOf } from './Payins'
 import { contractAlert } from '../../hr'
 import { Icon, LevelPill } from '../../components/ui'
 import { Logo } from '../../components/Logo'
-import { occupancy, who } from './derive'
+import { occupancy, payments, who } from './derive'
 import { Coaches, Members, Payments, Settings } from './Lists'
 import { CoachPanel } from './CoachAccess'
 import { Bookings } from './BookingsBoard'
@@ -133,7 +134,7 @@ export default function Admin() {
 // داشبورد: فقط مهم‌ترین‌ها — عددهای امروز، زمین‌های زنده، کارهای مانده و نتیجه‌ی ماه
 function Overview({ ctx }) {
   const [plShow, setPlShow] = useState(false)
-  const { club } = useStore()
+  const { club, user } = useStore()
   const V = useMemo(() => ledger(club), [club])
   const today = todayKey()
   const segDay = segments(V, period('day', today))
@@ -142,6 +143,13 @@ function Overview({ ctx }) {
   const avg7 = [...week.values()].reduce((s, d) => s + d.rev, 0) / 7
   const todays = club.bookings.filter((b) => b.date === today && b.status === 'ok' && b.type !== 'block')
   const occ = occupancy(club, today)
+  // درآمد این ماه به تفکیک: رزرو زمین از اپ، کافه، فروشگاه
+  const mon = period('month', today), monName = jMonthLabel(jMonthKey(today))
+  const paysM = useMemo(() => payments(club, user).filter((p) => p.paid > 0 && p.at <= Date.now() && inPeriod(dk(p.at), mon)), [club]) // eslint-disable-line react-hooks/exhaustive-deps
+  const sumOf = (f) => { const l = paysM.filter(f); return [l.reduce((s, p) => s + p.paid, 0), l.length] }
+  const [appCourt, appCourtN] = sumOf((p) => p.kind === 'court' && channelOf(p.method) === 'app')
+  const [cafeRev, cafeN] = sumOf((p) => p.kind === 'cafe')
+  const [shopRev, shopN] = sumOf((p) => p.kind === 'shop')
   const shopOpen = club.orders.filter((o) => o.status !== 'delivered')
   const cafeOpen = club.cafeOrders.filter((o) => o.status !== 'delivered')
   const unpaid = todays.filter((b) => b.paid < b.price)
@@ -174,6 +182,11 @@ function Overview({ ctx }) {
         <Kpi icon="court" label="پر بودن زمین‌ها امروز" value={`${fa(Math.round(occ * 100))}٪`} sub={`${fa(todays.length)} رزرو`} tip="درصد ساعت‌های رزروشده‌ی ۴ زمین از ۷ صبح تا ۱۲ شب" onClick={() => ctx.go('calendar')} />
         <Kpi icon="bag" label="سفارش‌های باز" tone={shopOpen.length + cafeOpen.length ? 'warn' : ''} value={fa(shopOpen.length + cafeOpen.length)} sub={`کافه ${fa(cafeOpen.length)}، فروشگاه ${fa(shopOpen.length)}`} tip="سفارش‌هایی که هنوز به مشتری تحویل نشده‌اند" onClick={() => ctx.go(cafeOpen.length ? 'cafe' : 'shop')} />
         <Kpi secret icon="chart" label="سود این ماه" tone={segMonth.net < 0 ? 'warn' : 'good'} value={mil(segMonth.net)} tip="درآمد ماه شمسی جاری منهای همه‌ی هزینه‌ها" onClick={() => ctx.go('accounting')} />
+      </div>
+      <div className="kpis three">
+        <Kpi secret="value" icon="phone" label="درآمد رزرو زمین از اپ" value={mil(appCourt)} sub={`${fa(appCourtN)} رزرو آنلاین، ${monName}`} tip="پول رزروهای زمین که این ماه از درگاه و کیف پول اپ رسیده" onClick={() => ctx.go('payments')} />
+        <Kpi secret="value" icon="cup" label="درآمد کافه" value={mil(cafeRev)} sub={`${fa(cafeN)} سفارش، ${monName}`} tip="فروش کافه در ماه جاری" onClick={() => ctx.go('cafe')} />
+        <Kpi secret="value" icon="bag" label="درآمد فروشگاه" value={mil(shopRev)} sub={`${fa(shopN)} سفارش، ${monName}`} tip="فروش فروشگاه در ماه جاری" onClick={() => ctx.go('shop')} />
       </div>
 
       <TodayIn compact />

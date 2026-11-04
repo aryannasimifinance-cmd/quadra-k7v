@@ -9,7 +9,7 @@ const BOX = 'button, .p-card, .coach-card, .intent-card, .event-banner, .ticket,
 export function installTapFx() {
   document.addEventListener('pointerdown', (e) => {
     const el = e.target.closest?.(BOX)
-    if (!el || el.disabled || el.closest('.nav') || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!el || el.disabled || el.closest('.nav, .co-tabs') || matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const r = el.getBoundingClientRect()
     if (r.width < 72 || r.height < 40) return
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative'

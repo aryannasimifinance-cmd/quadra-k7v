@@ -47,7 +47,7 @@ export default function Coach() {
       <nav className="co-tabs">
         {TABS.map(([k, n, ic]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => go(k)} aria-current={tab === k ? 'page' : undefined}>
-            <span><Icon name={ic} size={20} />{k === 'home' && d.todo.length > 0 && <i>{fa(d.todo.length)}</i>}</span><small>{n}</small>
+            <span className="co-ti"><Icon name={ic} size={20} />{k === 'home' && d.todo.length > 0 && <i>{fa(d.todo.length)}</i>}</span><small>{n}</small>
           </button>
         ))}
       </nav>

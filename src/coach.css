@@ -11,13 +11,13 @@
 .co-page { display: grid; gap: 12px; padding: 4px 16px 110px; }
 
 /* نوار پایین */
-.co-tabs { position: absolute; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 6px 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); backdrop-filter: blur(14px); box-shadow: 0 -1px 0 var(--line); }
-.co-tabs button { position: relative; display: grid; justify-items: center; gap: 3px; padding: 6px 0 5px; border-radius: 14px; color: var(--muted); transition: background .15s, color .15s; }
-.co-tabs button span { position: relative; width: 44px; height: 28px; border-radius: 99px; display: grid; place-items: center; transition: background .15s; }
-.co-tabs button span i { position: absolute; top: -3px; left: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px; background: #D9822B; color: #fff; font-style: normal; font-size: 10px; font-weight: 800; display: grid; place-items: center; box-shadow: 0 0 0 2px #fff; }
+.co-tabs { position: absolute; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 6px 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); background: #fff; box-shadow: 0 -1px 0 var(--line); z-index: 5; transform: translateZ(0); }
+.co-tabs button { position: relative; display: grid; justify-items: center; gap: 3px; padding: 6px 0 5px; border-radius: 14px; color: var(--muted); -webkit-tap-highlight-color: transparent; outline: none; }
+.co-tabs .co-ti { position: relative; width: 44px; height: 28px; border-radius: 99px; display: grid; place-items: center; }
+.co-tabs .co-ti i { position: absolute; top: -3px; left: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px; background: #D9822B; color: #fff; font-style: normal; font-size: 10px; font-weight: 800; display: grid; place-items: center; box-shadow: 0 0 0 2px #fff; }
 .co-tabs button small { font-size: 10.5px; font-weight: 600; white-space: nowrap; }
 .co-tabs button.on { color: var(--ink); }
-.co-tabs button.on span { background: var(--ink); color: var(--q); }
+.co-tabs button.on .co-ti { background: var(--ink); color: var(--q); }
 .co-tabs button.on small { font-weight: 800; }
 .co-tabs button.on::before { content: ''; position: absolute; top: -6px; left: 30%; right: 30%; height: 3px; border-radius: 0 0 3px 3px; background: var(--q); }
 

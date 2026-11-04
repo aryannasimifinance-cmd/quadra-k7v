@@ -920,7 +920,7 @@ img { display: block; }
 @media (prefers-reduced-motion: reduce) { .em-rally * { animation: none !important; } .bl-x { opacity: 1; transform: translateX(110px); } }
 
 /* ---------- موج لمس روی باکس‌ها ---------- */
-.tap-fx { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none; z-index: 5; }
+.tap-fx { position: absolute !important; inset: 0 !important; width: auto !important; height: auto !important; margin: 0 !important; padding: 0 !important; display: block !important; background: none !important; box-shadow: none !important; border: 0 !important; transform: none !important; border-radius: inherit; overflow: hidden; pointer-events: none; z-index: 5; }
 .tap-fx i { position: absolute; border-radius: 50%; background: radial-gradient(circle, currentColor 0%, transparent 55%); transform: scale(0); opacity: .22; animation: tap-ripple .6s cubic-bezier(.2,.7,.3,1) forwards; }
 .tap-on { animation: tap-pop .45s cubic-bezier(.3,1.6,.5,1); }
 .tap-on::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 2px var(--q); opacity: 0; animation: tap-ring .6s ease-out; pointer-events: none; z-index: 6; }
