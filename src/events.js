@@ -361,11 +361,39 @@ function withSingles(c) {
   const sales = regSales(ev)
   return { ...c, events: c.events.map((x, j) => (j === i ? ev : x)), sales: [...sales, ...c.sales.filter((s) => s.item !== e.id)].sort((a, b) => b.at - a.at), evSingles: true }
 }
+// آدینه‌ی نمونه‌ی ۳۲ تیمی (فقط حذفی، برگزارشده) تا جدول حذفی کامل از یک‌شانزدهم تا فینال در پنل مدیر دیده شود
+const F32 = ['آرش', 'بابک', 'کوروش', 'داریوش', 'سامان', 'فرزاد', 'میلاد', 'بهنام', 'شهاب', 'مازیار', 'رضا', 'علی', 'حامد', 'وحید', 'پیمان', 'سعید', 'کیوان', 'مهران', 'نوید', 'هومن', 'جواد', 'مسعود', 'ایمان', 'آرمین', 'بهروز', 'سهیل', 'فرشاد', 'کاوه', 'یاسر', 'رامتین', 'شایان', 'مهدی', 'اردلان', 'بیژن', 'تورج', 'جمشید', 'حسام', 'خسرو', 'رسول', 'زانیار', 'سروش', 'شروین', 'صادق', 'طاها', 'عماد', 'فرهود', 'قباد', 'کامران', 'گشتاسب', 'لقمان', 'مانی', 'نادر', 'هادی', 'یوسف', 'اهورا', 'بنیامین', 'پدرام', 'تیرداد', 'جهان', 'دارا', 'رادین', 'سیاوش', 'فریبرز', 'ماکان']
+const L32 = ['اکبری', 'حسینی', 'قاسمی', 'رحیمی', 'زارعی', 'عباسی', 'مرادی', 'نجفی', 'حیدری', 'کرمانی', 'صادقی', 'افشار', 'پاکزاد', 'ملکی', 'سلطانی', 'توکلی', 'امینی', 'باقری', 'رستمی', 'شجاعی']
+const SETS32 = [[6, 0], [6, 1], [6, 2], [6, 3], [6, 4], [7, 5], [7, 6]]
+function with32(c) {
+  let k = addDays(todayKey(), -7)
+  for (let d = -1; d >= -14; d--) { const x = addDays(todayKey(), d); if (fromKey(x).getDay() === 5) { k = x; break } }
+  const id = 'fr32-' + k
+  if ((c.events || []).some((e) => e.id === id)) return { ...c, ev32: true }
+  const r = (x) => hash(id + x)
+  const firsts = [...F32].sort((a, b) => r('o' + a) - r('o' + b))
+  const regs = Array.from({ length: 64 }, (_, i) => {
+    const name = firsts[i] + ' ' + L32[Math.floor(r('l' + i) * L32.length)]
+    const j = i - (i % 2)
+    return { id: `r${i + 1}`, by: null, name, level: LEVELS[2 + Math.floor(r('lv' + i) * 5)].id, phone: '0935' + String(1000000 + Math.floor(r('p' + i) * 8999999)), at: fromKey(k).getTime() - (10 - (i % 9)) * 864e5, method: r('m' + j) < 0.6 ? 'online' : 'cash', paid: 750000, source: 'app', pair: `${id}-p${j}` }
+  })
+  let ev = { id, kind: 'friday', title: 'آدینه‌ی بزرگ ۳۲ تیمی', desc: '۳۲ تیم دونفره، فقط حذفی از یک‌شانزدهم تا فینال', gender: 'all', format: 'knockout', scoring: 'set6', date: k, start: 9, dur: 8, courts: [1, 2, 3, 4], levels: LEVELS.slice(2, 7).map((l) => l.id), cap: 64, fee: 750000, prize: 'راکت Wilson + توپ + کارت هدیه‌ی کافه', img: EV_IMG[1 % EV_IMG.length], status: 'done', note: '', regs, teams: [], groups: [], matches: [] }
+  ev = makeKnockout(makeTeams(ev))
+  for (let g = 0; g < 40; g++) {
+    const m = ev.matches.find((x) => x.stage === 'ko' && x.b != null && !scored(x))
+    if (!m) break
+    const s = SETS32[Math.floor(r('s' + m.id) * SETS32.length)]
+    ev = setScore(ev, m.id, [r('w' + m.id) < 0.5 ? s : [s[1], s[0]]])
+  }
+  const sales = regSales(ev)
+  return { ...c, events: [ev, ...(c.events || [])], sales: [...sales, ...(c.sales || [])].sort((a, b) => b.at - a.at), ev32: true }
+}
 // داده‌ی قبلی بدون رویداد: یک بار رویدادهای نمونه اضافه می‌شود؛ زمین‌های مسابقه‌های پیش‌رو هم در تقویم بسته می‌شوند
 export function withEvents(club) {
   let c = club
   if (!c.events) { const { events, sales } = seedEvents(); c = { ...c, events, sales: [...sales, ...c.sales].sort((a, b) => b.at - a.at) } }
   if (!c.evSingles) c = withSingles(c)
+  if (!c.ev32) c = with32(c)
   if (c.evBlocks) return c
   // رزروهای نمونه‌ای که با ساعت مسابقه تداخل دارند کنار می‌روند (رزروهای خود کاربر می‌مانند)
   let bookings = c.bookings
