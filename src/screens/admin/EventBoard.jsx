@@ -38,6 +38,8 @@ export function EventBoard({ ev, locked }) {
   const autoOf = (R, j) => { const m = matchOf(R, j >> 1); const id = m && (j % 2 ? m.b : m.a); return id ? teamName(ev, id) : '' }
   // نتیجه‌ی همان بازی برای این تیم، ست به ست (مثلاً «۶ ۷»)
   const scoreOf = (R, j) => { const m = matchOf(R, j >> 1); const st = m && m.b != null ? setsOf(m) : []; return st.length ? st.map((x) => fa(x[j % 2])).join(' ') : null }
+  // نتیجه‌ی ریز بالای خانه از دید همین تیم، مثل «۶–۳»
+  const resOf = (R, j) => { const m = matchOf(R, j >> 1); const st = m && m.b != null ? setsOf(m) : []; return st.length ? st.map((x) => fa(x[j % 2]) + '–' + fa(x[1 - (j % 2)])).join('  ') : null }
   const wonOf = (R, j) => { const m = matchOf(R, j >> 1); const id = m && (j % 2 ? m.b : m.a); return !!id && winnerOf(m) === id && m.b != null }
 
   // هندسه: هر طرف C ستون (از دور اول تا نیمه‌نهایی)، وسط فینال؛ طرف راست نیمه‌ی اول جدول است
@@ -70,6 +72,7 @@ export function EventBoard({ ev, locked }) {
         const j = side * n + k, key = `${R}-${j}`, sc = scoreOf(R, j)
         slots.push(
           <div key={key} className={`pb-slot ${wonOf(R, j) ? 'won' : ''}`} style={{ left: `${colX(side, c) * 100}%`, top: yOf(c, k), width: `${colW * 100}%` }}>
+            {resOf(R, j) && <small className="pb-res">{resOf(R, j)}</small>}
             <Cell value={bd.ko?.[key]} auto={autoOf(R, j)} edit={edit} onSave={(v) => put('ko', key, v)} ph="نام تیم" list={list} />
             {sc != null && bd.ko?.[key] == null && <b className="pb-sc">{sc}</b>}
           </div>,
@@ -132,6 +135,7 @@ export function EventBoard({ ev, locked }) {
               const key = `2-${side}`, sc = scoreOf(2, side)
               return (
                 <div key={key} className={`pb-slot fin ${wonOf(2, side) ? 'won' : ''}`} style={{ left: '50%', top: finY[side], width: `${(1.3 / U) * 100}%` }}>
+                  {resOf(2, side) && <small className="pb-res">{resOf(2, side)}</small>}
                   <Cell value={bd.ko?.[key]} auto={autoOf(2, side)} edit={edit} onSave={(v) => put('ko', key, v)} ph="فینالیست" list={list} />
                   {sc != null && bd.ko?.[key] == null && <b className="pb-sc">{sc}</b>}
                 </div>

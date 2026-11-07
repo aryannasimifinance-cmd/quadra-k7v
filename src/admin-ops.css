@@ -1495,3 +1495,4 @@ input.pb-cell.at:focus { background: var(--card); box-shadow: 0 0 0 1.5px var(--
   .tgl-adm { min-height: 40px; }
   .seg-adm button { min-height: 40px; }
 }
+.pb-res { position: absolute; bottom: 100%; left: 0; right: 0; margin-bottom: 1px; text-align: center; font-size: 9.5px; line-height: 1.1; color: #9A978E; font-weight: 500; white-space: nowrap; pointer-events: none; direction: ltr; }
